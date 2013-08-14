@@ -1,0 +1,42 @@
+functionality checks, usually done in this order (on Kali, OSX, and Win7):
+
+
+./rawr.py --check-install
+./rawr.py -u
+	check file presence and their locations
+	rerun and check file detection
+
+./rawr.py --force-install
+./rawr.py -U
+	check file presence and their locations
+	check timestamps to make sure file was overwritten
+	rerun and check file detection
+	change version # in script and rerun, 'updating' the script
+		**SAVE A COPY - your changes will be overwritten!
+
+./rawr.py -n www.google.com
+./rawr.py -n www.google.com -p 80,443 -o -r --downgrade
+	check html page
+	check images, cookies for content
+	check html_res for:  style.css, jquery.js, nmap.xsl
+
+./rawr.py -n <sharedhost> -b -p 80
+	watch for:
+		duplicate bing entries
+		infinite loop
+		errors on bing calls
+
+./rawr.py -n scanme.nmap.org -p fuzzdb -d scans
+./rawr.py -n scanme.nmap.org -p 80 -d scans -z
+	look for proper placement of log folder
+	check for proper placement of compressed folder
+
+./rawr.py -n scanme.nmap.org -p 80 -d scans --spider
+	check <log folder>/maps/  for .png maps of each site
+	
+./rawr.py -n www.google.com -p 443 --title "War and Peace" --sslv -d scans -z
+	check for presence of extended SSL data in .csv
+	check for "War and Peace" in the HTML report title (printable view)
+
+./rawr.py -n canhazcode.com --spider -p 80 -d scans
+	check maps/ for .png and .txt for each site

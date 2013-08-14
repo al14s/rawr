@@ -1,0 +1,50 @@
+RAWR - Rapid Assessment of Web Resources
+
+Written by: Adam Byers (@al14s) [https://sourceforge.net/p/rawr-webenum/wiki/Home/]  -  Romans 5:6-8
+
+DISCLAIMER: This is only for testing purposes and can only be used where strict consent has been given. Do not use 
+this for illegal purposes period.                                                   
+                                                                            
+Any modifications, changes, or alterations to this application is acceptable, however, any public releases utilizing 
+this code must be approved by its creator. Check the LICENSE file for more information.
+
+RAWR is designed to make the process web enumeration easy and efficient by providing pertinent information in usable formats.
+
+
+
+Requirements:
+	nmap - at least 6.00 - required for SSL strength assessment
+	python - tested with 2.7
+	phantomJS - tested with 1.9.1
+	spidering - requires the following packages:
+			graphviz
+			libgv-python
+			python-pygraphviz
+			python-pygraph
+
+
+Installation:
+	Run	' ./rawr.py --check-install '
+		Checks for nmap, then downloads the latest default password list, IP to country list, and phantomJS (from google.code).
+
+
+OS Compatibility (tested with):
+	Backtrack 5r3 x86  /  NMap 6.01
+	Ubuntu 12.04LTS x64  /  NMap 5.21  (nmap caused errors due to absence of ssl-enum-ciphers.nse)
+	MacOSX 10.8.2  /  NMap 6.25
+	Windows 7 Ultimate  /  NMap 6.25
+	Windows XP Pro SP3  /  NMap 6.25
+	Windows 8 x64  /  NMap 6.25
+
+
+Browser Compatibility:
+	Supported - Firefox (tested w/ 18)
+	Tested/working on - Safari (tested w/ 6.0.2), Chrome (tested w/ 25.0.1364.97 m), IE (tested w/ 7-10)
+
+
+Exit codes:		0 - Normal Exit
+				1 - Exit with error
+				2 - User Initiated Exit
+
+
+

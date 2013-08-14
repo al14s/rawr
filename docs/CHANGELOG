@@ -1,0 +1,88 @@
+
+ToDo (in order of priority):
+		accept Nexpose simple XML
+		pull SSL info from Nexpose XML if available
+		pull SSL info from Qualys XML if available
+		pull SSL info from Nessus XML if available
+		HTML cleanup
+			redesign info display window
+				added flist to JS vars
+			add small charts to 'printable' mode
+			redesign iplist and selection params
+				use an id # for each entry and select only that one
+		add 'maps' button to HTML if maps are available - another page?
+		finish module regexes and test them
+		add 'threads active' back into status msg
+		clean up output messages (tabbing)
+		implement variable parsing in each url found in return data
+		add outputs:
+			sql db	
+			json
+		option to forgo the log folder --->  straight to stdout (json)
+		make screenshot optional
+		clean up data in csv
+		urlparse - pull vars from URLs
+
+
+
+	8/03/2013
+		finished first implementation of spider/map
+		split rawr up into folders/files for easier understanding
+			- my thanks to the Cuckoo crew for setting a good example!
+		added more code comments
+		added AUTHORS doc
+		moved default settings to conf/settings.py
+		added TESTS to docs folder in order to document the testing process
+		added modules/default.py, so users can easily add checks for enumeration
+		images now include a timestamp in their name
+		pulled css styles out into ./html_res/styles.css
+		---* changed behavior of -d *---
+			now simply decides where the log folder will reside.
+			log_<date>_<time>_rawr/  is created inside the specified directory.
+		updated to phantomJS 1.9.1
+
+
+	7/26/2013
+		add ability to spider links (only enumerate links on that domain)
+		add modules for java, JS, flash, jquery, etc.
+		create graph from spider (https://code.google.com/p/python-graph/)
+
+
+	7/25/2013
+		updated usage and -h (+examples) with new options
+		move modules to beginning of script or to another file and call them all during data parse
+
+
+	7/23/2013
+		no longer exits update process if user declines to update phantomJS
+
+
+	7/8/2013
+		fixed bug - error with range in report when using a file
+		fixed bug in logo size warning  (called writelog before it was defined)
+		fixed nmap.xsl reference in .xml file (it wasn't looking in the html_res folder)
+		
+		
+
+	6/24/2013
+		recreated changelog
+		optimize XML parsing
+		HTML report 'print mode' with user's logo in header
+			class 'Header' >> hidden
+			ignore mouseovers
+			ignore keystrokes - except for 'esc', which reloads the page
+			logo align right and veritcal center
+			add --title switch
+				warn if longer than 60 chars
+			replace <!-- REPLACEWITHDATE --> w/ date
+			replace <!-- REPLACEWITHTITLE --> and set default
+			replace <!-- REPLACEWITHLINK --> with just the link
+			replace <!-- REPLACEWITHLOGO --> w/ logo if specified
+			replace <!-- REPLACEWITHRANGE --> 
+			add --logo switch
+				check size and warn if odd
+		move nmap.xsl, jquery.js, and logo.png to html_res folder
+		updated usage to reflect new options
+		accept Qualys XML (requires QID 86000)
+
+

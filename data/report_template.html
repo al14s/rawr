@@ -1,0 +1,342 @@
+<!---
+	RAWR - Rapid Assessment of Web Resources
+	  Created via rawr.py - by @al14s
+-->
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+		<meta http-equiv="X-UA-Compatible" content="IE=Edge">
+		<title>Web Interface Report</title>
+		<script type="text/javascript" src="./html_res/jquery.js"></script>
+		<link href="./html_res/style.css" rel="stylesheet" type="text/css"/>	
+		<script type="text/javascript">	
+		
+			var timestamp="<!-- REPLACEWITHTIMESTAMP -->"
+			var flist="<!-- REPLACEWITHFLIST -->"
+			var picsize="175"
+			var n=50
+			var result_ips
+			var hcount
+				
+			$.fn.center = function () {
+				if (this.height() > (window.innerHeight-40)) { this.css({ height: (window.innerHeight-40) }); }
+				if (this.width() > ($(window).width()-40)) { this.css({ width: ($(window).width()-40) }); }
+			    this.css({
+					position:'absolute',
+					top: (window.innerHeight/2)-(this.height()/2),   //because FF14 doesn't like $(window).height() ????!
+					left: ($(window).width()/2)-(this.width()/2) 
+				});
+			    return this;
+			}
+
+			function render(p){			
+				var r=1;var m=0;var iplistq=0;result_ips="";
+				if (p==0) {var iplistq=1;$("#q").val(""); p=1;}	
+
+				$('#bd').animate({scrollTop:0}, 0);
+				closeall();
+				$("#bd").html("");
+				$("#srchindex").html("");
+				$("#sidepanel").html("");
+				$('img').removeClass('selected');
+
+				var query=$("#q").val().replace(/^\s+|\s+$/g, ''); 
+				if(query != ""){var q=query;}else{var q="";}
+				var data=$("#data").html();
+				data=data.toLowerCase().split('<br>');
+				hcount = data.length;
+				for (i=0; i<data.length-1; i++) {
+					var use=0;
+					if (data[i].replace(/^\s+|\s+$/g, '')==""){break;}
+					if (q.split(" ").length > 1) {  
+						for (x=0; x<q.split(" ").length; x++) {
+							if (data[i].toLowerCase().indexOf(q.split(" ")[x]) != -1){ use=1; }else{ use=0; break; }
+						}
+					} else {
+						if (iplistq!=1) { if (q=="" || data[i].indexOf(q) != -1) { use=1; } }
+						else if (iplistq==1) { if ($("#iplistdiv").text().indexOf(data[i].split(", ")[1]) != -1) { use=1; } }
+					}
+					if ( use == 1 ) {   // for search result qualification
+						picurl="images/"+data[i].split(", ")[0].split('//')[1] + "_" + timestamp + "_" + data[i].split(", ")[3] + ".png";
+						$.ajax({ type: "GET", url: picurl, error: function() {
+							picurl="images/"+data[i].split(", ")[2] + "_" + timestamp + "_" + data[i].split(", ")[3] + ".png";
+							$.ajax({ type: "GET", url: picurl, error: function() {
+								picurl="images/"+data[i].split(", ")[1] + "_" + timestamp + "_" + data[i].split(", ")[3] + ".png";
+								$.ajax({ type: "GET", url: picurl, error: function() {
+									// 1px x 1px white .png
+									picurl="data:image/png;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
+								}});
+							}});
+						}});
+						if ( picurl.substr(0,5) == "data:" ) { pic = "<div class='img_div noimg'></div> "; }
+						else { pic = "<div class='img_div' onclick=\'showpic($(this).children(\"img\"),\"" + picurl + "\",\"" + data[i].split(', ')[0] + "\");\' style='height:" + (picsize-20) + "px;' ><img style='display:none;' src='" + picurl + "' width=100% /\></div>"; }
+						
+						m++;
+						if (r<=n && i>=((p-1)*n)){
+							ip=(data[i].split(", ")[1]).replace(/(\r\n|\n|\r)/gm,"");
+							url=(data[i].split(", ")[0]).replace(/(\r\n|\n|\r)/gm,"");
+							port=(":"+data[i].split(", ")[3]).replace(/(\r\n|\n|\r)/gm,"");
+							if (port==":") {port=""}
+							ip_url=url.split(":")[0]+"://"+ip+port;
+							ip_port=ip+port;
+							hostname=data[i].split(", ")[2].split("|")[0];
+							if (hostname == "") {hostname="n/a";}
+							info=data[i].replace(/\, /g, ',').replace(/\,,/g, ',').replace(/\,,/g, ',').replace(/\,/g, '<br>');
+							if ( picurl.substr(0,5) == "data:" ) { var newline="<div class='result'><span class='result_content'>" + ip_url + "<br />[" + hostname + "]</span><br /><div class='img_div noimg'></div><div class='tabdiv'><ul class='tabs'><li><a target='_blank' href='" + url + "' >open</a></li><li><a onclick='showinfo(" + r + ");'>i</a></li><li><a onclick='listaddrem(\"" + ip_port + "\",this);'>+/-</a></li></ul></div><div class='info' id='" + String(r) + "'>" + info + "</div></div>"; }
+							else { var newline="<div class='result'><span class='result_content'>" + ip_url + "<br />[" + hostname + "]</span><br /><div class='img_div' onclick='showpic($(this).children(\"img\"),\"" + picurl + "\",\"" + url + "\");' style='height:" + (picsize-20) + "px;' ><img class='thumb' style='display:none;' src='" + picurl + "' width=100% /></div><div class='tabdiv'><ul class='tabs'><li><a target='_blank' href='" + url + "' >open</a></li><li><a onclick='showinfo(" + r + ");'>i</a></li><li><a onclick='listaddrem(\"" + ip_port + "\",this);'>+/-</a></li></ul></div><div class='info' id='" + String(r) + "'>" + info + "</div></div>"; }
+							$("#bd").append(newline);
+							result_ips=result_ips+","+ip_port;
+							r++;
+						}
+					}
+				}			
+				pages=Math.ceil(m/n);
+				var s_index="";var f_index="";var b_index="";var index="";var bs_index="";var fs_index="";
+				if (pages>1) {
+					if (p>1){ 				
+						var fs_index="<button onclick='render(" + (p-1) + ");'> &#60; </button> "; 
+						if (p>2){ var f_index="<button onclick='render(1);'> &#60;&#60; </button> "+fs_index}
+						else{f_index="&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; "+fs_index;};
+					}else{ var index=" &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; "; }
+					if (p>4){s=p-4;}else{var s=1;}
+					for (i=s; i<=(s+9); i++){ 
+						if (i>pages){break;}
+						if (s>0){if (p==i){var num="<u>" + i + "</u>";}else{var num=i;};index=index+"<span class='headertext' onclick='render(" + i + ");'>" + num + " </span>";}
+					}
+					if (p < pages){ 
+						var bs_index = "<button onclick='render(" + (p+1) + ");'> &#62; </button>";
+						if (p < (pages-1)){ var b_index = bs_index+" <button onclick='render(" + pages + ");'> &#62;&#62; </button>"}else{b_index=bs_index;};
+					}					
+					index = f_index + index + b_index; 
+					s_index = fs_index + "<br />" + bs_index;	
+					if (s_index != ""){ $("#sidepanel").show(); $("#sidepanel").html(s_index);}else{$("#sidepanel").hide();}
+					$("#hdinfo").html("Page " + p + " / " + pages + " with " + m + " results");
+					$("#srchindex").html(index);
+				} else if (pages < 1){ $("#hdinfo").html("No results found.");
+				} else { $("#hdinfo").html("Page " + p + " / " + pages + " with " + m + " results"); $("#srchindex").html(""); }
+				
+				$('.result').css('height', parseInt(picsize)).css('width', parseInt(picsize));
+				$('#bd').css({ top:80, bottom: 0 });
+				$('button').button();
+				$('.placeholder').mouseover(function() { $('.tabs').css({ display:"none"});$('.tabs', $(this).parent()).css({display:"block"}); });
+				$('.result').mouseover(function() { $('.tabs').css({ display:"none"});$('.tabs', $(this)).css({display:"block"}); });
+				setselected();
+				setTimeout('imgsize()', 100);
+			}
+
+			function imgsize(){  
+				$('.thumb').each(function() {  
+					$('.result_content').show(); $('.result').css("border","dotted 0px gray");
+					if ($('.result').height()<170) { $('.result').css("border","dotted 1px gray"); $('.result_content').hide(); }
+					var img = this;
+					if (this.complete) { if (typeof this.naturalWidth != "undefined" && this.naturalWidth == 0) {}else{ $(this).fadeIn(300); } } 
+					else { $(this).fadeIn(300); }
+					c=(($('.result').height()/2)-(($(this).height())/2));
+					$(this).css({ 'margin-top': c, 'margin-bottom': c });
+					if ($(this).height > $(this).width) {$(this).height='100%';} else {$(this).width='100%';}
+				});
+				$('.img_div').css('height', $('.result').css('height')); 
+				picsize=$('.result').height();				
+				shownopic();
+			}
+
+			function setselected(){
+				$('.result').each(function() {  
+					// need a better way to see if they're all the same IP.  the following lines make kittens weep.
+					var this_ip = $('.result_content',this).html().split('<br>')[0].split("//")[1].split(":")[0];
+					if ( $('.result_content').html().split('<br>')[0].split("//")[1].split(":")[0] == this_ip ) {
+						var hn= $('.result_content',this).html().split('<br>')
+						if (hn.length > 1) {hn=hn[1].replace('[','').replace(']','');}
+						if ($("#iplistdiv").text().indexOf(hn + ",") != -1){ $(this).addClass('selected'); }
+					} else {
+						var ip= $('.result_content',this).html().split('<br>')[0].split("//")[1];
+						if ($("#iplistdiv").text().indexOf(ip + ",") != -1){ $(this).addClass('selected'); }
+					}
+				});
+			}
+
+			function listaddrem(ip,e){
+				if (ip == "allresults"){
+					this_ip = $('.result_content',e).html().split('<br>')[0].split("//")[1].split(":")[0]
+					if ( $('.result_content').html().split('<br>')[0].split("//")[1].split(":")[0] == this_ip ) {
+						ips=""
+						$('.result').each(function() {  
+							ips=ips+","+$(this).html().split('<br>')[1].replace('[','').split(']')[0];
+						});
+						ips=ips.split(",");
+					} else {
+						ips=result_ips.split(",");
+					}
+					for (x in ips) {
+						if ($("#iplistdiv").text().indexOf(ips[x]) == -1 && ips[x] != ""){ $("#iplistdiv").append(ips[x] + ","); }
+					}
+				} else {
+					var obj = $(e).closest('.result');
+					if ( $('.result_content').html().split('<br>')[0].split("//")[1].split(":")[0] == ip.split(":")[0] ) {
+						ip= $(e).closest('.result').html().split('<br>')[1].replace('[','').split(']')[0];
+					};
+					if ($("#iplistdiv").text().indexOf(ip + ",") == -1){
+						$("#iplistdiv").append(ip + ","); obj.addClass('selected'); 
+					} else { 
+						$("#iplistdiv").text($("#iplistdiv").text().replace(new RegExp(ip+",", "ig"), "")); obj.removeClass('selected'); 
+					}
+				}
+				setselected();
+			}
+
+			function showpic(e,pic,url){
+				if ($(e).is(":visible")) {
+					$('#picview').html("<div class='previewtop'><span id='previewtop_l'><a class='textwds' target='_blank' href='" + pic + "'> " + pic + " </a></span><span id='previewtop_r'><a class='textwds' target='_blank' href='" + url + "'>[ Open site in new tab ]</a></span></div><img id='lrg_img' height='" + (window.innerHeight-100) + "' src='" + pic + "' />");
+					closeall();
+					$('#picview').css({display:"block"});
+					$('#picview').center();
+					$('#overlay').css({ width: $(document).width(), height: $(document).height(),display:"block" });
+				}
+			}
+
+			function printable(){
+				closeall();
+				var meta = 
+				$('#header').css({display:"none"});
+				$('#logo_printable').css({display:"block"});
+				$('#bd').css({top:"100px"});
+				$('.tabs').css({ display:"none"});
+				$('#overlay').css({ width: $(document).width(), height: $(document).height(), display:"block", opacity:0 });
+				
+			}
+
+			function showinfo(id){
+				$('#infoviewtxt').html($('#'+String(id)).html());
+				closeall();
+				$('#infoview').css({display:"block"});
+				$('#infoview').center();
+				$('#infoviewtxt').animate({scrollTop:0}, 0);
+				$('#overlay').css({ width: $(document).width(), height: $(document).height(),display:"block" });
+			}
+
+			function closeall(){
+				$('#header').css({display:"inline-block"});
+				$('#bd').css({top:"80px"});
+				$('#logo_printable').css({display:"none"});
+				$('#picview').css({display:"none"});
+				$('#overlay').css({display:"none", opacity:.60});
+				$('#iplist').css({display:"none"});
+				$('#infoview').css({display:"none"});
+				$('#infoview').css({display:"none"});
+			}
+
+			function shownopic(){
+				if ($('#cbtxt').text()=="show all"){ 
+					//because some browsers are allergic to standards
+					$('.noimg').closest('.result').hide();
+					$('img:hidden').closest('.result').hide();
+				} else {
+					//because some browsers are allergic to standards
+					$('.noimg').closest('.result').show();
+					$('img:hidden').closest('.result').show();
+				}; 
+			}
+
+			$(window).resize(function() {
+				if ($('#picview').css("display")=="block") { $('#picview').center(); }
+				if ($('#iplist').css("display")=="block") { $('#iplist').center(); }
+				if ($('#infoview').css("display")=="block") { $('#infoview').center(); }
+				$('#bd').css({ bottom: 0 });
+				$('#overlay').css({ width: $(document).width(), height: $(document).height() });
+			});
+
+			$(window).keypress(function(event){var keycode = (event.keyCode ? event.keyCode : event.which);if(keycode == '27'){ closeall(); }});
+
+			window.onload = (function(){
+				$(document).ready(function() {
+					$('#q').val('');
+					$('.tabs').css({display:"none"});
+					$('#q').keypress(function(event){var keycode = (event.keyCode ? event.keyCode : event.which);if(keycode == '13'){ render(1); }});
+					$('#imgsizedown').click(function(){if ($('.result').height()>100){ $('.result').css('height','-=75').css('width','-=75') };imgsize();});				
+					$('#imgsizeup').click(function(){ if ($('.result').height()<325){ $('.result').css('height', '+=75').css('width', '+=75') }; imgsize();});
+					$('.rsltbtn').click(function(){ $('#bd').text(''); n= $(this).text(); render(1); });			
+					$('#picview').click(function(){ $('#picview').css({display:"none"}); $('#overlay').css({display:"none"}); });
+					$('#imgonly').click(function(){ 
+						if ($('#cbtxt').text()=="show all"){ $('#cbtxt').text("img only"); }else{ $('#cbtxt').text("show all"); }; 
+						shownopic();
+					});
+					$('#close').click(function(){ $('#iplist').hide(); $('#overlay').css({display:"none"}); });
+					$('#clear').click(function(){ $('#iplistdiv').text(""); $('.result').removeClass('selected'); });
+					$('#addall').click(function(){ listaddrem("allresults",""); });
+					$('#overlay').click(function(){ closeall(); });
+					$('#search').click(function(){ render(1); });
+					$('#reset').click(function(){ $("#q").val(""); $('#iplistdiv').text(""); render(1); });
+
+					//
+					$('#renderip').click(function(){ if ($('#iplistdiv').text() != "") {$('#overlay').css({display:"none"}); render(0);} });
+					//
+
+					$('#closeinfo').click(function(){ $('#infoview').hide(); $('#overlay').css({display:"none"}); });
+					$('#showips').click(function(){ 
+						closeall();
+						$('#iplist').css({display:"block"});
+						$('#iplist').offset({ 
+							top: $(document).scrollTop()+($('#iplist').height()/2), 
+							left: ($(window).width()/2)-($('#iplist').width()/2) 
+						});
+						$('#overlay').css({ width: $(document).width(), height: $(document).height(),display:"block" });
+					});
+					render(1);			
+				});	
+			});		
+		</script>
+	</head>
+	<body>
+		<div id="header">
+			<span class="srch_area">
+				<span class="textwds">Search: </span>
+				<input type="text" id="q" size="15"/>
+				<button id="search">search</button>
+				<button id="reset">reset</button>
+			</span>
+			<span class="links_area">				
+				<a class="textwds" onselect=False target="_blank" href="<!-- REPLACEWITHLINK -->">NMap XML</a>
+				<a class="textwds" onselect=False target="_blank" onClick="printable();">Printable</a>
+			</span>
+			<span id="srchindex" class='textwds'></span>
+			<span class="filter_btns">
+				<button id="imgonly"><span id="cbtxt">img only</span></button>
+				<button id="showips">IP list</button>
+				<button id="imgsizedown">-</button> 
+				<button id="imgsizeup">+</button>
+			</span>
+			<span class="rslt_btns">
+				<span class='textwds'>Results: </span>
+				<button class="rsltbtn">50</button> 
+				<button class="rsltbtn">100</button> 
+				<button class="rsltbtn">200</button>
+				<button onclick="if( hcount<500 || confirm('With '+hcount+' hosts, this might take a while.  Are you sure?') ) { $('#bd').text(''); n=99999; render(1); }">all</button><br/>
+			</span>
+			<span id="hdinfo"></span>
+		</div>
+		<div id="logo_printable">
+			<!-- REPLACEWITHLOGO -->
+			<span id="report_caption">
+				<span id="date"><!-- REPLACEWITHDATE --></span><br/>
+				<br/><!-- REPLACEWITHTITLE --><br/>
+				<span id="range"><!-- REPLACEWITHRANGE --></span>
+			</span>
+		</div>
+		<div id="iplist">
+			<textarea id="iplistdiv" onpaste="return false" ></textarea>
+			<br /><br />
+			<!--<button id="renderip">Show these</button>-->
+			<button id="addall">Add all results</button>
+			<button id="clear">Clear</button>
+			<button id="close">Close</button>
+		</div>
+		<div id="infoview">
+			<div id="infoviewtxt"></div><br />
+			<div style='align:right;float:right;'><button id="closeinfo">close</button></div>
+		</div>
+		<div id="picview"></div>
+		<div id="overlay"></div>
+		<div id="sidepanel"></div>
+		<div id="bd"></div>
+
+<div id="data">
