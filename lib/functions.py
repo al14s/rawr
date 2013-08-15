@@ -640,6 +640,20 @@ def write_to_csv(timestamp, ip, hostname, portnum, state, protocol, owner, servi
 def update(force, ckinstall, pjs_path, scriptpath):
 	os.chdir(scriptpath)
 
+	# remove any files left over from versions < 0.1.5
+	#   we'll leave this in until 0.1.6
+	for pre_ver5_file in ["CHANGELOG","README","LICENSE","report_template.html","screenshot.js","nmap.xsl","jquery.js","defpass.csv","IpToCountry.csv"]:
+		if os.path.exists(pre_ver5_file): os.remove(pre_ver5_file)
+
+	if os.path.exists("phantomjs"):
+		def onerror(func, path, exc_info):
+			if not os.access(path, os.W_OK):
+				os.chmod(path, stat.S_IWUSR)
+				func(path)
+
+		shutil.rmtree("phantomjs",onerror=onerror)
+
+
 	url = REPO_DL_PATH + VER_FILE
 	print "  ++ Checking current versions...  >\n   %s\n"%url
 	try:
@@ -649,22 +663,24 @@ def update(force, ckinstall, pjs_path, scriptpath):
 		defpass_ver = ver_data.split(",")[1].replace('\n','')
 		ip2c_ver = ver_data.split(",")[2].replace('\n','')
 		pJS_ver = ver_data.split(",")[3].replace('\n','')
+
 	except Exception, ex:
 		print "  !! Failed:  %s\n"%ex
 		sys.exit(1)
 
 	# check for updated version of script
 	if script_ver > VERSION:
-		choice = raw_input('\n  ** Update RAWR v%s to v%s? [Y/n]:'%(version,script_ver))
+		choice = raw_input('\n  ** Update RAWR v%s to v%s? [Y/n]:' % (VERSION, script_ver))
 		if (choice.lower() in ("y","yes",'')):
-			print "\n  ++ Updating  RAWR v%s >> v%s\n"%(version,script_ver)
-			url = REPO_DL_PATH + "rawr_"+script_ver+".tar"
-			print "\tPulling - "+url
+			print "\n  ++ Updating  RAWR v%s >> v%s\n" % (VERSION, script_ver)
+			url = REPO_DL_PATH + "rawr_" + script_ver + ".tar"
+			print "\tPulling - " + url
 			try:
 				data = urllib2.urlopen(url).read()
-				open("rawr_" + script_ver + ".tar",'w+b').write( urllib2.urlopen(url).read() )
+				open("rawr_" + script_ver + ".tar", 'w+b').write( urllib2.urlopen(url).read() )
 				tarfile.open("rawr_" + script_ver + ".tar").extractall('../')
 				os.remove("rawr_" + script_ver + ".tar")
+
 			except Exception, ex:
 				print "\n    !! Error pulling: " + url + "\n\t\t - " + str(ex)
 				print "     Try pulling lastest version from %s\n\n" & REPO_DL_PATH
@@ -675,7 +691,7 @@ def update(force, ckinstall, pjs_path, scriptpath):
 			python = sys.executable
 			os.execl(python, python, * sys.argv)
 		else:
-			print "\n  ++ RAWR v%s found (current is %s) ++\n" % (version, script_ver)
+			print "\n  ++ RAWR v%s found (current is %s) ++\n" % (VERSION, script_ver)
 
 	else:
 		print "  ++ RAWR v%s found (current) ++\n" % VERSION
@@ -809,6 +825,7 @@ def update(force, ckinstall, pjs_path, scriptpath):
 			tarfile.open(IP_TO_COUNTRY + ".tar.gz").extractall('./data')
 			os.remove(IP_TO_COUNTRY + ".tar.gz")
 			print "     ++ Success ++\n"
+
 		except Exception, ex:
 			print "     !! Failed:  %s\n" % ex
 			sys.exit(1)
