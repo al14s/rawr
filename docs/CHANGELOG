@@ -1,51 +1,39 @@
 
 ToDo (in order of priority):
-		clean up data in csv
-		urlparse - pull vars from URLs
-		clean up output messages 
-			(tabbing)
-			output short version of the csv to stdout
-			better progress indicator
-		accept Nexpose simple XML
-		pull SSL info from Nexpose XML if available
-		pull SSL info from Qualys XML if available
-		pull SSL info from Nessus XML if available
-		HTML cleanup
-			redesign info display window
-				added flist to JS vars
-			add small charts to 'printable' mode
-			redesign iplist and selection params
-				use an id # for each entry and select only that one
-		add 'maps' button to HTML if maps are available - another page?
+		BUGs:
+			EC2 instance - screenshots don't work!
+
+		inputs:
+			accept Nexpose simple XML
+			pull SSL info from Nexpose XML if available
+			pull SSL info from Qualys XML if available
+			pull SSL info from Nessus XML if available
+
+		enum:
+			finish modules and test them
+				#implement parser
+			test/tweak spidering
+
+		outputs:
+			#sql db	
+			#json
+			urlparse - pull vars from URLs
+			clean up output messages (tabbing)
+			clean up data in csv
+			option to forgo the log folder --->  straight to stdout (json)
+			make screenshot optional
+			HTML cleanup
+				redesign info display window
+					added flist to JS vars
+				add small charts to 'printable' mode
+				redesign iplist and selection params
+					use an id # for each entry and select only that one
+				add 'maps' button to HTML if maps are available - another page?
+
+
+	9/13/2013
 		add 'threads active' back into status msg
-		implement variable parsing in each url found in return data
-		add outputs:
-			sql db	
-			json
-		option to forgo the log folder --->  straight to stdout (json)
-		pull hosts from pcap files (other network traffic formats) scapy + tcpdump
-			> conf.iface = 'mon0'
-			> pkts = sniff(filter="wlan proto 0x888e", count = 1)
-			tcpdump: WARNING: mon0: no IPv4 address assigned
-			> pkts
-			Sniffed: TCP:0 UDP:0 ICMP:0 Other:1
-			> EAP in pkts[0]
-
-
-
-	8/15/2013
-		read all files as streams
-		change xml parser to lxml
-		switched to optparse
-		switched to requests from urllib2
-		make screenshot optional
-		forgo saving nmap data and use header data from pull
-		use dict object for target info
-		rehash NMAP and NESSUS doc parse
-		break xml parsing functions out into functions.py
-		allow spidering without PNG output
-		add redirect history to target object
-		
+		BUGFIX: SSL parsing error
 
 
 	8/03/2013
