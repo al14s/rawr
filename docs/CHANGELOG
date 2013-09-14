@@ -1,28 +1,39 @@
 
 ToDo (in order of priority):
-		accept Nexpose simple XML
-		pull SSL info from Nexpose XML if available
-		pull SSL info from Qualys XML if available
-		pull SSL info from Nessus XML if available
-		HTML cleanup
-			redesign info display window
-				added flist to JS vars
-			add small charts to 'printable' mode
-			redesign iplist and selection params
-				use an id # for each entry and select only that one
-		add 'maps' button to HTML if maps are available - another page?
-		finish module regexes and test them
-		add 'threads active' back into status msg
-		clean up output messages (tabbing)
-		implement variable parsing in each url found in return data
-		add outputs:
-			sql db	
-			json
-		option to forgo the log folder --->  straight to stdout (json)
-		make screenshot optional
-		clean up data in csv
-		urlparse - pull vars from URLs
+		BUGs:
+			EC2 instance - screenshots don't work!
 
+		inputs:
+			accept Nexpose simple XML
+			pull SSL info from Nexpose XML if available
+			pull SSL info from Qualys XML if available
+			pull SSL info from Nessus XML if available
+
+		enum:
+			finish modules and test them
+				#implement parser
+			test/tweak spidering
+
+		outputs:
+			#sql db	
+			#json
+			urlparse - pull vars from URLs
+			clean up output messages (tabbing)
+			clean up data in csv
+			option to forgo the log folder --->  straight to stdout (json)
+			make screenshot optional
+			HTML cleanup
+				redesign info display window
+					added flist to JS vars
+				add small charts to 'printable' mode
+				redesign iplist and selection params
+					use an id # for each entry and select only that one
+				add 'maps' button to HTML if maps are available - another page?
+
+
+	9/13/2013
+		add 'threads active' back into status msg
+		BUGFIX: SSL parsing error
 
 
 	8/03/2013

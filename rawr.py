@@ -596,7 +596,7 @@ if q.qsize() > 0:
 	# Create the main worker pool and get them started
 	threads=[]
 	for i in range(nthreads):
-		t = sithread(q, opener, timestamp, scriptpath, pjs_path, logdir, output, bing_dns, getoptions, getrobots, defpass, crawl)
+		t = sithread(q, threads, opener, timestamp, scriptpath, pjs_path, logdir, output, bing_dns, getoptions, getrobots, defpass, crawl)
 		threads.append(t)
 		t.daemon = True
 		t.start()

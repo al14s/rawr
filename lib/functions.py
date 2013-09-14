@@ -50,10 +50,11 @@ class out_thread(threading.Thread):
 					
 
 class sithread(threading.Thread):
-	def __init__(self, q, opener, timestamp, scriptpath, pjs_path, logdir, output, bing_dns, getoptions, getrobots, defpass, crawl):
+	def __init__(self, q, threads, opener, timestamp, scriptpath, pjs_path, logdir, output, bing_dns, getoptions, getrobots, defpass, crawl):
 		threading.Thread.__init__(self)
 
 		self.timestamp = timestamp
+		self.threads = threads
 		self.scriptpath = scriptpath
 		self.pjs_path = pjs_path
 		self.logdir = logdir
@@ -199,9 +200,13 @@ class sithread(threading.Thread):
 						self.output.put(msg+"\t: "+url+port)
 
 				self.busy = False
-	
-				self.output.put(" [ Queue size [ %s ] - Threads Alive [ %s ] ] "%(str(self.q.qsize()),str(threading.active_count()-2)))
 
+				busy_count = 0
+				for t in self.threads:
+					if t.busy == True:
+						busy_count += 1
+
+				self.output.put(" [ Queue size [ %s ] - Threads Busy/Alive [ %s/%s ] ] "%(str(self.q.qsize()),busy_count,str(threading.active_count()-2)))
 				self.q.task_done()
 
 
@@ -385,7 +390,7 @@ def parsedata(data, nmap, opener, logdir, output, timestamp, scriptpath, getopti
 		except Exception:
 			pass
 
-	# eat cookie now....omnomnom
+	# grab cookies
 	if hasattr(data, 'info'):
 		cookies = data.info().getheaders('Set-Cookie')
 		if cookies and (len(cookies) > 0): 	
@@ -449,7 +454,7 @@ def parsedata(data, nmap, opener, logdir, output, timestamp, scriptpath, getopti
 
 		# Run through our user-defined content modules.
 		#  *** If a field isn't present in 'flist' (in the settings section), it won't be added at this time.
-		for field,regxp,modtype in modules:
+		for field,regxp,modtype,scope in modules:
 			# MODTYPE_CONTENT - returns all matches, seperates by ';'
 			if modtype == 0:	
 				addtox(field, ';'.join(re.findall(regxp, html, re.I)) )
@@ -553,39 +558,58 @@ def parsedata(data, nmap, opener, logdir, output, timestamp, scriptpath, getopti
 
 			open("./ssl_certs/%s.cert" % (nmap.split(", ")[1]),'w').write(ssl_data)
 			addtox("SSL_Cert-Raw", ssl_data)
-			ssl_data = ssl_data.split('\n')
-			addtox("SSL_Cert-Issuer", ssl_data[1].split(": ")[1])
-			addtox("SSL_Cert-Subject", ssl_data[0].split(": ")[1])
-			if "*" in ssl_data[0].split(": ")[1]:
-				subject = ssl_data[0].split(": ")[1].split("*")[1]
-			else:
-				subject = ssl_data[0].split(": ")[1]
 
-			if subject in nmap.split(', ')[0:3]: 
-				addtox("SSL_Cert-Verified", "yes")
+			for line in ssl_data.split('\n'):
+				if "issuer" in line.lower():
+					addtox("SSL_Cert-Issuer", line.split(": ")[1])
 
-			addtox("SSL_Cert-KeyAlg", "%s%s"%(ssl_data[2].split(": ")[1],ssl_data[3].split(": ")[1]) )
-			addtox("SSL_Cert-MD5", ssl_data[6].split(": ")[1].replace(" ",''))
-			addtox("SSL_Cert-SHA-1", ssl_data[7].split(": ")[1].replace(" ",''))
-			addtox("SSL_Cert-notbefore", ssl_data[4].split(": ")[1].strip())
-			addtox("SSL_Cert-notafter", ssl_data[5].split(": ")[1].strip())
-			try:
-				notbefore = datetime.strptime(ssl_data[4].split(": ")[1].strip(" "), '%Y-%m-%d %H:%M:%S')
-				notafter = datetime.strptime(ssl_data[5].split(": ")[1].strip(" "), '%Y-%m-%d %H:%M:%S')
-				vdays = ( notafter - notbefore ).days
-				if datetime.now() > notafter: 
-					daysleft = "EXPIRED"
+				elif "subject" in line.lower():
+					addtox("SSL_Cert-Subject", line.split(": ")[1])
 
-				else: 
-					daysleft = ( notafter - datetime.now() ).days
+					if "*" in line.split(": ")[1]:
+						subject = line.split(": ")[1].split("*")[1]
 
-			except ValueError:
-				# some certificates have non-standard dates in these fields.  
-				vdays = "unk"
-				daysleft = "unk"
+					else:
+						subject = line.split(": ")[1]
 
-			addtox("SSL_Cert-ValidityPeriod", vdays)
-			addtox("SSL_Cert-DaysLeft", daysleft)
+					if subject in nmap.split(', ')[0:3]: 
+						addtox("SSL_Cert-Verified", "yes")
+
+				elif "md5" in line.lower():
+					addtox("SSL_Cert-MD5", line.split(": ")[1].replace(" ",''))
+
+				elif "sha1" in line.lower():
+					addtox("SSL_Cert-SHA-1", line.split(": ")[1].replace(" ",''))
+
+				elif "algorithm" in line.lower():
+					addtox("SSL_Cert-KeyAlg", "%s%s"%line.split(": ")[1] )
+					# need to take another look at this one.  no seeing it atm
+
+				elif "not valid before" in line:
+					notbefore = line.split(": ")[1].strip()
+					addtox("SSL_Cert-notbefore", notafter)
+
+				elif "not valid after" in line:
+					notafter = line.split(": ")[1].strip()
+					addtox("SSL_Cert-notafter", notafter)
+
+				try:
+					notbefore = datetime.strptime(notbefore, '%Y-%m-%d %H:%M:%S')
+					notafter = datetime.strptime(notafter, '%Y-%m-%d %H:%M:%S')
+					vdays = ( notafter - notbefore ).days
+					if datetime.now() > notafter: 
+						daysleft = "EXPIRED"
+
+					else: 
+						daysleft = ( notafter - datetime.now() ).days
+
+				except Exception:
+					# some certificates have non-standard dates in these fields.  
+					vdays = "unk"
+					daysleft = "unk"
+
+				addtox("SSL_Cert-ValidityPeriod", vdays)
+				addtox("SSL_Cert-DaysLeft", daysleft)
 
 	# check title, service, and server fields for matches in defpass file
 	if defpass:
