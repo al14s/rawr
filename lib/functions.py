@@ -3,20 +3,20 @@ import os
 import sys
 import shutil
 import tarfile
-import urllib2
 import platform
 import subprocess
+import requests
 import signal
 import re
 import time
 import threading
+from Queue import Queue
+from lxml import html, etree
 from glob import glob
-from xml.dom import minidom
 from datetime import datetime
 from lib.constants import *
-from conf.settings import useragent, flist, timeout, ss_delay, binged, binging, spider_depth, spider_follow_subdomains
+from conf.settings import useragent, flist, timeout, ss_delay, spider_depth, spider_follow_subdomains
 from modules.default import *
-
 
 # Import graphviz and pygraph if they're available
 try:
@@ -31,193 +31,220 @@ try:
 	foundgv = True
 
 except Exception, ex:
-	print " !! %s > \n\t\tWe won't be spidering due to this... \n" % ex
+	#print " !! %s > \n\t\tWe won't be spidering due to this... \n" % ex
 	# We'll decline the '--spider' command if there was a problem importing gv or pygraph
 	foundgv = False
 
 
+binged = {}
+binging = False
+
+threads=[]
+q = Queue()  # Create the main queue and parse the files for hosts, placing them in the queue
+output = Queue()  # Create the output queue - prevents output overlap
+
+
 class out_thread(threading.Thread):
-	def __init__(self, queue, logfile):
+	def __init__(self, logfile):
 		threading.Thread.__init__(self)
-		self.queue = queue
 		self.logfile = logfile
 		global writelog
 
 	def run(self): 
 		while True:
-			writelog(self.queue.get(), self.logfile)
-			self.queue.task_done()
+			writelog(output.get(), self.logfile)
+			output.task_done()
 					
 
 class sithread(threading.Thread):
-	def __init__(self, q, threads, opener, timestamp, scriptpath, pjs_path, logdir, output, bing_dns, getoptions, getrobots, defpass, crawl):
+	def __init__(self, timestamp, scriptpath, pjs_path, logdir, bing_dns, getoptions, getrobots, defpass, crawl, noss):
 		threading.Thread.__init__(self)
 
 		self.timestamp = timestamp
-		self.threads = threads
 		self.scriptpath = scriptpath
 		self.pjs_path = pjs_path
 		self.logdir = logdir
 		self.bing_dns = bing_dns
-		self.output = output
+		self.noss = noss
 		self.getoptions = getoptions
 		self.getrobots = getrobots
 		self.crawl = crawl
-		self.q = q
 		self.defpass = defpass
 		self.terminate = False
 		self.busy = False
-		self.opener = opener
 
 	def run(self):
 
 		global binged
 		global binging
+		global q
 
 		while not self.terminate:
 			time.sleep(0.5)
-			if not self.q.empty():
+
+			if not q.empty():
 				data = ""
 				self.busy = True
-				nmap = self.q.get().split(', ')
-
+				target = q.get()
+				#output.put("[DEBUG]  target pulled from queue: " + str(target))
 				hostnames = []
 
 				prefix = "http://"
-				if any(s in nmap[6] for s in ["https","ssl"]):
-					prefix = "https://"
+				if 'tunnel' in target.keys():
+					print target['tunnel']
+					if any(s in target['tunnel'] for s in ["https","ssl"]):
+						prefix = "https://"
 					
-				suffix = ":"+nmap[2]
-				if any(s in nmap[2] for s in ["80","443"]):
+				suffix = ":" + target['port']
+				if any(s in target['port'] for s in ["80","443"]):
 					suffix = ""
-				
-				if self.bing_dns == True and not "bing~" in nmap[0]:
+
+				if self.bing_dns == True and (not 'is_bing_result' in target.keys()):
 					# Don't do Bing>DNS lookups for non-routable IPs
 					routable = True		
-					nrips = ["10.","172.","192.168.","127.;16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31","169."]
+					nrips = ["10.","172.","192.168.","127.16-31","169."]
 					for nrip in nrips:
-						if nmap[0].startswith(nrip.split(";")[0]):
-							if len(nrip.split(";")) > 1: 
-								for subnet in nrip.split(";")[1].split(","):
-									if nmap[0].startswith(nrip.split(";")[0]+subnet+'.'):
-										routable = False
-							else:
-								routable = False
+						if "-" in nrip:
+							a = int(nrip.split(".")[1].split("-")[0])
+							while not a <= int(nrip.split(".")[1].split("-")[1]):
+								if target['ipv4'].startswith('.'.join(nrip.split('.')[0], str(a), '')):
+									routable = False
+								a += 1
+
+						elif target['ipv4'].startswith(nrip):
+							routable = False
 
 					if routable:
 						while binging:
-							time.sleep(0.5)
+							time.sleep(0.5)  # The intention here is to avoid flooding Bing with requests.
 
-						binging = True
+						if target['ipv4'] in binged.keys():
+							output.put("[.] Bing>DNS\t: " + target['ipv4'] + "  -  pulling from cache...")
+							hostnames = binged[target['ipv4']]
+							#output.put("[DEBUG] pulled from cache:\n%s" % str(hostnames))
 
-						if nmap[0] in "~".join(binged):
-							self.output.put("[@] Bing>DNS\t: " + nmap[0] + "  -  pulling from cache...")
-							for item in binged:
-								if nmap[0] in item.split(":")[0]:
-									hn = item.split(":")[1].split(";")									
-									if len(hn) != 0 and hn[0] != "":
-										hostnames = hn
-
-									break
-						else:
-							self.opener.addheaders.append(('Cookie', 'SRCHHPGUSR=NRSLT=150'))
-
-							self.output.put("[@] Bing>DNS\t: "+nmap[0])
+						else:						
+							binging = True
+							output.put("[@] Bing>DNS\t: " + target['ipv4'])
 							try: 
-								bing_res = self.opener.open(("http://www.bing.com/search?q=ip%3a"+nmap[0])).read().split("sb_meta")
+								cookies = dict(SRCHHPGUSR='NRSLT=150')
+								bing_res = (requests.get("http://www.bing.com/search?q=ip%3a" + target['ipv4'], cookies=cookies).text).split("sb_meta")
 								for line in bing_res:
-									res = re.findall( r".*<cite>(.*)</cite>.*", line )
+									res = re.findall(r".*<cite>(.*)</cite>.*", line)
 									if res:
 										hostnames.append(res[0].split('/')[0])
 
-								binged.append(nmap[0] + ":" + ";".join(hostnames))
+								binged[target['ipv4']] = hostnames
+								#output.put("[DEBUG]  binged.keys() - " +  str(binged.keys()) )
+
 							except Exception, ex: 
-								self.output.put("[x] Bing>DNS\t: Error - %s"%ex)
-								hostnames = []
+								output.put("[x] Bing>DNS\t: Error - %s" % ex)
+								hostnames = []   # Just to make sure it's cleared out.
 
-						binging = False
-
-						# back to normal
-						self.opener.addheaders = [('User-agent', useragent)]
+							binging = False
 
 						if len(hostnames) == 0: 
-							self.output.put("[x] Bing>DNS\t: found no DNS entries for %s"%(nmap[0]))
+							output.put("[x] Bing>DNS\t: found no DNS entries for %s" % (target['ipv4']))
+
 						else:
-							# remove any duplicates...
+							# remove any duplicates from our list of domains...
 							seen = set()
 							hostnames = [ x for x in hostnames if x not in seen and not seen.add(x)]
-							self.output.put("[+] Bing>DNS\t: found %s DNS entries for %s" % (len(hostnames), nmap[0]))
-							for hostname in hostnames[1:]:
-								self.q.put("bing~" + nmap[0] + ", " + hostname + "|" + ", ".join(nmap[1:]))
+							output.put("[+] Bing>DNS\t: found %s DNS entries for %s" % (len(hostnames), target['ipv4']))
 
-							hostnames = [hostnames[0]]
+							for hostname in hostnames:
+								new_target = target.copy()
+								new_target['is_bing_result'] = True
+								new_target['hostnames'] = [hostname.strip()]
+								#output.put("[DEBUG]  target injected into queue: " + str(new_target))
+								q.put(new_target)
+
 					else:
-						self.output.put("[-] %s is not a routable IP, skipping Bing>DNS for this host."%nmap[0])
+						output.put("[-] %s is not a routable IP, skipping Bing>DNS for this host." % target['ipv4'] )
 
 
-				# Add the ip into the mix of hostnames
-				if "bing~" in nmap[0]:
-					hostnames = [nmap[1].split('|')[0]]
-					nmap[0] = nmap[0].split('~')[1]
-				else:
-					for item in nmap[1].split('|'): 
-						if item != "":
-							hostnames.append(item)
+				if not 'is_bing_result' in target.keys():
+					# Add the ip into the mix of hostnames
+					target['hostnames'].append(target['ipv4'])
 
-					hostnames.append(nmap[0]) 
-
-				for hostname in hostnames:
+				for hostname in target['hostnames']:
 					if hostname != "":
-						url = prefix+hostname + suffix
+						target['url'] = prefix + hostname + suffix
 						if suffix == "":
-							port = " [" + nmap[2] + "]"
+							port = " [" + target['port'] + "]"
 						else:
 							port = ""
 
-						self.output.put("[>] Pulling\t: " + url + port)
+						output.put("[>] Pulling\t: " + target['url'] + port)
 
-						screenshot(url, hostname, nmap[2], "%s/images" % self.logdir, self.timestamp, self.scriptpath, self.pjs_path, self.logdir, self.output)
+						if not self.noss:
+							screenshot(target, "%s/images" % self.logdir, self.timestamp, self.scriptpath, self.pjs_path, self.logdir)
 
 						try:
-							data = self.opener.open(url)
+							target['res'] = requests.get(target['url'], headers={"user-agent":useragent}, verify=False, timeout=timeout, allow_redirects=True)
 							msg = "[+] Finished"
+
 						except Exception, ex:
 							if hasattr(ex, 'code'):
-								e = ex.code
+								target['res'] = ex.code
 							elif hasattr(ex, 'reason'):
-								e = ex.reason
+								target['res'] = ex.reason
 							else:
-								e = ex
+								target['res'] = ex
 
 							msg = "[x] Failed"
-							# last ditch effort to try and snag the error info
+
+						if self.getoptions:
+							res = (requests.options(target['url'], headers={"user-agent":useragent}, verify=False, timeout=timeout, allow_redirects=False))
+							if 'allow' in res.headers:
+								target['options'] = res.headers['allow']
+
+							if "x-powered-by" in target['res'].headers:
+								target['x-powered-by'] = target['res'].headers['x-powered-by']
+
+						if self.getrobots:
 							try:
-								data = e
-							except:
+								dat = requests.get("%s/robots.txt" % target['url'], verify=False, timeout=timeout, allow_redirects=False).text
+								if dat.status_code == 200 and "llow:" in dat_content: 
+									if not os.path.exists("robots"):
+										os.makedirs("robots")
+
+									open("./robots/%s_robots.txt" % target['hostname'], 'w').write(dat_content)
+									output.put("   [r] Pulled robots.txt:  ./robots/%s_%s_robots.txt  " % (target['hostname'], target['port']))
+									target['robots'] = "y"
+
+								dat = None
+
+							except Exception:
 								pass
 
-						parsedata(data, url + ', ' + ', '.join(nmap), self.opener, self.logdir, self.output, self.timestamp, self.scriptpath, self.getoptions, self.getrobots, self.defpass, self.crawl, url)
-						self.output.put(msg+"\t: "+url+port)
+						if self.crawl == True:
+							output.put("[+] Spidering\t: %s" % full_url)
+							spider(foundgv, target, logdir, timestamp, urls)
+
+						parsedata(target, self.logdir, self.timestamp, self.scriptpath, self.defpass)
+						output.put(msg + "\t: " + target['url'] + " [" + target['port'] + "]")
 
 				self.busy = False
 
 				busy_count = 0
-				for t in self.threads:
+				for t in threads:
 					if t.busy == True:
 						busy_count += 1
+	
+				output.put(" [ Main queue size [ %s ] - Threads Busy/Alive [ %s/%s ] ] "%(str(q.qsize()),busy_count,str(threading.active_count()-2)))
 
-				self.output.put(" [ Queue size [ %s ] - Threads Busy/Alive [ %s/%s ] ] "%(str(self.q.qsize()),busy_count,str(threading.active_count()-2)))
-				self.q.task_done()
+				q.task_done()
 
 
-def screenshot(url, ip, port, destination, timestamp, scriptpath, pjs_path, logdir, output):
-	filename = "%s/%s_%s_%s.png" % (destination, ip, timestamp, port)
+def screenshot(target, destination, timestamp, scriptpath, pjs_path, logdir):
+	filename = "%s/%s_%s_%s.png" % (destination, target['url'].split("/")[2].split(":")[0], timestamp, target['port'])
 	err='.'
 
 	try:
 		log_pipe = open("%s/rawr_%s.log" % (logdir, timestamp), 'ab')
 		start = datetime.now()
-		process = subprocess.Popen([pjs_path,"--web-security=no","--ignore-ssl-errors=yes","--ssl-protocol=any",scriptpath+"/data/screenshot.js", url, filename, useragent, str(ss_delay)], stdout=log_pipe, stderr=log_pipe)
+		process = subprocess.Popen([pjs_path, "--web-security=no", "--ignore-ssl-errors=yes", "--ssl-protocol=any", scriptpath + "/data/screenshot.js", target['url'] , filename, useragent, str(ss_delay)], stdout=log_pipe, stderr=log_pipe)
 		while process.poll() is None:
 			time.sleep(0.1)
 			now = datetime.now()
@@ -225,7 +252,7 @@ def screenshot(url, ip, port, destination, timestamp, scriptpath, pjs_path, logd
 				sig = getattr(signal, 'SIGKILL', signal.SIGTERM)
 				os.kill(process.pid, sig)
 				os.waitpid(-1, os.WNOHANG)
-				err=' - Timed Out.'
+				err = ' - Timed Out.'
 				break
 
 		log_pipe.close()
@@ -234,21 +261,27 @@ def screenshot(url, ip, port, destination, timestamp, scriptpath, pjs_path, logd
 
 		if os.path.exists(filename): 
 			if os.stat(filename).st_size > 0:
-				output.put('[>] Screenshot\t: [ %s ] >>\n   %s' % (url,filename))
+				output.put('[>] Screenshot\t: [ %s ] >>\n   %s' % (target['url'], filename))
 			else:
-				output.put('[X] Screenshot\t: [ %s ] Failed - 0 byte file. Deleted.' % (url))
+				output.put('[X] Screenshot\t: [ %s ] Failed - 0 byte file. Deleted.' % (target['url']))
 				try:
 					os.remove(filename)
 				except:
 					pass
 		else:
-			output.put('[X] Screenshot\t:  [ %s ] Failed%s' % (url,err))
+			output.put('[X] Screenshot\t:  [ %s ] Failed%s' % (target['url'], err))
 
 	except Exception, ex:
-		output.put('[!] Screenshot\t:  [ %s ] Failed - %s' % (url,ex))
+		print target
+		output.put('[!] Screenshot\t:  [ %s ] Failed - %s' % (target['url'], ex))
 
 
-def spider(origin, opener, logdir, timestamp, urls=None):
+def addtox(fname, val): 
+	if fname.lower() in flist.lower().split(', '):
+		x[flist.lower().split(", ").index(fname.lower())] = re.sub('[\n\r,]', '', str(val))
+
+
+def spider(makePNG, origin, logdir, timestamp, urls=None):
 	if not os.path.exists("maps"): os.makedirs("maps")
 
 	coll = []
@@ -262,11 +295,15 @@ def spider(origin, opener, logdir, timestamp, urls=None):
 		urls = list(set(urls))
 
 	def recurse(url_t1, urls_t2, d, tabs):
+		global logdir
+		global fname
+		global timestamp
+
 		for url_t2 in urls_t2:
-			if d > 0: 
+			if d > 0 and makePNG: 
 				coll.append((url_t1, url_t2))
 
-			map_text.append( tabs + url_t2 )
+			open('%s/maps/%s_%s.txt' % (logdir, fname, timestamp), 'a').write("\n" + tabs + url_t2 )
 
 			if len(url_t2.split("/")) > 2: 
 				if spider_follow_subdomains == True:
@@ -277,7 +314,7 @@ def spider(origin, opener, logdir, timestamp, urls=None):
 			if url_t2_hn in url_t1 and not url_t2 in urls_visited:
 				urls_visited.append(url_t2)
 				try:
-					html = (opener.open(url_t2)).read().replace("\n","")
+					html = (requests.get(url_t2, headers={"user-agent":useragent}, verify=False, timeout=timeout, allow_redirects=True).text).replace("\n","")
 					urls_t3_r = list(set(re.findall(URL_REGEX, html, re.I)))
 					urls_t3=[]
 					for url_t3 in urls_t3_r:
@@ -289,10 +326,10 @@ def spider(origin, opener, logdir, timestamp, urls=None):
 				except Exception, ex:
 					pass
 
-	
+
 	recurse(origin, urls, spider_depth, "\t")
 
-	if len(coll) > 0:
+	if len(coll) > 0 and makePNG:
 		# Graph creation
 		gr = graph()
 
@@ -319,346 +356,316 @@ def spider(origin, opener, logdir, timestamp, urls=None):
 
 		gv.layout(gvv, 'dot')
 		gv.render(gvv, 'png', str('%s/maps/%s_map_%s.png' % (logdir, fname, timestamp)))
-		open('%s/maps/%s_%s.txt' % (logdir, fname, timestamp), 'w').write("\n".join(map_text))
-
-def addtox(fname,val): 
-	if fname.lower() in flist.lower():
-		x[flist.lower().split(", ").index(fname.lower())] = re.sub('[\n\r,]', '', str(val))
 
 
-def parsedata(data, nmap, opener, logdir, output, timestamp, scriptpath, getoptions, getrobots, defpass, crawl, full_url):
+def parsedata(target, logdir, timestamp, scriptpath, defpass):
 	x=[" "] * len(flist.split(","))
 
-	def addtox(fname,val): 
-		if fname.lower() in flist.lower():
-			try:
-				x[flist.lower().split(", ").index(fname.lower())] = re.sub('[\n\r,]', '', str(val))
-			
-			except Exception, ex:
-				output.put("  -- Error placing %s in flist  --" % fname)
+	def addtox(fname, val): 
+		if fname.lower() in flist.lower().split(', '):
+			x[flist.lower().split(", ").index(fname.lower())] = re.sub('[\n\r,]', '', str(val))
 
-	addtox("url", nmap.split(", ")[0])
-	addtox("host_ip", nmap.split(", ")[1])
-	addtox("hostname", nmap.split(", ")[2])
-	addtox("port", nmap.split(", ")[3])
-	addtox("state", nmap.split(", ")[4])
-	addtox("protocol", nmap.split(", ")[5])
-	addtox("owner", nmap.split(", ")[6])
-	addtox("service", nmap.split(", ")[7])
-	addtox("rpc_info", nmap.split(", ")[8])
-	if len(nmap.split(", ")) > 9:
-		addtox("version", nmap.split(", ")[9])
+	for i,v in target.items():
+		addtox(i, target[str(i)])
 
 	# identify country if possible
-	#   * am considering loading this into memory with defpass
 	if os.path.exists("%s/%s" % (scriptpath, IP_TO_COUNTRY)):
-		ip = nmap.split(", ")[1].split('.')
+		ip = target['ipv4'].split('.')
 		ipnum = (int(ip[0])*16777216) + (int(ip[1])*65536) + (int(ip[2])*256) + int(ip[3])
 		for l in re.sub('[\"\r]', '', open("%s/%s" % (scriptpath, IP_TO_COUNTRY)).read()).split('\n'):
 			try:
 				if l != "" and (not "#" in l) and (int(l.split(',')[1]) > ipnum > int(l.split(',')[0])):
-					addtox("country", "[%s]-%s" % (l.split(',')[4],l.split(',')[6]))
+					addtox("country", "[%s]-%s" % (l.split(',')[4], l.split(',')[6]))
 					break
 
 			except Exception, ex:
 				output.put("  -- Error parsing %s:  %s  --" % (ex, IP_TO_COUNTRY))
 
-	if getoptions:
+
+	# eat cookie now....omnomnom
+	if len(target['res'].cookies) > 0:	
 		try:
-			req = urllib2.Request(url=nmap.split(", ")[0])
-			req.get_method = lambda : "OPTIONS"
-			resp = opener.open(req)
-			options = resp.info().getheaders('Allow')[0].replace(',','|')
-			addtox("allow", options)
-		except Exception:
+			os.mkdir("cookies")
+
+		except:
 			pass
 
-		resp = None
+		open("./cookies/%s_%s.txt" % (target['url'].split("/")[2].split(":")[0] ,target['port']), 'w').write(str(target['res'].cookies))
+		addtox("cookies", len(target['res'].cookies))
+		
+	addtox("endurl", target['res'].url)
 
-	if getrobots:
-		try:
-			host = nmap.split(", ")[0].split(":")[1].replace("//",'')
-			dat = opener.open("%s/robots.txt" % nmap.split(", ")[0])
-			dat_content = dat.read()
-			if dat.getcode() == 200 and "llow:" in dat_content: 
-				if not os.path.exists("robots"): os.makedirs("robots")
-				open("./robots/%s_robots.txt" % host, 'w').write(dat_content)
-				output.put("   [r] Pulled robots.txt:  ./robots/%s_%s_robots.txt  " % (host,nmap.split(", ")[3]))
-				addtox("robots.txt", "y")
+	if "server" in target['res'].headers:
+		addtox("server", target['res'].headers['server'])
 
-			dat = None
-		except Exception:
-			pass
+	addtox("encoding", target['res'].encoding)
 
-	# grab cookies
-	if hasattr(data, 'info'):
-		cookies = data.info().getheaders('Set-Cookie')
-		if cookies and (len(cookies) > 0): 	
-			try:
-				os.mkdir("cookies")
-			except:
-				pass
+	hist = []
+	for h in target['res'].history: hist.append(h.url)
 
-			cout = ""
-			for cookie in cookies:
-				cout += cookie+'\n\n'
+	if len(hist) > 0: addtox("history", hist)
 
-			open("./cookies/%s_%s.txt"%(nmap.split(", ")[0].split('/')[2].split(':')[0],nmap.split(", ")[3]),'w').write(cout)
-			addtox("cookies", len(cookies))
+	addtox("returncode", "[%s]" % str(target['res'].status_code))
 
-	try:		
-		server_type = ""
-		html = data.read()
-		addtox("endurl", data.geturl())
-		addtox("returncode", "[%s]" % str(data.getcode()))
-		for field in data.info().__str__().split("\r\n"):
-			if field != "":
-				fname = field.split(": ")[0]
-				fval = re.sub('[\n\r]', '', field.split(": ")[1])
-				fval = fval.replace(",",'')
-				if "server" in fname.lower():
-					server_type=fval.lower()
+	# parse the html for different element types
+	# Thanks to A.G. for the lxml suggestion.
+        cxt = html.fromstring(target['res'].content)
+	for tag in ['meta', 'iframe', 'applet', 'object', 'script', 'title', 'embed']:
+		v = 0
+		for el in cxt.iter(tag):
+			v += 1
 
-				addtox(fname.lower(), fval)
+		addtox(tag, v)
 
-		addtox("info", (re.sub('[\n\r,]', '', data.info().__str__())))
-	except: 
-		html = str(data)
+	# looking for urls, we don't want to be limited to specific types of elements.
+	urls = []
+	for url in re.findall(URL_REGEX, target['res'].text, re.I):
+		urls.append(url.split("<")[0])
 
-	if "urlopen error [Errno" in html:
-		line = "%s%s" % (nmap,', '.join(x))
-	else:
-		addtox("title", ' : '.join(re.findall("""<title.*?>([^<]+)<\/title>""", html, re.I)))
+	addtox("urls", ';'.join(urls) )
 
-		meta = re.findall("""<meta[^>^=]+content[\s]*=[\s]*['"]([^"^'^>]+)['"][^>^=]+name[\s]*=[\s]*['"]?(.*)['"]?""", html, re.I)
-		meta += re.findall("""<meta[^>^=]+name[\s]*=[\s]*['"]?(.*)['"]?[^>^=]+content[\s]*=[\s]*['"]?([^"^'^>]+)['"]?""", html, re.I)
-		m = ""
-		for field in meta:
-			if field != "":
-				fname = field[0].strip('"')   
-				fval = re.sub('[\n\r,]', '', field[1])
-				m += "%s:%s, " % (fname, fval)
-				addtox(fname.lower(), fval)
+	# Run through our user-defined regex filters.
+	#  *** If a field isn't present in 'flist' (in the settings section), it won't be added at this time.
+	for field, regxp, modtype in modules:
+		# MODTYPE_CONTENT - returns all matches, seperates by ';'
+		if modtype == 0:	
+			addtox(field, ';'.join(re.findall(regxp, target['res'].text, re.I)) )
 
-		addtox("meta", m.replace(",",'; '))
-		urls = []
-		for url in re.findall(URL_REGEX, html, re.I):
-			urls.append(url.split("<")[0])
-
-		addtox("urls", ';'.join(urls) )
-
-		# Spidering out
-		if crawl == True and foundgv == True:
-			output.put("[+] Spidering\t: %s" % full_url)
-			spider(nmap.split(", ")[0], opener, logdir, timestamp, urls)
-
-		# Run through our user-defined content modules.
-		#  *** If a field isn't present in 'flist' (in the settings section), it won't be added at this time.
-		for field,regxp,modtype,scope in modules:
-			# MODTYPE_CONTENT - returns all matches, seperates by ';'
-			if modtype == 0:	
-				addtox(field, ';'.join(re.findall(regxp, html, re.I)) )
-
-			# MODTYPE_TRUEFALSE - returns 'True' or 'False' based on regxp
-			elif modtype == 1:
-				if len(re.findall(regxp, html, re.I)) > 0:
-					addtox(field, "True")
-				else:
-					addtox(field, "False")
-
-			# MODTYPE_COUNT - counts the number of returned matches
-			elif modtype == 2:
-				addtox(field, len(re.findall(regxp, html, re.I)) )
-
+		# MODTYPE_TRUEFALSE - returns 'True' or 'False' based on regxp
+		elif modtype == 1:
+			if len(re.findall(regxp, target['res'].text, re.I)) > 0:
+				addtox(field, "True")
 			else:
-				output.put("**  skipping %s - \"\"\"%s\"\"\"... invalid modtype" % (field, regxp) )
+				addtox(field, "False")
+
+		# MODTYPE_COUNT - counts the number of returned matches
+		elif modtype == 2:
+			addtox(field, len(re.findall(regxp, target['res'].text, re.I)) )
+
+		else:
+			output.put("**  skipping %s - \"\"\"%s\"\"\"... invalid modtype" % (field, regxp) )
 
 
-	#looking for SSL data
-	if any(s in nmap.split(", ")[7].lower() for s in ["https","ssl"]):
-		ssl_data = ""
-		for xmlfile in glob("*.nessus") + glob("*.xml"):
-			try:
-				if "<NessusClientData_v2>" in open(xmlfile).read():
-					for node in minidom.parse(xmlfile).getElementsByTagName('ReportHost'): 
-						for item in node.getElementsByTagName('ReportItem'):
-							service = item.getAttribute('svc_name')
-							plugin = item.getAttribute('pluginName')
-							if (service == "www") and (plugin == "SSL Certificate Information"):
-								#SSL stuff  ..  ;)
-								pass
-								#nmapout += ", ".join([ip,hostname,portnum,state,protocol,owner,service,sunrpc_info,version_info])+", \n"
-								#count += 1
+	if target['protocol'] == "ssl":   # need to verify this....
+		if not target['ssl_data']:  
+			1==2 # Go out and grab the SSL cert.  Placeholder for now...
 
-								if (nmap.split(", ")[1] in hostnames) or (match == True):
-									#we're on the correct report item - placeholder here until i can get the format
-									output.put("......Found SSL data for %s....." % nmap.split(', ')[1])
-									#addtox("SSL_Tunnel-Weakest", weakest.strip())
-									#addtox("SSL_Tunnel-Ciphers", ciphers.strip("; "))
-									#addtox("SSL_Tunnel-CiphersRaw", c_data.replace("\n",";"))
-									#ssl_data = script.getAttribute('output')
+		# Parse cert and write to file
+		if not os.path.exists("ssl_certs"):
+			os.mkdir("ssl_certs") 
 
-								break; break
+		ssl_data = target['ssl_data']
 
-				else:
-					# nmap xml output
-					dom = minidom.parse(xmlfile).getElementsByTagName('nmaprun')[0]
-					for node in dom.getElementsByTagName('host'): 
-						h = ""		
-						for n in node.getElementsByTagName('hostname'):
-							h += n.getAttribute('name')
+		open("./ssl_certs/%s.cert" % (nmap.split(", ")[1]),'w').write(ssl_data)
+		addtox("SSL_Cert-Raw", ssl_data)
+		ssl_data = ssl_data.split('\n')
+		addtox("SSL_Cert-Issuer", ssl_data[1].split(": ")[1])
+		addtox("SSL_Cert-Subject", ssl_data[0].split(": ")[1])
+		if "*" in ssl_data[0].split(": ")[1]:
+			subject = ssl_data[0].split(": ")[1].split("*")[1]
+		else:
+			subject = ssl_data[0].split(": ")[1]
 
-						for n in node.getElementsByTagName('address'):
-							h += n.getAttribute('addr')
-			
-						match = False
-						for hostname in nmap.split(", ")[2].split('|'):
-							if hostname in h:
-								match == True
-								break
+		if subject in nmap.split(', ')[0:3]: 
+			addtox("SSL_Cert-Verified", "yes")
 
-						if (nmap.split(", ")[1] in h) or (match == True):
-							for port in node.getElementsByTagName('port'):
-								if port.getAttribute('portid') == nmap.split(", ")[3]: 
-									for script in port.getElementsByTagName('script'):
-										if script.getAttribute('id') == "ssl-enum-ciphers":
-											ciphers = ""
-											c_data = script.getAttribute('output')
-											addtox("SSL_Tunnel-CiphersRaw", c_data.replace("\n",";"))
-											c_data = c_data.split('NULL\n  ')
-											for v in c_data[0:-1]:
-												ciphers+= v.strip('\n').strip().split('\n')[0]+"; "
+		addtox("SSL_Cert-KeyAlg", "%s%s"%(ssl_data[2].split(": ")[1],ssl_data[3].split(": ")[1]) )
+		addtox("SSL_Cert-MD5", ssl_data[6].split(": ")[1].replace(" ",''))
+		addtox("SSL_Cert-SHA-1", ssl_data[7].split(": ")[1].replace(" ",''))
+		addtox("SSL_Cert-notbefore", ssl_data[4].split(": ")[1].strip())
+		addtox("SSL_Cert-notafter", ssl_data[5].split(": ")[1].strip())
+		try:
+			notbefore = datetime.strptime(ssl_data[4].split(": ")[1].strip(" "), '%Y-%m-%d %H:%M:%S')
+			notafter = datetime.strptime(ssl_data[5].split(": ")[1].strip(" "), '%Y-%m-%d %H:%M:%S')
+			vdays = ( notafter - notbefore ).days
+			if datetime.now() > notafter: 
+				daysleft = "EXPIRED"
 
-											addtox("SSL_Tunnel-Ciphers", ciphers.strip("; "))
-											weakest = c_data[-1].strip('\n').strip().split('=')
-											if len(weakest) > 1:
-												weakest = weakest[1]
-											else:
-												weakest = weakest[0]
+			else: 
+				daysleft = ( notafter - datetime.now() ).days
 
-											addtox("SSL_Tunnel-Weakest", weakest.strip())
+		except ValueError:
+			# some certificates have non-standard dates in these fields.  
+			vdays = "unk"
+			daysleft = "unk"
 
-										if script.getAttribute('id') == "ssl-cert":
-											ssl_data = script.getAttribute('output')
-
-									break; break
-
-				try:
-					dom.unlink()
-				except:
-					pass
-
-			except Exception, ex:
-				output.put("\n\n  !! Unable to parse %s  !!\n\t\t Error: %s\n\n" % (xmlfile, ex))
-
-		if ssl_data != "":
-			# write the cert to a file
-			if not os.path.exists("ssl_certs"):
-				os.mkdir("ssl_certs") 
-
-			open("./ssl_certs/%s.cert" % (nmap.split(", ")[1]),'w').write(ssl_data)
-			addtox("SSL_Cert-Raw", ssl_data)
-
-			for line in ssl_data.split('\n'):
-				if "issuer" in line.lower():
-					addtox("SSL_Cert-Issuer", line.split(": ")[1])
-
-				elif "subject" in line.lower():
-					addtox("SSL_Cert-Subject", line.split(": ")[1])
-
-					if "*" in line.split(": ")[1]:
-						subject = line.split(": ")[1].split("*")[1]
-
-					else:
-						subject = line.split(": ")[1]
-
-					if subject in nmap.split(', ')[0:3]: 
-						addtox("SSL_Cert-Verified", "yes")
-
-				elif "md5" in line.lower():
-					addtox("SSL_Cert-MD5", line.split(": ")[1].replace(" ",''))
-
-				elif "sha1" in line.lower():
-					addtox("SSL_Cert-SHA-1", line.split(": ")[1].replace(" ",''))
-
-				elif "algorithm" in line.lower():
-					addtox("SSL_Cert-KeyAlg", "%s%s"%line.split(": ")[1] )
-					# need to take another look at this one.  no seeing it atm
-
-				elif "not valid before" in line:
-					notbefore = line.split(": ")[1].strip()
-					addtox("SSL_Cert-notbefore", notafter)
-
-				elif "not valid after" in line:
-					notafter = line.split(": ")[1].strip()
-					addtox("SSL_Cert-notafter", notafter)
-
-				try:
-					notbefore = datetime.strptime(notbefore, '%Y-%m-%d %H:%M:%S')
-					notafter = datetime.strptime(notafter, '%Y-%m-%d %H:%M:%S')
-					vdays = ( notafter - notbefore ).days
-					if datetime.now() > notafter: 
-						daysleft = "EXPIRED"
-
-					else: 
-						daysleft = ( notafter - datetime.now() ).days
-
-				except Exception:
-					# some certificates have non-standard dates in these fields.  
-					vdays = "unk"
-					daysleft = "unk"
-
-				addtox("SSL_Cert-ValidityPeriod", vdays)
-				addtox("SSL_Cert-DaysLeft", daysleft)
+		addtox("SSL_Cert-ValidityPeriod", vdays)
+		addtox("SSL_Cert-DaysLeft", daysleft)
 
 	# check title, service, and server fields for matches in defpass file
 	if defpass:
 		defpwd = ""
-		services_txt = ",".join(nmap.split(',')[6:]).lower() + ",%s"%server_type
-		for pdef in defpass:
-			try:
-				if not pdef.startswith("#"):
-					if (pdef.split(',')[0].lower() in (services_txt) ): 
-						defpwd += "%s;" % (':'.join(pdef.split(',')[0:5]))
-			except Exception, ex:
-				output.put(" -- Error parsing %s: %s --" % (ex, DEFPASS_FILE))
+		target['services'] = []
+		for a in ['server','version-info','x-powered-by','title']:
+			if a in target.keys():
+				target['services'].append(target[a])
+
+		with open("%s/%s" % (scriptpath, DEFPASS_FILE)) as f:
+			for line in f:
+				try:
+					if not line.startswith("#"):
+						if (line.split(',')[0].lower() in (target['services']) ): 
+							defpwd += "%s;" % (':'.join(line.split(',')[0:5]))
+
+				except Exception, ex:
+					output.put(" -- Error parsing %s: %s --" % (DEFPASS_FILE, ex))
 
 		if defpwd: 
 			addtox("Default Password Suggestions", defpwd.strip(";"))
 
-	try:
-		xdata = str(','.join(x))
-		nmap = str(nmap)
-	except Exception, ex:
-		output.put("\t\t!!  Error - " % ex)
-		output.put(x)
-		xdata = ""
-
-	open('index_%s.html' % timestamp, 'a').write("%s%s<br>" % (nmap, xdata))
-	open("rawr_%s_serverinfo.csv" % timestamp, 'a').write("\n%s" % (xdata))
+	open('index_%s.html' % timestamp, 'a').write("%s<br>" % str(','.join(x)))
+	open("rawr_%s_serverinfo.csv" % timestamp, 'a').write("\n%s" % (str(','.join(x))))
 
 
-def write_to_csv(timestamp, ip, hostname, portnum, state, protocol, owner, service, sunrpc_info, version_info):
+def write_to_csv(timestamp, target):
 	x=[" "] * len(flist.split(","))
 
 	if not os.path.exists("rawr_%s_serverinfo.csv" % timestamp):
 		open("rawr_%s_serverinfo.csv" % timestamp, 'w').write(flist)
 
-	addtox("host_ip", ip)
-	addtox("hostname", hostname)
-	addtox("port", portnum)
-	addtox("state", state)
-	addtox("protocol", protocol)
-	addtox("owner", owner)
-	addtox("service", service)
-	addtox("rpc_info", sunrpc_info)
-	addtox("version", version_info)		
+	for i,v in target.items():
+		addtox(i, target[str(i)])	
 
 	try:
 		open("rawr_%s_serverinfo.csv" % timestamp, 'a').write("\n%s" % (str(','.join(x))))
+
 	except Exception, ex:
 		print "\t\t    [!] Unable to write .csv !\n\t\t Error: %s\n\n" % ex
 		print x
+
+
+def parseNexposeXML(allinfo, timestamp, filename):
+	data = etree.iterparse(filename)
+	# Placeholder until I can research the format...
+	targets = []
+	for node in dom.getElementsbyTagName('node'):
+		ip = node.getElementsbyTagName('address').firstChild.nodeValue
+		hostname = node.getElementsbyTagName('name').firstChild.nodeValue
+
+		# ????????????????
+
+		if web:				
+			targets.append(target)
+
+		elif allinfo:
+			write_to_csv(timestamp, target)
+
+	return targets
+
+
+def parseQualysXML(allinfo, timestamp, filename):
+	data = etree.iterparse(filename)
+	targets = []
+	for host in dom.getElementsByTagName('HOST'):
+		target = {}
+		target['hostname'] = ""
+		target['ipv4'] = host.getElementsByTagName('IP')[0].firstChild.nodeValue
+		if len(host.getElementsByTagName('DNS')) > 0:
+			target['hostname'] = host.getElementsByTagName('DNS')[0].firstChild.nodeValue
+
+		for name in host.getElementsByTagName('NETBIOS'):
+			if not name.firstChild.nodeValue.lower() in hostname.lower():
+				target['hostname'] += "|" + name.firstChild.nodeValue
+
+		for vuln in host.getElementsByTagName('VULN_INFO'):
+			if vuln.getElementsByTagName('QID')[0].firstChild.nodeValue in "86000;86001":
+				for name in vuln.getElementsByTagName('FQDN'):
+					if not name.firstChild.nodeValue.lower() in hostname.lower():
+						target['hostname'] += "|" + name.firstChild.nodeValue
+
+				target['port'] = vuln.getElementsByTagName('PORT')[0].firstChild.nodeValue
+				target['protocol'] = vuln.getElementsByTagName('PROTOCOL')[0].firstChild.nodeValue
+				target['owner'] = ""
+				target['service'] = vuln.getElementsByTagName('SERVICE')[0].firstChild.nodeValue
+				target['sunrpc_info'] = ""
+				target['version_info'] = (vuln.getElementsByTagName('RESULT')[0].firstChild.nodeValue).split("\t")[2]
+
+				targets.append(target)
+
+			elif allinfo:
+				write_to_csv(timestamp, target) 
+
+	return targets
+
+
+def parseNessusXML(allinfo, timestamp, filename):
+	data = etree.iterparse(filename)
+	targets = []
+	for node in dom.getElementsByTagName('ReportHost'): 
+				for item in node.getElementsByTagName('ReportItem'):
+					plugin = item.getAttribute('pluginName')
+	 				if plugin == "Service Detection":
+						target = {}
+						target['hostname'] = node.getAttribute('name')
+
+						for subele in node.getElementsByTagName('tag'):
+							name = subele.getAttribute('name')
+							val = subele.firstChild.nodeValue
+							if name == "host-ip":
+								target['ipv4'] = val
+							elif name == "operating-system": 
+								target['version_info'] = val
+							elif name == "system-type": 
+								target['service'] = val
+							elif name == "netbios-name": 
+								target['hostname'] += ("|" + val)
+
+						target['version_info'] += " (%s)"%systype
+			
+						target['protocol'] = item.getAttribute('protocol')
+						target['port'] = item.getAttribute('port')
+						plugin_output = item.getElementsByTagName("plugin_output")[0].firstChild.nodeValue
+
+						if item.getAttribute('svc_name') in ["www","http?","https?"]:
+							target['protocol'] = "http"
+							if any(s in plugin_output.lower() for s in ["ssl", "tls"]):
+								target['protocol'] += "s"
+							targets.append(target)
+
+						elif allinfo:
+							write_to_csv(timestamp, target)
+
+	return targets
+
+
+def parseNMapXML(r):
+	targets = []
+	for el_port in r.xpath("//port"):
+		if el_port.find("state").attrib["state"] == "open":
+			target = {}
+			el_host = el_port.getparent().getparent()
+			for el_add in el_host.xpath("address"):
+				target[el_add.attrib['addrtype']] = el_add.attrib['addr']
+
+			target['hostnames'] = []
+			for el_hn in el_host.xpath("*/hostname"):
+				target['hostnames'].append(el_hn.attrib['name'])
+
+			for el_svc in el_port.xpath("service"):
+				for key in el_svc.keys():
+					target["service_"+key] = el_svc.attrib[key]
+		
+			for el_scpt in el_port.xpath("script"):
+				if el_scpt.attrib['id'] == "ssl-cert":
+					target['ssl-cert'] = el_scpt.attrib['output']
+
+				if el_scpt.attrib['id'] == "ssl-enum-ciphers":
+					target["SSL_Tunnel-Ciphers"] = el_scpt.attrib['output'].replace("\n",";")
+					target["SSL_Tunnel-Weakest"] = el_scpt.attrib['output'][-1].strip('\n').strip()
+			
+			for el_hn in el_host.xpath('owner'):
+				target['owner'].append(el_hn.attrib['name'])
+
+			target['port'] = el_port.attrib['portid']
+			target['protocol'] = el_port.attrib['protocol']
+
+		if any(s in target['service_name'].lower() for s in ["ssl", "http", "tls"]):
+			targets.append(target)
+
+		elif allinfo:
+			write_to_csv(target)
+	
+	return targets
 
 
 def update(force, ckinstall, pjs_path, scriptpath):
@@ -681,7 +688,7 @@ def update(force, ckinstall, pjs_path, scriptpath):
 	url = REPO_DL_PATH + VER_FILE
 	print "  ++ Checking current versions...  >\n   %s\n"%url
 	try:
-		ver_data = urllib2.urlopen(url).read()
+		ver_data = requests.get(url).text
 		script_ver = ver_data.split(",")[0].split(":")[0].replace('\n','')
 		script_files = ver_data.split(",")[0].split(":")[1:]
 		defpass_ver = ver_data.split(",")[1].replace('\n','')
@@ -700,8 +707,8 @@ def update(force, ckinstall, pjs_path, scriptpath):
 			url = REPO_DL_PATH + "rawr_" + script_ver + ".tar"
 			print "\tPulling - " + url
 			try:
-				data = urllib2.urlopen(url).read()
-				open("rawr_" + script_ver + ".tar", 'w+b').write( urllib2.urlopen(url).read() )
+				data = requests.get(url).content
+				open("rawr_" + script_ver + ".tar", 'w+b').write(data)
 				tarfile.open("rawr_" + script_ver + ".tar").extractall('../')
 				os.remove("rawr_" + script_ver + ".tar")
 
@@ -768,7 +775,8 @@ def update(force, ckinstall, pjs_path, scriptpath):
 
 				try:
 					fname = "data/" + fname
-					open(fname,'w+b').write( urllib2.urlopen(url).read() )
+					data = requests.get(url).content
+					open(fname,'w+b').write( data )
 
 					if os.path.exists("data/phantomjs"):
 						def onerror(func, path, exc_info):
@@ -815,7 +823,8 @@ def update(force, ckinstall, pjs_path, scriptpath):
 		url = REPO_DL_PATH + DEFPASS_FILE.split("/")[1]
 		print "  ++ Updating %s rev.%s >> rev.%s\n   %s" % (DEFPASS_FILE, defpass_curr, defpass_ver, url)
 		try:
-			open("data/defpass_tmp.csv",'w').write( urllib2.urlopen(url).read() )
+			data = requests.get(url).content
+			open("data/defpass_tmp.csv",'w').write( data )
 			try: 
 				os.remove(DEFPASS_FILE)
 			except: 
@@ -845,7 +854,8 @@ def update(force, ckinstall, pjs_path, scriptpath):
 		url = REPO_DL_PATH + IP_TO_COUNTRY.split("/")[1] + ".tar.gz"
 		print "\n  ++ Updating %s ver.%s >> ver.%s\n   %s" % (IP_TO_COUNTRY, ip2c_curr,ip2c_ver,url)
 		try:
-			open(IP_TO_COUNTRY + ".tar.gz",'w+b').write( urllib2.urlopen(url).read() )
+			data = requests.get(url).content
+			open(IP_TO_COUNTRY + ".tar.gz",'w+b').write( data )
 			tarfile.open(IP_TO_COUNTRY + ".tar.gz").extractall('./data')
 			os.remove(IP_TO_COUNTRY + ".tar.gz")
 			print "     ++ Success ++\n"
@@ -857,6 +867,7 @@ def update(force, ckinstall, pjs_path, scriptpath):
 		print "\n     -- NOT updating %s - already at ver.%s\n" % (IP_TO_COUNTRY, ip2c_ver)
 
 	print "  ++  Update Complete  ++\n\n"
+	sys.exit(2)
 
 
 def inpath(app):

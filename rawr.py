@@ -17,18 +17,15 @@ import os
 import re
 import sys
 import shutil
-import getopt
 import tarfile
 import httplib
+import optparse
 from time import sleep
 from glob import glob
-from Queue import Queue
-from socket import setdefaulttimeout
 from subprocess import call
 from httplib import HTTPConnection
 from platform import system
 from datetime import datetime
-from xml.dom import minidom
 
 # Set a few static variables
 timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -40,168 +37,62 @@ from lib.banner import *
 from conf.settings import *
 from lib.functions import *
 
+# pull&parse our commandline args
+parser = optparse.OptionParser(usage=usage, version=VERSION)
+parser.add_option('-a', help='Include all open ports in .csv, not just web interfaces.', dest='allinfo', action='store_true', default=False)
+parser.add_option('-f', help='NMap|Nessus|Nexpose|Qualys xml or dir from which to pull files.', dest='xmlfile')
+parser.add_option('-i', help="Target an input list.  [NMap format] [can't be used with -n]", dest='nmap_il')
+parser.add_option('-n', help="Target the specified range or host.  [NMap format]", dest='nmaprng')
+parser.add_option('-p', help="Specify port(s) to scan.   [default is '80,443,8080,8088']", dest='ports')
+parser.add_option('-s', help='Specify a source port for the NMap scan.', dest='sourceport', type='int')
+parser.add_option('-t', help='Set a custom NMap scan timing.   [default is 4]', dest='nmapspeed', type='int')
+parser.add_option('-y', help='', dest='y', action='store_true', default=False)
+parser.add_option('--sslv', help='Assess the SSL security of each target.  [considered intrusive]', dest='sslopt', action='store_true', default=False)
 
-# Parse the arguments
-try: 
-	opts, args = getopt.getopt(sys.argv[1:], "abd:ef:hi:n:op:rs:t:quUyz", ["help","compress-logs","logo=","title=","downgrade","spider","sslv","check-install","force-install","quiet"])
+group = optparse.OptionGroup(parser, "Enumeration Options")
+group.add_option('-b', help='Use Bing to gather external hostnames. (good for shared hosting)', dest='bing_dns', action='store_true', default=False)
+group.add_option('-o', help="Make an 'OPTIONS' call to grab the site's available methods.", dest='getoptions', action='store_true', default=False)
+group.add_option('-r', help='Make an additional web call to get "robots.txt"', dest='getrobots', action='store_true', default=False)
+group.add_option('--downgrade', help='Make requests using HTTP 1.0', dest='ver_dg', action='store_true', default=False)
+group.add_option('--noss', help='Disable screenshots.', dest='noss', action='store_true', default=False)
+group.add_option('--spider', help="Enumerate all urls in target's HTML, create site layout graph.  Will record but not follow links outside of the target's domain.  Creates a map (.png) for that site in the <logfolder>/maps folder.", dest='crawl', action='store_true', default=False)
+parser.add_option_group(group)
 
-except getopt.GetoptError, err: 
-	print "%s\n%s\n\n\t!!   %s   !!\n\n" % (banner, usage, str(err))
-	exit(2)
+group = optparse.OptionGroup(parser, "Output Options")
+group.add_option('-d', help='Directory in which to create log folder [default is "./"]', dest='logdir')
+group.add_option('-q', '--quiet', help="Won't show splash screen.", dest='quiet', action='store_true', default=False)
+group.add_option('-z', help='Compress log folder when finished.', dest='compress_logs', action='store_true', default=False)
+group.add_option('--json', help='stdout will include only JSON strings. Log folders and files are created normally.', dest='json', action='store_true', default=False)
+group.add_option('--json-minimal', help='The only output of this script will be JSON strings to stdout.', dest='json_min', action='store_true', default=False)
+parser.add_option_group(group)
 
-for o, a in opts:
-	if o == ("-a"):
-		allinfo = True
+group = optparse.OptionGroup(parser, "Report Options")
+group.add_option('-e', help='Exclude default username/password data from output.', dest='defpass', action='store_true', default=True)
+group.add_option('--logo', help='Specify a logo file for the HTML report.', dest='logo')
+group.add_option('--title', help='Specify a custom title for the HTML report.', dest='title')
+parser.add_option_group(group)
 
-	elif o == ("-b"):
-		bing_dns = True
+group = optparse.OptionGroup(parser, "Update Options")
+group.add_option('-u', help='Check for newer version of IpToCountry.csv and defpass.csv.', dest='update', action='store_true', default=False)
+group.add_option('-U', help='Force update of IpToCountry.csv and defpass.csv.', dest='forceupdate', action='store_true', default=False)
+group.add_option('--check-install', help="Check for newer IpToCountry.csv and defpass.csv. Check for presence of NMap and its version. Check for presence of phantomJS, prompts if installing.", dest='checkinstall', action='store_true', default=False)
+group.add_option('--force-install', help="Force update - IpToCountry.csv, defpass,csv, phantomJS.  Also check for presence of NMap and its version.", dest='forceinstall', action='store_true', default=False)
+parser.add_option_group(group)
 
-	elif o == ("-d"):
-		logdir = os.path.realpath(a) + "/log_%s_rawr" % timestamp
+(opts, args) = parser.parse_args()
 
-	elif o == ("--downgrade"):
-		ver_dg = True
-
-	elif o == ("-e"):
-		defpass = False
-
-	elif o == ("-f"):
-		if not os.path.exists(os.path.abspath(a)): 
-			print "Unable to locate [%s]. =-\n" % msg
-			sys.exit(1)
-
-		if os.path.isdir(a):
-			for f in glob("%s/*.xml" % a):
-				files.append(os.path.realpath(f))
-
-			if not files:
-				print "No .xml files in [%s]. =-\n" % msg
-				sys.exit(1)
-
-		else: 
-			xmlfile = True
-			files = [os.path.realpath(a)]
-
-	elif o in ("-h", "--help"):
-		print banner + usage + summary + examples
-		sys.exit()
-
-	elif o == ("-i"):
-		if os.path.exists(a): 
-			nmap_il = os.path.realpath(a)
-		else:
-			print "Unable to locate data source [%s]. =-\n" % msg
-			sys.exit(1)
-
-	elif o == ("--logo"):
-		if os.path.exists(os.path.abspath(a)):
-			from PIL import Image
-			i = Image.open(os.path.abspath(a)).size
-			if i[0] > 400 or i[1] > 60:
-				print "[ warning ]  The specified logo may not show up correctly.\n\tA size no larger than 400x60 is recommended.\n"
-
-			logo_file = os.path.realpath(a)
-
-		else:
-			print "Unable to locate logo file [%s]. =-\n" % msg
-			sys.exit(1)
-
-	elif o == ("-n"):
-		nmaprng = a
-
-	elif o == ("-o"):
-		getoptions = True
-
-	elif o == ("-p"):
-		if a.lower() == "fuzzdb":
-			ports = fuzzdb
-
-		elif a.lower() == "all":
-			ports = "1-65535"
-
-		else:
-			ports = a
-
-	elif o == ("-u"):
-		ckinstall = False
-		upd = True
-		force = False
-
-	elif o == ("-U"):
-		ckinstall = False
-		upd = True
-		force = True
-
-	elif o == ("--check-install"):
-		ckinstall=True
-		upd = True
-		force = False
-
-	elif o == ("--force-install"):
-		ckinstall = True
-		upd = True
-		force = True
-
-	elif o == ("-s"):
-		sourceport = a
-
-	elif o == ("--spider"):
-		crawl = True
-
-	elif o == ("-t"):
-		try:
-			if 6 > int(a) > 0:
-				nmapspeed = a
-			else:
-				raise()
-		except:
-			print "%s\n  -= Scan Timing (-t) must be numeric and 1-5 =-\n" % msg
-			sys.exit(1)
-
-	elif o == ("--title"):
-		if len(o) > 60:
-			writelog("The title specified might not show up properly.", logfile)
-
-		report_title = a
-
-	elif o == ("--sslv"):
-		sslopt = ",ssl-enum-ciphers"
-
-	elif o in ("-q","--quiet"):
-		quiet = True
-
-	elif o == ("-r"):
-		getrobots = True
-
-	elif o == ("-y"): 
-		import random;i="Random,Ragged,Rabid,Rare,Radical,Rational,Risky,Remote,Rowdy,Rough,Rampant,Ruthless:Act,Audit,Arming,Affront,Arc,Attack,Apex,Assault,Answer,Assembly,Attempt,Alerting,Arrest,Account,Apparel,Approval,Army:Wily,Weird,Wonky,Wild,Wascawy,Wimpy,Winged,Willing,Working,Warring,Wacky,Wasteful,Wealthy,Worried:Ravioli,Rats,Rabbits,Rhinos,Robots,Rigatoni,Reindeer,Roosters,Robins,Raptors,Raccoons,Reptiles".split(':'); e="%s %s of %s %s"%(random.choice(i[0].split(',')),random.choice(i[1].split(',')),random.choice(i[2].split(',')),random.choice(i[3].split(','))); e=(" "*((18-len(e)/2)))+e+(" "*((18-len(e)/2))); print banner.replace("  Rapid Assessment of Web Resources ",e[0:36]); sys.exit()
-
-	elif o in ("-z","--compress-logs"):
-		compress_logs = True
-
-	else:
-		print "\n  !! Unhandled option:  %s %s  !!\n" % (o, a)
-		sys.exit(1)
-
+if opts.y: 
+	import random;i=words.split(':'); e="%s %s of %s %s"%(random.choice(i[0].split(',')),random.choice(i[1].split(',')),random.choice(i[2].split(',')),random.choice(i[3].split(','))); e=(" "*((18-len(e)/2)))+e+(" "*((18-len(e)/2))); print banner.replace("  Rapid Assessment of Web Resources ",e[0:36]); sys.exit()
 
 # Remove the big dinosaur...  :\
-if not quiet: 
+if not opts.quiet:
 	print banner
 
-
-# Do some switch sanity checks
-if len(sys.argv) < 2 or (len(sys.argv) < 3 and quiet):
+if len(sys.argv) ==99:
 	print usage
-	sys.exit(1)
-elif not (nmaprng != "" or nmap_il != "" or files or upd == True): 
-	print "\n  !! No input specified / found in supplied path. !!\n"
-	sys.exit(1)
-elif (nmaprng != "" and nmap_il != ""):
-	print "\n  !! Can't use -i and -n at the same time.  !!\n\n"
-	sys.exit(1)
+	sys.exit(2)
 
-
-# Look for PhantomJS
+# Look for PhantomJS if needed
 if inpath("phantomjs"):
 	pjs_path = "phantomjs"
 
@@ -214,34 +105,128 @@ elif system() in "CYGWIN|Windows" and inpath("phantomjs.exe"):
 elif system() in "CYGWIN|Windows" and (os.path.exists("%s/data/phantomjs/phantomjs.exe" % scriptpath)):
 	pjs_path = "%s/data//phantomjs/phantomjs.exe" % scriptpath
 
-elif upd == False:
-	print "  !! phantomJS not found in $PATH or in RAWR folder.  \n\n\tTry running 'rawr.py --check-install'\n\n  !! Exiting... !!\n\n"
-	sys.exit(1)
 else:
 	pjs_path = ""
 
 
-# Update if requested.
-if upd == True:
-	update(force, ckinstall, pjs_path, scriptpath)
-	sys.exit(2)
+if (opts.update or opts.forceupdate):
+	if opts.update:
+		update(False, False, pjs_path, scriptpath)
+
+	else:
+		update(True, False, pjs_path, scriptpath)
+
+if opts.forceinstall:
+	update(True, True, pjs_path, scriptpath)
+
+elif opts.checkinstall:
+	update(False, True, pjs_path, scriptpath)
+
+
+if pjs_path == "" and not opts.noss:
+	print "  !! phantomJS not found in $PATH or in RAWR folder.  \n\n\tTry running 'rawr.py --check-install'\n\n  !! Exiting... !!\n\n"
+	sys.exit(1)
+
+
+# sanity checks
+if (opts.nmap_il and opts.nmaprng) or (opts.xmlfile and (opts.nmap_il or opts.nmaprng)):
+	parser.error("Can't use -f, -i, or -n in the same command.")
+	sys.exit(1)
+
+# Take a look at out inputs
+if opts.xmlfile:
+	if not os.path.exists(os.path.abspath(opts.xmlfile)): 
+		print "Unable to locate \n\t[%s]. =-\n" % opts.xmlfile
+		sys.exit(1)
+
+	if os.path.isdir(opts.xmlfile):
+		for f in glob("%s/*.xml" % opts.xmlfile):
+			files.append(os.path.realpath(f))
+
+		if not files:
+			print "No .xml files in \n\t[%s]. =-\n" % opts.xmlfile
+			sys.exit(1)
+
+	else: 
+		xmlfile = True
+		files = [os.path.realpath(opts.xmlfile)]
+
+elif opts.nmap_il or opts.nmaprng:
+	if opts.nmap_il:
+		if os.path.exists(opts.nmap_il): 
+			nmap_il = os.path.realpath(opts.nmap_il)
+		else:
+			print "Unable to locate file \n\t[%s]. =-\n" % opts.nmap_il
+			sys.exit(1)
+
+	else:
+		nmaprng = opts.nmaprng
+
+	if opts.ports:
+		if str(opts.ports).lower() == "fuzzdb":
+			ports = fuzzdb
+
+		elif str(opts.ports).lower() == "all":
+			ports = "1-65535"
+
+		else:
+			ports = str(opts.ports)
+
+	if opts.nmapspeed:
+		try:
+			if 6 > int(opts.nmapspeed) > 0:
+				nmapspeed = opts.nmapspeed
+			else:
+				raise()
+		except:
+			print "\n  -= Scan Timing (-t) must be numeric and 1-5 =-\n"
+			sys.exit(1)
+
+else:
+	print usage + "\n\n\n  -= No input specified. =-\n"
+	sys.exit(1)
+
+
+if opts.logdir:
+	# redefine logdir based on user request
+	logdir = os.path.realpath(opts.logdir) + "/log_%s_rawr" % timestamp
+
+if opts.logo:
+	if os.path.exists(os.path.abspath(opts.logo)):
+		from PIL import Image
+		i = Image.open(os.path.abspath(opts.logo)).size
+		if i[0] > 400 or i[1] > 60:
+			print "[ warning ]  The specified logo may not show up correctly.\n\tA size no larger than 400x60 is recommended.\n"
+
+		logo_file = os.path.realpath(opts.logo)
+
+	else:
+		print "\t-= Unable to locate logo file \n\t[%s]. =-\n" % opts.logo
+		sys.exit(1)
+
+if opts.title:
+	if len(opts.title) > 60:
+		print "[warning] The title specified might not show up properly."
+
+	report_title = opts.title
 
 
 # Create the log directory if it doesn't already exist.
 if not os.path.exists(logdir): 
 	os.makedirs(logdir)
 	newdir = True
+else:
+	newdir = False
 
 logfile = "%s/rawr_%s.log" % (logdir, timestamp)	
 os.chdir(logdir)
 
 
 # Check for the list of default passwords
-if defpass:
+if opts.defpass:
 	if os.path.exists("%s/%s" % (scriptpath, DEFPASS_FILE)): 
 		writelog("\n   -= Located defpass.csv =-\n", logfile)
-		# load defpass into memory - if it gets too big, this will change
-		defpass = [line.strip() for line in open("%s/%s" % (scriptpath, DEFPASS_FILE))]
+
 	else:
 		writelog("\n   -= Unable to locate %s. =-\n" % DEFPASS_FILE, logfile)
 		choice = raw_input("\tContinue without default password info? [Y|n] ").lower()
@@ -251,16 +236,10 @@ if defpass:
 			sys.exit(2)
 
 
-# Build our global opener object
-setdefaulttimeout(timeout)
-
-if ver_dg:
+if opts.ver_dg:
 	# downgrade to HTTP 1.0
 	httplib.HTTPConnection._http_vsn = 10
 	httplib.HTTPConnection._http_vsn_str = 'HTTP/1.0'
-
-opener = urllib2.build_opener(urllib2.HTTPSHandler())
-opener.addheaders = [('User-agent', useragent)]
 
 
 msg = "\nStarted RAWR : %s\n     cmdline : %s\n\n" % (timestamp, " ".join(sys.argv))
@@ -269,9 +248,10 @@ writelog("\n  -= Log Folder created : %s =-\n" % logdir, logfile)
 
 
 # Create a list called 'files', which contains filenames of all our .xml sources.
-if nmap_il != "" or nmaprng != "":
+if opts.nmap_il or opts.nmaprng:
+	files = []
 	# Run NMap to provide discovery [xml] data
-	if nmap_il != "" or (re.match('^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,6}(:[0-9]{1,5})?(\/.*)?$', nmaprng) or (re.match('^((25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{1}[0-9]{1}|[1-9]{1}){1}([-,](25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{1}[0-9]{1}|[1-9]{1}){1}){0,}|\*)\.(((25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{0,1}[0-9]{1}){1}([-,](25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{0,1}[0-9]{1}){1}){0,}|\*)\.){2}((25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{0,1}[0-9]{1}){1}([-,](25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{0,1}[0-9]{1}){1}){0,}|\*|([0]{1}\/(8|9|[1-2]{1}[0-9]{1}|30|31|32){1})){1}$', nmaprng) and not re.match('([-][0-9]{1,3}[-])|(([,-].*[/]|[/].*[,-])|([*].*[/]|[/].*[*]))', nmaprng) and not re.match('([-][0-9]{1,3}[-])|(([,-].*[/]|[/].*[,-])|([*].*[/]|[/].*[*]))', nmaprng))):
+	if opts.nmap_il != "" or (re.match('^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,6}(:[0-9]{1,5})?(\/.*)?$', opts.nmaprng) or (re.match('^((25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{1}[0-9]{1}|[1-9]{1}){1}([-,](25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{1}[0-9]{1}|[1-9]{1}){1}){0,}|\*)\.(((25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{0,1}[0-9]{1}){1}([-,](25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{0,1}[0-9]{1}){1}){0,}|\*)\.){2}((25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{0,1}[0-9]{1}){1}([-,](25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{0,1}[0-9]{1}){1}){0,}|\*|([0]{1}\/(8|9|[1-2]{1}[0-9]{1}|30|31|32){1})){1}$', opts.nmaprng) and not re.match('([-][0-9]{1,3}[-])|(([,-].*[/]|[/].*[,-])|([*].*[/]|[/].*[*]))', opts.nmaprng) and not re.match('([-][0-9]{1,3}[-])|(([,-].*[/]|[/].*[,-])|([*].*[/]|[/].*[*]))', opts.nmaprng))):
 		# ^^ check for valid nmap input (can use hostnames, subnets (ex. 192.168.0.0/24), stars (ex. 192.168.*.*), and split ranges (ex. 192.168.1.1-10,14))
 		if not (inpath("nmap") or inpath("nmap.exe")):
 			writelog("  !! NMap not found in $PATH.  Exiting... !!\n\n", logfile)
@@ -282,15 +262,19 @@ if nmap_il != "" or nmaprng != "":
 		# Build the NMap command args
 		cmd = ["nmap","-Pn"]
 
-		if sourceport != "":
-			cmd += "-g", sourceport
+		if opts.sourceport:
+			cmd += "-g", str(opts.sourceport)
 
-		cmd += "-p", ports ,"-T%s"%nmapspeed, "-vv", "-sV", "--script=ssl-cert"+sslopt, "-oA", "rawr_"+timestamp, "--open"
+		sslscripts = "--script=ssl-cert"
+		if opts.sslopt:
+			sslscripts += ",ssl-enum-ciphers"
 
-		if nmap_il != "": 
-			cmd += "-iL", nmap_il
+		cmd += "-p", ports ,"-T%s" % nmapspeed, "-vv", "-sV", sslscripts, "-oA", "rawr_" + timestamp, "--open"
+
+		if opts.nmap_il: 
+			cmd += "-iL", opts.nmap_il
 		else:
-			cmd.append(nmaprng)
+			cmd.append(opts.nmaprng)
 
 		writelog('  Running > ' + " ".join(cmd), logfile)
 
@@ -338,191 +322,37 @@ else:
 		os.rename(filename, "./images/%s" % (newname))
 
 
-# Create the main queue and parse the files for hosts, placing them in the queue
-q = Queue()
 for filename in files:
-	writelog("[>] Parsing\t: %s  for web hosts..." % filename, logfile)
+	writelog("[>] Parsing : \n\t%s\n   for web hosts...\n" % filename, logfile)
 	try:
-		dom = minidom.parse(filename)
+		r = etree.parse(filename)
 
-		if len(dom.getElementsByTagName('NexposeReport')) > 0:
-			############
-			# Nexpose
-			############
-			for node in dom.getElementsbyTagName('node'):
-				ip = node.getElementsbyTagName('address').firstChild.nodeValue
-				hostname = node.getElementsbyTagName('name').firstChild.nodeValue
+		if len(r.xpath('//NexposeReport')) > 0:
+			targets = parseNexposeXML(r)
 
-				portnum = ""
+		if len(r.xpath('//ASSET_DATA_REPORT')) > 0:
+			targets = parseQualysXML(r)
 
-				state = "open"
-
-				protocol = ""
-
-				owner = ""
-
-				service = ""
-
-				sunrpc_info = ""
-
-				version_info = ""
-
-				if web:
-						q.put(", ".join([ip, hostname, portnum, state, protocol, owner, service, sunrpc_info, version_info]))
-
-				elif allinfo:
-					write_to_csv(timestamp, ip, hostname, portnum, state, protocol, owner, service, sunrpc_info, version_info)
-
-		if len(dom.getElementsByTagName('ASSET_DATA_REPORT')) > 0:
-			############
-			# Qualys
-			############
-			for host in dom.getElementsByTagName('HOST'):
-				hostname = ""
-				ip = host.getElementsByTagName('IP')[0].firstChild.nodeValue
-				if len(host.getElementsByTagName('DNS')) > 0:
-					hostname = host.getElementsByTagName('DNS')[0].firstChild.nodeValue
-
-				for name in host.getElementsByTagName('NETBIOS'):
-							if not name.firstChild.nodeValue.lower() in hostname.lower():
-								hostname += "|" + name.firstChild.nodeValue
-
-				for vuln in host.getElementsByTagName('VULN_INFO'):
-					if vuln.getElementsByTagName('QID')[0].firstChild.nodeValue in "86000;86001":
-						for name in vuln.getElementsByTagName('FQDN'):
-							if not name.firstChild.nodeValue.lower() in hostname.lower():
-								hostname += "|" + name.firstChild.nodeValue
-
-						portnum = vuln.getElementsByTagName('PORT')[0].firstChild.nodeValue
-						state = "open"
-						protocol = vuln.getElementsByTagName('PROTOCOL')[0].firstChild.nodeValue
-						owner = ""
-						service = vuln.getElementsByTagName('SERVICE')[0].firstChild.nodeValue
-						sunrpc_info = ""
-						version_info = vuln.getElementsByTagName('RESULT')[0].firstChild.nodeValue
-						version_info = version_info.split("\t")[2]
-
-						q.put(", ".join([ip, hostname, portnum, state, protocol, owner, service, sunrpc_info, version_info]))
-
-		elif len(dom.getElementsByTagName('NessusClientData_v2')) > 0:
-			############
-			# Nessus
-			############
-			for node in dom.getElementsByTagName('ReportHost'): 
-				for item in node.getElementsByTagName('ReportItem'):
-					plugin = item.getAttribute('pluginName')
-	 				if plugin == "Service Detection":
-						hostname = node.getAttribute('name')
-						service = item.getAttribute('svc_name')
-						ip = ""
-						state = ""
-						owner = ""
-						sunrpc_info = ""
-						version_info = ""
-						systype = ""
-
-						for subele in node.getElementsByTagName('tag'):
-							name = subele.getAttribute('name')
-							val = subele.firstChild.nodeValue
-							if name == "host-ip":
-								ip = val
-							elif name == "operating-system": 
-								version_info = val
-							elif name == "system-type": 
-								systype = val
-							elif name == "netbios-name": 
-								hostname += ("|" + val)
-
-						version_info += " (%s)"%systype
-			
-						protocol = item.getAttribute('protocol')
-						portnum = item.getAttribute('port')
-						plugin_output = item.getElementsByTagName("plugin_output")[0].firstChild.nodeValue
-			
-						service = "http"
-						if any(s in plugin_output.lower() for s in ["ssl", "tls"]):
-							service += "s"
-
-						if (service == "www"):
-							q.put(", ".join([ip, hostname, portnum, state, protocol, owner, service, sunrpc_info, version_info]))
-
-						elif allinfo:
-							write_to_csv(timestamp, ip, hostname, portnum, state, protocol, owner, service, sunrpc_info, version_info)
-
-		elif len(dom.getElementsByTagName('nmaprun')) > 0:
-			############
-			# NMap
-			############
-			for node in dom.getElementsByTagName('host'): 
-				if len(node.getElementsByTagName('ports')) > 0:
-					for port in node.getElementsByTagName('ports')[0].getElementsByTagName('port'):
-						if port.getElementsByTagName('state')[0].getAttribute('state') == "open": 
-							ip = node.getElementsByTagName('address')[0].getAttribute('addr')
-							hostname = []
-							for hn in node.getElementsByTagName('hostname'):
-								if not hn.getAttribute('name') in hostname:
-									hostname.append(hn.getAttribute('name'))
-
-							hostname = '|'.join(hostname)
-							portnum = port.getAttribute('portid')
-							protocol = port.getAttribute('protocol')
-							state = port.getElementsByTagName('state')[0].getAttribute('state')
-							owner = port.getElementsByTagName('owner')
-							if len(owner) > 0: 
-								owner = owner.getAttribute('name')
-							else: 
-								owner = " "
-
-							# Enumerate service information
-							service = "unknown"
-							sunrpc_info = ""
-							version_info = ""
-							ele_service = port.getElementsByTagName('service')
-
-							if len(ele_service) > 0: 
-								ele_service = ele_service[0]
-								service_tunnel = ele_service.getAttribute('tunnel')
-								service = ele_service.getAttribute('name')
-								if service_tunnel: 
-									service = "%s|%s"%(ele_service.getAttribute('tunnel'),service)
-
-								version_info = ele_service.getAttribute('product')
-								if version_info != "": 
-									version_info += " %s" % ele_service.getAttribute('version')
-
-								ostype = ele_service.getAttribute('ostype')
-								if ostype != "": 
-									devtype = ele_service.getAttribute('devicetype')	
-									if devtype != "": 
-										version_info += " [%s - %s]" % (ostype, devtype)
-									else: 
-										version_info += " [%s]" % ostype
-
-									xtra = ele_service.getAttribute('extrainfo')
-									if xtra != "": 
-										version_info += " (%s)" % xtra
-
-							if any(s in service.lower() for s in ["ssl", "http", "tls"]):	
-								q.put(", ".join([ip, hostname, portnum, state, protocol, owner, service, sunrpc_info, version_info]))	
-
-							elif allinfo:
-								write_to_csv(timestamp, ip, hostname, portnum, state, protocol, owner, service, sunrpc_info, version_info)
+		elif len(r.xpath('//NessusClientData_v2')) > 0:
+			targets = parseNessusXML(r)
+					
+		elif len(r.xpath('//nmaprun')) > 0:
+			targets = parseNMapXML(r)
 
 		else:
 			writelog("    [!] Unrecognized file format.  [ %s ]" % filename, logfile)
 			continue
 
+		for target in targets: 
+			q.put(target)
+
 	except Exception, ex:
 		writelog("\n\n    [!] Unable to parse %s !\n\t\t Error: %s\n\n" % ( filename, ex ), logfile)
 
-	writelog("    [>] Found [ %s ] web hosts in %s..." % ( q.qsize(), filename ), logfile)
 
-	try:
-		dom.unlink()
-	except:
-		pass
+	writelog("    [>] Found [ %s ] web hosts in \n\t%s" % ( q.qsize(), filename ), logfile)
 
-	dom = None
+	data = None
 
 
 # Begin processing any hosts found
@@ -536,7 +366,7 @@ if q.qsize() > 0:
 
 	# Make the link to NMap XML in our HTML report
 	if len(files) == 1:
-		if xmlfile == True:
+		if opts.xmlfile:
 			fname = os.path.basename(files[0])
 		else:
 			fname = "rawr_%s.xml" % timestamp
@@ -545,11 +375,11 @@ if q.qsize() > 0:
 		filedat = filedat.replace( '<!-- REPLACEWITHLINK -->', fname )
 		filedat = filedat.replace( '<!-- REPLACEWITHDATE -->', datetime.now().strftime("%b %d, %Y") )
 		filedat = filedat.replace( '<!-- REPLACEWITHTITLE -->', report_title )
-		if nmap_il != "":
-			report_range = nmap_il
+		if opts.nmap_il:
+			report_range = str(opts.nmap_il)
 			
-		elif nmaprng != "":
-			report_range = nmaprng
+		elif opts.nmaprng != "":
+			report_range = str(opts.nmaprng)
 			
 		else:
 			if len(files) > 1:
@@ -564,7 +394,7 @@ if q.qsize() > 0:
 		filedat = filedat.replace( '<!-- REPLACEWITHFLIST -->', flist )
 
 
-		if logo_file != "":
+		if opts.logo:
 			shutil.copy(logo_file, "./html_res/")
 			filedat = filedat.replace( '<!-- REPLACEWITHLOGO -->', ( '\n<img id="logo" src="./html_res/%s" />\n' % os.path.basename(logo_file) ) )
 
@@ -587,16 +417,13 @@ if q.qsize() > 0:
 
 	writelog("\n   -= Getting info from server(s) =-\n", logfile)
 
-	# Create the output queue - prevents output overlap
-	output = Queue()
-	o = out_thread(output, logfile)
+	o = out_thread(logfile)
 	o.daemon = True
 	o.start()
 
 	# Create the main worker pool and get them started
-	threads=[]
 	for i in range(nthreads):
-		t = sithread(q, threads, opener, timestamp, scriptpath, pjs_path, logdir, output, bing_dns, getoptions, getrobots, defpass, crawl)
+		t = sithread(timestamp, scriptpath, pjs_path, logdir, opts.bing_dns, opts.getoptions, opts.getrobots, opts.defpass, opts.crawl, opts.noss)
 		threads.append(t)
 		t.daemon = True
 		t.start()
@@ -646,7 +473,7 @@ if q.qsize() > 0:
 	
 	writelog("\n   ++ Report created in [%s/].  ++\n" % os.getcwd(), logfile)
 
-	if compress_logs:
+	if opts.compress_logs:
 		writelog("[>] Compressing logfile...\n", logfile)
 		logdir = os.path.basename(os.getcwd())
 		os.chdir("../")
