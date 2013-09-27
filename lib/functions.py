@@ -294,20 +294,20 @@ def screenshot(target, logdir, timestamp, scriptpath, pjs_path, output):
 
         if os.path.exists(filename): 
             if os.stat(filename).st_size > 0:
-                output.put('      [+] Screenshot :     [ %s%s ]' % (target['url'], target['port']))
+                output.put('      [+] Screenshot :     [ %s:%s ]' % (target['url'], target['port']))
             else:
-                output.put('      [X] Screenshot :     [ %s%s ] Failed - 0 byte file. Deleted.' % (target['url'], target['port']))
+                output.put('      [X] Screenshot :     [ %s:%s ] Failed - 0 byte file. Deleted.' % (target['url'], target['port']))
                 try:
                     os.remove(filename)
                 except:
                     pass
         else:
-            output.put('      [X] Screenshot :     [ %s%s ] Failed - %s' % (target['url'], target['port'], err))
+            output.put('      [X] Screenshot :     [ %s:%s ] Failed - %s' % (target['url'], target['port'], err))
 
     except Exception:
         error = traceback.format_exc().splitlines()[-3:]
         error_msg("\n".join(error))
-        output.put("      [!] Screenshot :     [ %s%s ] Failed\n\t%s\n" % (target['url'], target['port'], "\n\t".join(error) ))
+        output.put("      [!] Screenshot :     [ %s:%s ] Failed\n\t%s\n" % (target['url'], target['port'], "\n\t".join(error) ))
 
 
 def crawl(target, logdir, timestamp, opts):
