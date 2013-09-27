@@ -12,10 +12,10 @@ fuzzdb = "66,80,81,443,445,457,1080,1100,1241,1352,1433,1434,1521,1944,2301,3128
     ",4002,4100,5000,5432,5800,5801,5802,6346,6347,7001,7002,8080,8888,30821"
 #http://code.google.com/p/fuzzdb/source/browse/trunk/wordlists-misc/common-http-ports.txt
 
-spider_depth = 3                    # Number of layers to crawl.
-spider_follow_subdomains = True     # Allows all subdomains of given url.
-spider_timeout = 180                # Time in seconds after which the crawl will cease.
-spider_url_limit = 300              # Maxmimum number of urls to crawl.
+spider_depth = 3	                 # Number of layers to crawl.
+spider_follow_subdomains = True    # Allows all subdomains of given url.
+spider_timeout = 30                # Time in seconds after which the crawl will cease.
+spider_url_limit = 200             # Maxmimum number of urls to crawl.
 
 # CSV settings
 csv_sort_col = "ipv4"     # The column name of the field by which the CSV will be ordered.  *Must exist in 'flist'*
