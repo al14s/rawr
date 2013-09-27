@@ -1,872 +1,1526 @@
-
 import os
 import sys
 import shutil
 import tarfile
-import urllib2
 import platform
 import subprocess
 import signal
 import re
 import time
 import threading
-from glob import glob
-from xml.dom import minidom
+import sqlite3
+import traceback
+import urlparse
 from datetime import datetime
-from lib.constants import *
-from conf.settings import useragent, flist, timeout, ss_delay, binged, binging, spider_depth, spider_follow_subdomains
-from modules.default import *
+from Queue import Queue
 
+# Not in stdlib, but included in lib folder
+sys.path.append('./lib/')
+import requests
+from lxml import html, etree
+from constants import *
+from conf.modules import *
+from conf.settings import useragent, flist, timeout, ss_delay, spider_depth,\
+    spider_follow_subdomains, spider_url_limit, spider_timeout, nthreads
 
-# Import graphviz and pygraph if they're available
-try:
-	import gv
-	sys.path.append('..')
-	sys.path.append('/usr/lib/graphviz/python/')
-	sys.path.append('/usr/lib64/graphviz/python/')
-	from pygraph.classes.graph import graph
-	from pygraph.classes.digraph import digraph
-	from pygraph.algorithms.searching import breadth_first_search
-	from pygraph.readwrite.dot import write
-	foundgv = True
+binged = {}
+binging = False
 
-except Exception, ex:
-	print " !! %s > \n\t\tWe won't be spidering due to this... \n" % ex
-	# We'll decline the '--spider' command if there was a problem importing gv or pygraph
-	foundgv = False
-
+threads = []
+q = Queue()  # Create the main queue and parse the files for hosts, placing them in the queue
+output = Queue()  # Create the output queue - prevents output overlap
 
 class out_thread(threading.Thread):
-	def __init__(self, queue, logfile):
-		threading.Thread.__init__(self)
-		self.queue = queue
-		self.logfile = logfile
-		global writelog
+    def __init__(self, queue, logfile, opts):
+        threading.Thread.__init__(self)
+        self.queue = queue
+        self.logfile = logfile
+        self.opts = opts
+        global writelog
 
-	def run(self): 
-		while True:
-			writelog(self.queue.get(), self.logfile)
-			self.queue.task_done()
-					
+    def run(self):
+        while True:
+            writelog(self.queue.get(), self.logfile, self.opts)
+            self.queue.task_done()
+
 
 class sithread(threading.Thread):
-	def __init__(self, q, threads, opener, timestamp, scriptpath, pjs_path, logdir, output, bing_dns, getoptions, getrobots, defpass, crawl):
-		threading.Thread.__init__(self)
-
-		self.timestamp = timestamp
-		self.threads = threads
-		self.scriptpath = scriptpath
-		self.pjs_path = pjs_path
-		self.logdir = logdir
-		self.bing_dns = bing_dns
-		self.output = output
-		self.getoptions = getoptions
-		self.getrobots = getrobots
-		self.crawl = crawl
-		self.q = q
-		self.defpass = defpass
-		self.terminate = False
-		self.busy = False
-		self.opener = opener
-
-	def run(self):
-
-		global binged
-		global binging
-
-		while not self.terminate:
-			time.sleep(0.5)
-			if not self.q.empty():
-				data = ""
-				self.busy = True
-				nmap = self.q.get().split(', ')
-
-				hostnames = []
-
-				prefix = "http://"
-				if any(s in nmap[6] for s in ["https","ssl"]):
-					prefix = "https://"
-					
-				suffix = ":"+nmap[2]
-				if any(s in nmap[2] for s in ["80","443"]):
-					suffix = ""
-				
-				if self.bing_dns == True and not "bing~" in nmap[0]:
-					# Don't do Bing>DNS lookups for non-routable IPs
-					routable = True		
-					nrips = ["10.","172.","192.168.","127.;16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31","169."]
-					for nrip in nrips:
-						if nmap[0].startswith(nrip.split(";")[0]):
-							if len(nrip.split(";")) > 1: 
-								for subnet in nrip.split(";")[1].split(","):
-									if nmap[0].startswith(nrip.split(";")[0]+subnet+'.'):
-										routable = False
-							else:
-								routable = False
-
-					if routable:
-						while binging:
-							time.sleep(0.5)
-
-						binging = True
-
-						if nmap[0] in "~".join(binged):
-							self.output.put("[@] Bing>DNS\t: " + nmap[0] + "  -  pulling from cache...")
-							for item in binged:
-								if nmap[0] in item.split(":")[0]:
-									hn = item.split(":")[1].split(";")									
-									if len(hn) != 0 and hn[0] != "":
-										hostnames = hn
-
-									break
-						else:
-							self.opener.addheaders.append(('Cookie', 'SRCHHPGUSR=NRSLT=150'))
-
-							self.output.put("[@] Bing>DNS\t: "+nmap[0])
-							try: 
-								bing_res = self.opener.open(("http://www.bing.com/search?q=ip%3a"+nmap[0])).read().split("sb_meta")
-								for line in bing_res:
-									res = re.findall( r".*<cite>(.*)</cite>.*", line )
-									if res:
-										hostnames.append(res[0].split('/')[0])
-
-								binged.append(nmap[0] + ":" + ";".join(hostnames))
-							except Exception, ex: 
-								self.output.put("[x] Bing>DNS\t: Error - %s"%ex)
-								hostnames = []
-
-						binging = False
-
-						# back to normal
-						self.opener.addheaders = [('User-agent', useragent)]
-
-						if len(hostnames) == 0: 
-							self.output.put("[x] Bing>DNS\t: found no DNS entries for %s"%(nmap[0]))
-						else:
-							# remove any duplicates...
-							seen = set()
-							hostnames = [ x for x in hostnames if x not in seen and not seen.add(x)]
-							self.output.put("[+] Bing>DNS\t: found %s DNS entries for %s" % (len(hostnames), nmap[0]))
-							for hostname in hostnames[1:]:
-								self.q.put("bing~" + nmap[0] + ", " + hostname + "|" + ", ".join(nmap[1:]))
-
-							hostnames = [hostnames[0]]
-					else:
-						self.output.put("[-] %s is not a routable IP, skipping Bing>DNS for this host."%nmap[0])
-
-
-				# Add the ip into the mix of hostnames
-				if "bing~" in nmap[0]:
-					hostnames = [nmap[1].split('|')[0]]
-					nmap[0] = nmap[0].split('~')[1]
-				else:
-					for item in nmap[1].split('|'): 
-						if item != "":
-							hostnames.append(item)
-
-					hostnames.append(nmap[0]) 
-
-				for hostname in hostnames:
-					if hostname != "":
-						url = prefix+hostname + suffix
-						if suffix == "":
-							port = " [" + nmap[2] + "]"
-						else:
-							port = ""
-
-						self.output.put("[>] Pulling\t: " + url + port)
-
-						screenshot(url, hostname, nmap[2], "%s/images" % self.logdir, self.timestamp, self.scriptpath, self.pjs_path, self.logdir, self.output)
-
-						try:
-							data = self.opener.open(url)
-							msg = "[+] Finished"
-						except Exception, ex:
-							if hasattr(ex, 'code'):
-								e = ex.code
-							elif hasattr(ex, 'reason'):
-								e = ex.reason
-							else:
-								e = ex
-
-							msg = "[x] Failed"
-							# last ditch effort to try and snag the error info
-							try:
-								data = e
-							except:
-								pass
-
-						parsedata(data, url + ', ' + ', '.join(nmap), self.opener, self.logdir, self.output, self.timestamp, self.scriptpath, self.getoptions, self.getrobots, self.defpass, self.crawl, url)
-						self.output.put(msg+"\t: "+url+port)
-
-				self.busy = False
-
-				busy_count = 0
-				for t in self.threads:
-					if t.busy == True:
-						busy_count += 1
-
-				self.output.put(" [ Queue size [ %s ] - Threads Busy/Alive [ %s/%s ] ] "%(str(self.q.qsize()),busy_count,str(threading.active_count()-2)))
-				self.q.task_done()
-
-
-def screenshot(url, ip, port, destination, timestamp, scriptpath, pjs_path, logdir, output):
-	filename = "%s/%s_%s_%s.png" % (destination, ip, timestamp, port)
-	err='.'
-
-	try:
-		log_pipe = open("%s/rawr_%s.log" % (logdir, timestamp), 'ab')
-		start = datetime.now()
-		process = subprocess.Popen([pjs_path,"--web-security=no","--ignore-ssl-errors=yes","--ssl-protocol=any",scriptpath+"/data/screenshot.js", url, filename, useragent, str(ss_delay)], stdout=log_pipe, stderr=log_pipe)
-		while process.poll() is None:
-			time.sleep(0.1)
-			now = datetime.now()
-			if (now - start).seconds > timeout+1:
-				sig = getattr(signal, 'SIGKILL', signal.SIGTERM)
-				os.kill(process.pid, sig)
-				os.waitpid(-1, os.WNOHANG)
-				err=' - Timed Out.'
-				break
-
-		log_pipe.close()
-		log_pipe = None
-		process = None
-
-		if os.path.exists(filename): 
-			if os.stat(filename).st_size > 0:
-				output.put('[>] Screenshot\t: [ %s ] >>\n   %s' % (url,filename))
-			else:
-				output.put('[X] Screenshot\t: [ %s ] Failed - 0 byte file. Deleted.' % (url))
-				try:
-					os.remove(filename)
-				except:
-					pass
-		else:
-			output.put('[X] Screenshot\t:  [ %s ] Failed%s' % (url,err))
-
-	except Exception, ex:
-		output.put('[!] Screenshot\t:  [ %s ] Failed - %s' % (url,ex))
-
-
-def spider(origin, opener, logdir, timestamp, urls=None):
-	if not os.path.exists("maps"): os.makedirs("maps")
-
-	coll = []
-	urls_visited = []
-	map_text = [origin]
-	fname = origin.split("/")[2]
-
-	if urls == None:
-		urls = [origin]
-	else:
-		urls = list(set(urls))
-
-	def recurse(url_t1, urls_t2, d, tabs):
-		for url_t2 in urls_t2:
-			if d > 0: 
-				coll.append((url_t1, url_t2))
-
-			map_text.append( tabs + url_t2 )
-
-			if len(url_t2.split("/")) > 2: 
-				if spider_follow_subdomains == True:
-					url_t2_hn = ".".join((url_t2.split("/")[2]).split(".")[-2:])
-				else:
-					url_t2_hn = url_t2.split("/")[2]
-
-			if url_t2_hn in url_t1 and not url_t2 in urls_visited:
-				urls_visited.append(url_t2)
-				try:
-					html = (opener.open(url_t2)).read().replace("\n","")
-					urls_t3_r = list(set(re.findall(URL_REGEX, html, re.I)))
-					urls_t3=[]
-					for url_t3 in urls_t3_r:
-						urls_t3.append(url_t3)
-
-					if len(urls_t3) > 0 and d > 0:
-						recurse(url_t2, urls_t3, d-1, tabs + "\t")					
-
-				except Exception, ex:
-					pass
-
-	
-	recurse(origin, urls, spider_depth, "\t")
-
-	if len(coll) > 0:
-		# Graph creation
-		gr = graph()
-
-		c = []
-		# Add nodes and edges
-		for item in coll:
-			c.append(item[0].replace(":","~").split("<")[0])
-			c.append(item[1].replace(":","~").split("<")[0])
-
-		gr.add_nodes(list(set(c)))
-
-		for item in coll:
-			try:
-				gr.add_edge((item[0].replace(":","~").split("<")[0], item[1].replace(":","~").split("<")[0]))
-			except Exception, ex:
-				pass
-
-		st, order = breadth_first_search(gr, root=origin.replace(":","~").split("<")[0])
-		gst = digraph()
-		gst.add_spanning_tree(st)
-		dot = write(gst)
-
-		gvv = gv.readstring(dot)
-
-		gv.layout(gvv, 'dot')
-		gv.render(gvv, 'png', str('%s/maps/%s_map_%s.png' % (logdir, fname, timestamp)))
-		open('%s/maps/%s_%s.txt' % (logdir, fname, timestamp), 'w').write("\n".join(map_text))
-
-def addtox(fname,val): 
-	if fname.lower() in flist.lower():
-		x[flist.lower().split(", ").index(fname.lower())] = re.sub('[\n\r,]', '', str(val))
-
-
-def parsedata(data, nmap, opener, logdir, output, timestamp, scriptpath, getoptions, getrobots, defpass, crawl, full_url):
-	x=[" "] * len(flist.split(","))
-
-	def addtox(fname,val): 
-		if fname.lower() in flist.lower():
-			try:
-				x[flist.lower().split(", ").index(fname.lower())] = re.sub('[\n\r,]', '', str(val))
-			
-			except Exception, ex:
-				output.put("  -- Error placing %s in flist  --" % fname)
-
-	addtox("url", nmap.split(", ")[0])
-	addtox("host_ip", nmap.split(", ")[1])
-	addtox("hostname", nmap.split(", ")[2])
-	addtox("port", nmap.split(", ")[3])
-	addtox("state", nmap.split(", ")[4])
-	addtox("protocol", nmap.split(", ")[5])
-	addtox("owner", nmap.split(", ")[6])
-	addtox("service", nmap.split(", ")[7])
-	addtox("rpc_info", nmap.split(", ")[8])
-	if len(nmap.split(", ")) > 9:
-		addtox("version", nmap.split(", ")[9])
-
-	# identify country if possible
-	#   * am considering loading this into memory with defpass
-	if os.path.exists("%s/%s" % (scriptpath, IP_TO_COUNTRY)):
-		ip = nmap.split(", ")[1].split('.')
-		ipnum = (int(ip[0])*16777216) + (int(ip[1])*65536) + (int(ip[2])*256) + int(ip[3])
-		for l in re.sub('[\"\r]', '', open("%s/%s" % (scriptpath, IP_TO_COUNTRY)).read()).split('\n'):
-			try:
-				if l != "" and (not "#" in l) and (int(l.split(',')[1]) > ipnum > int(l.split(',')[0])):
-					addtox("country", "[%s]-%s" % (l.split(',')[4],l.split(',')[6]))
-					break
-
-			except Exception, ex:
-				output.put("  -- Error parsing %s:  %s  --" % (ex, IP_TO_COUNTRY))
-
-	if getoptions:
-		try:
-			req = urllib2.Request(url=nmap.split(", ")[0])
-			req.get_method = lambda : "OPTIONS"
-			resp = opener.open(req)
-			options = resp.info().getheaders('Allow')[0].replace(',','|')
-			addtox("allow", options)
-		except Exception:
-			pass
-
-		resp = None
-
-	if getrobots:
-		try:
-			host = nmap.split(", ")[0].split(":")[1].replace("//",'')
-			dat = opener.open("%s/robots.txt" % nmap.split(", ")[0])
-			dat_content = dat.read()
-			if dat.getcode() == 200 and "llow:" in dat_content: 
-				if not os.path.exists("robots"): os.makedirs("robots")
-				open("./robots/%s_robots.txt" % host, 'w').write(dat_content)
-				output.put("   [r] Pulled robots.txt:  ./robots/%s_%s_robots.txt  " % (host,nmap.split(", ")[3]))
-				addtox("robots.txt", "y")
-
-			dat = None
-		except Exception:
-			pass
-
-	# grab cookies
-	if hasattr(data, 'info'):
-		cookies = data.info().getheaders('Set-Cookie')
-		if cookies and (len(cookies) > 0): 	
-			try:
-				os.mkdir("cookies")
-			except:
-				pass
-
-			cout = ""
-			for cookie in cookies:
-				cout += cookie+'\n\n'
-
-			open("./cookies/%s_%s.txt"%(nmap.split(", ")[0].split('/')[2].split(':')[0],nmap.split(", ")[3]),'w').write(cout)
-			addtox("cookies", len(cookies))
-
-	try:		
-		server_type = ""
-		html = data.read()
-		addtox("endurl", data.geturl())
-		addtox("returncode", "[%s]" % str(data.getcode()))
-		for field in data.info().__str__().split("\r\n"):
-			if field != "":
-				fname = field.split(": ")[0]
-				fval = re.sub('[\n\r]', '', field.split(": ")[1])
-				fval = fval.replace(",",'')
-				if "server" in fname.lower():
-					server_type=fval.lower()
-
-				addtox(fname.lower(), fval)
-
-		addtox("info", (re.sub('[\n\r,]', '', data.info().__str__())))
-	except: 
-		html = str(data)
-
-	if "urlopen error [Errno" in html:
-		line = "%s%s" % (nmap,', '.join(x))
-	else:
-		addtox("title", ' : '.join(re.findall("""<title.*?>([^<]+)<\/title>""", html, re.I)))
-
-		meta = re.findall("""<meta[^>^=]+content[\s]*=[\s]*['"]([^"^'^>]+)['"][^>^=]+name[\s]*=[\s]*['"]?(.*)['"]?""", html, re.I)
-		meta += re.findall("""<meta[^>^=]+name[\s]*=[\s]*['"]?(.*)['"]?[^>^=]+content[\s]*=[\s]*['"]?([^"^'^>]+)['"]?""", html, re.I)
-		m = ""
-		for field in meta:
-			if field != "":
-				fname = field[0].strip('"')   
-				fval = re.sub('[\n\r,]', '', field[1])
-				m += "%s:%s, " % (fname, fval)
-				addtox(fname.lower(), fval)
-
-		addtox("meta", m.replace(",",'; '))
-		urls = []
-		for url in re.findall(URL_REGEX, html, re.I):
-			urls.append(url.split("<")[0])
-
-		addtox("urls", ';'.join(urls) )
-
-		# Spidering out
-		if crawl == True and foundgv == True:
-			output.put("[+] Spidering\t: %s" % full_url)
-			spider(nmap.split(", ")[0], opener, logdir, timestamp, urls)
-
-		# Run through our user-defined content modules.
-		#  *** If a field isn't present in 'flist' (in the settings section), it won't be added at this time.
-		for field,regxp,modtype,scope in modules:
-			# MODTYPE_CONTENT - returns all matches, seperates by ';'
-			if modtype == 0:	
-				addtox(field, ';'.join(re.findall(regxp, html, re.I)) )
-
-			# MODTYPE_TRUEFALSE - returns 'True' or 'False' based on regxp
-			elif modtype == 1:
-				if len(re.findall(regxp, html, re.I)) > 0:
-					addtox(field, "True")
-				else:
-					addtox(field, "False")
-
-			# MODTYPE_COUNT - counts the number of returned matches
-			elif modtype == 2:
-				addtox(field, len(re.findall(regxp, html, re.I)) )
-
-			else:
-				output.put("**  skipping %s - \"\"\"%s\"\"\"... invalid modtype" % (field, regxp) )
-
-
-	#looking for SSL data
-	if any(s in nmap.split(", ")[7].lower() for s in ["https","ssl"]):
-		ssl_data = ""
-		for xmlfile in glob("*.nessus") + glob("*.xml"):
-			try:
-				if "<NessusClientData_v2>" in open(xmlfile).read():
-					for node in minidom.parse(xmlfile).getElementsByTagName('ReportHost'): 
-						for item in node.getElementsByTagName('ReportItem'):
-							service = item.getAttribute('svc_name')
-							plugin = item.getAttribute('pluginName')
-							if (service == "www") and (plugin == "SSL Certificate Information"):
-								#SSL stuff  ..  ;)
-								pass
-								#nmapout += ", ".join([ip,hostname,portnum,state,protocol,owner,service,sunrpc_info,version_info])+", \n"
-								#count += 1
-
-								if (nmap.split(", ")[1] in hostnames) or (match == True):
-									#we're on the correct report item - placeholder here until i can get the format
-									output.put("......Found SSL data for %s....." % nmap.split(', ')[1])
-									#addtox("SSL_Tunnel-Weakest", weakest.strip())
-									#addtox("SSL_Tunnel-Ciphers", ciphers.strip("; "))
-									#addtox("SSL_Tunnel-CiphersRaw", c_data.replace("\n",";"))
-									#ssl_data = script.getAttribute('output')
-
-								break; break
-
-				else:
-					# nmap xml output
-					dom = minidom.parse(xmlfile).getElementsByTagName('nmaprun')[0]
-					for node in dom.getElementsByTagName('host'): 
-						h = ""		
-						for n in node.getElementsByTagName('hostname'):
-							h += n.getAttribute('name')
-
-						for n in node.getElementsByTagName('address'):
-							h += n.getAttribute('addr')
-			
-						match = False
-						for hostname in nmap.split(", ")[2].split('|'):
-							if hostname in h:
-								match == True
-								break
-
-						if (nmap.split(", ")[1] in h) or (match == True):
-							for port in node.getElementsByTagName('port'):
-								if port.getAttribute('portid') == nmap.split(", ")[3]: 
-									for script in port.getElementsByTagName('script'):
-										if script.getAttribute('id') == "ssl-enum-ciphers":
-											ciphers = ""
-											c_data = script.getAttribute('output')
-											addtox("SSL_Tunnel-CiphersRaw", c_data.replace("\n",";"))
-											c_data = c_data.split('NULL\n  ')
-											for v in c_data[0:-1]:
-												ciphers+= v.strip('\n').strip().split('\n')[0]+"; "
-
-											addtox("SSL_Tunnel-Ciphers", ciphers.strip("; "))
-											weakest = c_data[-1].strip('\n').strip().split('=')
-											if len(weakest) > 1:
-												weakest = weakest[1]
-											else:
-												weakest = weakest[0]
-
-											addtox("SSL_Tunnel-Weakest", weakest.strip())
-
-										if script.getAttribute('id') == "ssl-cert":
-											ssl_data = script.getAttribute('output')
-
-									break; break
-
-				try:
-					dom.unlink()
-				except:
-					pass
-
-			except Exception, ex:
-				output.put("\n\n  !! Unable to parse %s  !!\n\t\t Error: %s\n\n" % (xmlfile, ex))
-
-		if ssl_data != "":
-			# write the cert to a file
-			if not os.path.exists("ssl_certs"):
-				os.mkdir("ssl_certs") 
-
-			open("./ssl_certs/%s.cert" % (nmap.split(", ")[1]),'w').write(ssl_data)
-			addtox("SSL_Cert-Raw", ssl_data)
-
-			for line in ssl_data.split('\n'):
-				if "issuer" in line.lower():
-					addtox("SSL_Cert-Issuer", line.split(": ")[1])
-
-				elif "subject" in line.lower():
-					addtox("SSL_Cert-Subject", line.split(": ")[1])
-
-					if "*" in line.split(": ")[1]:
-						subject = line.split(": ")[1].split("*")[1]
-
-					else:
-						subject = line.split(": ")[1]
-
-					if subject in nmap.split(', ')[0:3]: 
-						addtox("SSL_Cert-Verified", "yes")
-
-				elif "md5" in line.lower():
-					addtox("SSL_Cert-MD5", line.split(": ")[1].replace(" ",''))
-
-				elif "sha1" in line.lower():
-					addtox("SSL_Cert-SHA-1", line.split(": ")[1].replace(" ",''))
-
-				elif "algorithm" in line.lower():
-					addtox("SSL_Cert-KeyAlg", "%s%s"%line.split(": ")[1] )
-					# need to take another look at this one.  no seeing it atm
-
-				elif "not valid before" in line:
-					notbefore = line.split(": ")[1].strip()
-					addtox("SSL_Cert-notbefore", notafter)
-
-				elif "not valid after" in line:
-					notafter = line.split(": ")[1].strip()
-					addtox("SSL_Cert-notafter", notafter)
-
-				try:
-					notbefore = datetime.strptime(notbefore, '%Y-%m-%d %H:%M:%S')
-					notafter = datetime.strptime(notafter, '%Y-%m-%d %H:%M:%S')
-					vdays = ( notafter - notbefore ).days
-					if datetime.now() > notafter: 
-						daysleft = "EXPIRED"
-
-					else: 
-						daysleft = ( notafter - datetime.now() ).days
-
-				except Exception:
-					# some certificates have non-standard dates in these fields.  
-					vdays = "unk"
-					daysleft = "unk"
-
-				addtox("SSL_Cert-ValidityPeriod", vdays)
-				addtox("SSL_Cert-DaysLeft", daysleft)
-
-	# check title, service, and server fields for matches in defpass file
-	if defpass:
-		defpwd = ""
-		services_txt = ",".join(nmap.split(',')[6:]).lower() + ",%s"%server_type
-		for pdef in defpass:
-			try:
-				if not pdef.startswith("#"):
-					if (pdef.split(',')[0].lower() in (services_txt) ): 
-						defpwd += "%s;" % (':'.join(pdef.split(',')[0:5]))
-			except Exception, ex:
-				output.put(" -- Error parsing %s: %s --" % (ex, DEFPASS_FILE))
-
-		if defpwd: 
-			addtox("Default Password Suggestions", defpwd.strip(";"))
-
-	try:
-		xdata = str(','.join(x))
-		nmap = str(nmap)
-	except Exception, ex:
-		output.put("\t\t!!  Error - " % ex)
-		output.put(x)
-		xdata = ""
-
-	open('index_%s.html' % timestamp, 'a').write("%s%s<br>" % (nmap, xdata))
-	open("rawr_%s_serverinfo.csv" % timestamp, 'a').write("\n%s" % (xdata))
-
-
-def write_to_csv(timestamp, ip, hostname, portnum, state, protocol, owner, service, sunrpc_info, version_info):
-	x=[" "] * len(flist.split(","))
-
-	if not os.path.exists("rawr_%s_serverinfo.csv" % timestamp):
-		open("rawr_%s_serverinfo.csv" % timestamp, 'w').write(flist)
-
-	addtox("host_ip", ip)
-	addtox("hostname", hostname)
-	addtox("port", portnum)
-	addtox("state", state)
-	addtox("protocol", protocol)
-	addtox("owner", owner)
-	addtox("service", service)
-	addtox("rpc_info", sunrpc_info)
-	addtox("version", version_info)		
-
-	try:
-		open("rawr_%s_serverinfo.csv" % timestamp, 'a').write("\n%s" % (str(','.join(x))))
-	except Exception, ex:
-		print "\t\t    [!] Unable to write .csv !\n\t\t Error: %s\n\n" % ex
-		print x
+    def __init__(self, timestamp, scriptpath, pjs_path, logdir, output, opts):
+        threading.Thread.__init__(self)        
+        self.timestamp = timestamp
+        self.scriptpath = scriptpath
+        self.pjs_path = pjs_path
+        self.logdir = logdir
+        self.output = output
+        self.opts = opts
+        self.terminate = False
+        self.busy = False
+
+    def run(self):
+
+        global binged
+        global binging
+        global q
+        global nthreads
+
+        while not self.terminate:
+            time.sleep(0.5)
+
+            if not q.empty():
+                self.busy = True
+                target = q.get()
+                
+                try:
+                    prefix = "http://"
+                    if target['service_name'] == "https":
+                        prefix = "https://"
+
+                    port = ":" + target['port']
+                    if target['port'] in ["80", "443"]:
+                        port = ''
+
+                    if self.opts.bing_dns and (not 'is_bing_result' in target.keys()):
+                        # Don't do Bing>DNS lookups for non-routable IPs
+                        routable = True        
+                        nrips = ["10.", "172.", "192.168.", "127.16-31", "169."]
+                        for nrip in nrips:
+                            if "-" in nrip:
+                                a = int(nrip.split(".")[1].split("-")[0])
+                                while not a <= int(nrip.split(".")[1].split("-")[1]):
+                                    if target['ipv4'].startswith('.'.join(nrip.split('.')[0], str(a), '')):
+                                        routable = False
+                                    a += 1
+
+                            elif target['ipv4'].startswith(nrip):
+                                routable = False
+
+                        if routable:
+                            if target['ipv4'] in binged.keys():
+                                if target['port'] in binged[target['ipv4']][1]:
+                                    self.output.put("  [.] Bing>DNS\t: " + target['ipv4'] + " (" +
+                                                    target['hostnames'][0] + ") - duplicate, skipping...")
+
+                                else:
+                                    binged[target['ipv4']][1].append(target['port'])
+                                    self.output.put("  [.] Bing>DNS\t: " + target['ipv4'] + " (" +
+                                                    target['hostnames'][0] + ") - pulling from cache...")
+                                    target['hostnames'] = binged[target['ipv4']][0]
+
+                            else:
+                                while binging:  # The intention here is to avoid flooding Bing with requests.
+                                    time.sleep(0.5)    
+
+                                binging = True
+                                self.output.put("  [@] Bing>DNS\t: " + target['ipv4'])
+                                cookies = dict(SRCHHPGUSR='NRSLT=150')
+
+                                try:
+                                    bing_res = requests.get("http://www.bing.com/search?q=ip%3a" + target['ipv4'],
+                                                            cookies=cookies).text.split("sb_meta")
+
+                                except Exception:
+                                    error = traceback.format_exc().splitlines()[-3:]
+                                    error_msg("\n".join(error))
+                                    self.output.put("  [x] Bing>DNS:\n\t%s\n" % "\n\t".join(error))
+                                    bing_res = ""
+
+                                hostnames = []
+                                for line in bing_res:
+                                    res = re.findall(r".*<cite>(.*)</cite>.*", line)
+                                    if res:
+                                        hostnames.append(res[0].split('/')[0])
+
+                                if len(hostnames) > 0:
+                                    # remove any duplicates from our list of domains...
+                                    hostnames = list(set(hostnames))
+                                    self.output.put("  [+] Bing>DNS\t: found %s DNS names for %s" % (len(hostnames), target['ipv4']))
+
+                                    # distribute the load
+                                    for hostname in hostnames:
+                                        if not hostname == target['ipv4']:
+                                            new_target = target.copy()
+                                            new_target['is_bing_result'] = True
+                                            new_target['hostnames'] = [hostname.strip()]
+                                            q.put(new_target)
+
+                                else: 
+                                    self.output.put("  [x] Bing>DNS\t: found no DNS entries for %s" % (target['ipv4']))
+
+                                binged[target['ipv4']] = [hostnames, [target['port']]]
+
+                                binging = False
+
+                        else:
+                            self.output.put("  [-] %s is not routable. Skipping Bing>DNS for this host." % target['ipv4'])
+
+                    if len(target['hostnames']) > 1:
+                        # distribute the load
+                        for hostname in target['hostnames'][1:]:
+                            new_target = target.copy()
+                            new_target['hostnames'] = [hostname.strip()]
+                            q.put(new_target)
+                            self.output.put("  [+] Off-loaded %s:%s to the queue. [ %s%s ]" % (new_target['hostnames'][0],
+                                                                                        new_target['port'], target['ipv4'], port))
+            
+                    hostname = target['hostnames'][0]
+
+                    target['url'] = prefix + hostname + port
+                    self.output.put("  [>] Pulling\t: " + target['url'] + port)
+
+                    try:
+                        target['res'] = requests.get(target['url'], headers={"user-agent": useragent}, verify=False,
+                                                     timeout=timeout, allow_redirects=True)
+                        msg = "  [+] Finished~~~"
+
+                    except requests.ConnectionError:
+                        msg = "  [x] Not found~~~"
+
+                    except requests.Timeout:
+                        msg = "  [x] Timed out~~~"
+
+                    except Exception:
+                        error = traceback.format_exc().splitlines()[-3:]
+                        error_msg("\n".join(error))
+                        msg = "  [x] Failed~~~:\n\t%s\n" % "\n\t".join(error)
+
+                    if self.opts.getoptions and 'res' in target.keys():
+                        try:
+                            res = (requests.options(target['url'], headers={"user-agent":useragent}, verify=False,
+                                                    timeout=timeout, allow_redirects=False))
+
+                            if 'allow' in res.headers:
+                                target['options'] = res.headers['allow'].replace(",", "|")
+                    
+                            self.output.put("      [o] Pulled OPTIONS : [ %s%s ]" % (target['url'], port))
+
+                        except requests.ConnectionError:
+                            msg = "  [x] Not found~~~"
+
+                        except requests.Timeout:
+                            self.output.put("      [x] Timed out pulling OPTIONS: [ %s%s ]" % (target['url'], port))
+
+                        except Exception:
+                            error = traceback.format_exc().splitlines()[-3:]
+                            error_msg("\n".join(error))
+                            self.output.put("      [x] Failed pulling OPTIONS: [ %s%s ]\n\t%s\n" % (target['url'], port, "\n\t".join(error)))
+
+                    if not self.opts.noss and 'res' in target.keys():
+                        screenshot(target, self.logdir, self.timestamp, self.scriptpath, self.pjs_path, self.output)
+
+                    if self.opts.getrobots and 'res' in target.keys():
+                        try:
+                            res = requests.get("%s/robots.txt" % target['url'], verify=False,
+                                               timeout=timeout, allow_redirects=False)
+                            if res.status_code == 200 and "llow:" in res.text: 
+                                if not self.opts.json_min:
+                                    if not os.path.exists("robots"):
+                                        try:
+                                            os.makedirs("robots")
+
+                                        except:
+                                            pass
+
+                                    open("./robots/%s_%s_robots.txt" % (hostname, target['port']), 'w').write(res.text)
+                                    self.output.put("      [r] Pulled robots.txt:  ./robots/%s_%s_robots.txt  " % (hostname, target['port']))
+                                target['robots'] = "y"
+
+                        except requests.ConnectionError:
+                            msg = "  [x] Not found~~~"
+
+                        except requests.Timeout:
+                            self.output.put("      [x] Timed out pulling robots.txt: [ %s%s ]" % (target['url'], port))
+
+                        except Exception:
+                            error = traceback.format_exc().splitlines()[-3:]
+                            error_msg("\n".join(error))
+                            self.output.put("      [x] Failed pulling robots.txt:\n\t%s\n" % "\n\t".join(error))
+
+                    if self.opts.crawl and not self.opts.json_min and 'res' in target.keys():
+                        if not os.path.exists("maps"):
+                            try:
+                                os.makedirs("maps")
+
+                            except:
+                                pass
+
+                        crawl(target, self.logdir, self.timestamp, self.opts)
+
+                    parsedata(target, self.logdir, self.timestamp, self.scriptpath, self.opts)
+                    self.output.put("%s  [ %s ]%s" % (msg.split("~~~")[0], target['url'], msg.split("~~~")[1]))
+
+                except Exception:
+                    error = traceback.format_exc().splitlines()[-3:]
+                    error_msg("\n".join(error))
+                    self.output.put("  [x] Failed : [ %s%s ]\n\t%s\n" % (target['url'], port, "\n\t".join(error) ))
+
+                self.busy = False
+
+                busy_count = 0
+                for t in threads:
+                    if t.busy:
+                        busy_count += 1
+    
+                self.output.put("  [i] Main queue size [ %s ] - Threads Busy/Total [ %s/%s ]" % (str(q.qsize()), busy_count, nthreads))
+
+                q.task_done()
+
+
+def screenshot(target, logdir, timestamp, scriptpath, pjs_path, output):
+    filename = "%s/%s_%s_%s.png" % ("%s/images" % logdir, target['url'].split("/")[2].split(":")[0],
+                                    timestamp, target['port'])
+    err = '.'
+
+    try:
+        with open("%s/rawr_%s.log" % (logdir, timestamp), 'ab') as log_pipe:
+            start = datetime.now()
+            process = subprocess.Popen([pjs_path, "--web-security=no", "--ignore-ssl-errors=yes", "--ssl-protocol=any",
+                                        scriptpath + "/data/screenshot.js", target['url'], filename, useragent,
+                                        str(ss_delay)], stdout=log_pipe, stderr=log_pipe)
+
+            while process.poll() is None:
+                time.sleep(0.1)
+                now = datetime.now()
+                if (now - start).seconds > timeout + 1:
+                    try:
+                        sig = getattr(signal, 'SIGKILL', signal.SIGTERM)
+                        os.kill(process.pid, sig)
+                        os.waitpid(-1, os.WNOHANG)
+                        err = ' - Timed Out.'
+
+                    except:
+                        pass
+
+                    break
+
+        if os.path.exists(filename): 
+            if os.stat(filename).st_size > 0:
+                output.put('      [+] Screenshot :     [ %s%s ]' % (target['url'], target['port']))
+            else:
+                output.put('      [X] Screenshot :     [ %s%s ] Failed - 0 byte file. Deleted.' % (target['url'], target['port']))
+                try:
+                    os.remove(filename)
+                except:
+                    pass
+        else:
+            output.put('      [X] Screenshot :     [ %s%s ] Failed - %s' % (target['url'], target['port'], err))
+
+    except Exception:
+        error = traceback.format_exc().splitlines()[-3:]
+        error_msg("\n".join(error))
+        output.put("      [!] Screenshot :     [ %s%s ] Failed\n\t%s\n" % (target['url'], target['port'], "\n\t".join(error) ))
+
+
+def crawl(target, logdir, timestamp, opts):
+    output.put("      [>] Spidering  :     [ %s:%s ]" % (target['url'], target['port']))
+
+    def recurse(url_t1, urls_t2, tabs, depth=0):
+        if opts.verbose:
+            output.put("      [i] depth %s - time %d - urls %s" % (depth, (datetime.now() - time_start).total_seconds(), len(list(set(urls_visited))) ))
+        
+        url_t1 = url_t1.replace(":", "-").split("'")[0].split("<")[0].split("--")[0].rstrip("%)/.")  # supplement our regex
+
+        for url_t2 in urls_t2:
+            if depth > spider_depth:
+                break
+
+            elif len(list(set(urls_visited))) > spider_url_limit:
+                if opts.verbose:
+                    output.put("      [!] Spidering stopped :   [ %s:%s ] - URL limit reached" % (target['url'], target['port']))
+                break
+
+            elif (datetime.now() - time_start).total_seconds() > spider_timeout:
+                if opts.verbose:
+                    output.put("      [!] Spidering stopped :   [ %s:%s ] - Timed out" % (target['url'], target['port']))
+                break
+
+            url_t2_f = url_t2.split('"')[0].split("'")[0].split("<")[0].split("--")[0].rstrip('%)/.')  # supplement regex
+            if not url_t2_f in ("https://ssl", "http://www", "http://", "http:", "https:"):  # google analytics junk
+                url_t2 = url_t2_f.replace(":", "-")
+
+                coll.append((url_t1, url_t2))
+
+                open('%s/maps/%s_%s_map.txt' % (logdir, hname, timestamp), 'a').write( tabs + url_t2 + "\n" )
+
+                if len(url_t2.split("/")) > 2: 
+                    if spider_follow_subdomains:
+                        url_t2_hn = ".".join((url_t2.split("/")[2]).split(".")[-2:])
+
+                    else:
+                        url_t2_hn = url_t2.split("/")[2]
+
+                    if url_t2_hn in url_t1 and not url_t2 in urls_visited:
+                        urls_visited.append(url_t2)
+                        try:
+                            html = requests.get(url_t2_f, headers={"user-agent":useragent}, verify=False, timeout=timeout, allow_redirects=True).text.replace("\n","")
+                            urls_t3_r = list(set(re.findall(URL_REGEX, html, re.I)))
+                            urls_t3 = []
+                            for url_t3 in urls_t3_r:
+                                urls_t3.append(url_t3.rstrip('/'))
+
+                            if len(urls_t3) > 0 and not (len(list(set(urls_visited))) > spider_url_limit or depth > spider_depth or (datetime.now() - time_start).total_seconds() > spider_timeout):
+                                recurse(url_t2, urls_t3, tabs + "\t", depth + 1)
+
+                        except Exception:
+                            pass
+
+    coll = []
+    urls_visited = []
+    hname = target['url'].split("/")[2]
+    time_start = datetime.now()
+    recurse(target['url'], [target['url']], "\t")
+
+    if len(coll) > 1:
+        try: 
+            import pygraphviz as pgv
+
+            output.put("      [+] Finished spider: [ %s ] - building graph..." % (target['url']))
+
+            # Graph creation
+            gr = pgv.AGraph(splines='ortho', rankdir='LR')    # need to catch any exceptions this thing throws!!
+            gr.node_attr['shape'] = 'rect'
+
+            c = []
+            # Add nodes and edges
+            for item in coll:
+                c.append(item[0].strip('"/\; ()'))  # Stripping these actually fixes the previous errors
+                c.append(item[1].strip('"/\; ()'))  #   not a permanent fix, but will do for now!
+
+            for node in list(set(c)):
+                if node == target['url']:
+                    gr.add_node(node, root=True)
+
+                else:
+                    gr.add_node(node)
+
+            for item in coll:
+                if not item[0] == item[1]:
+                    try:
+                        gr.add_edge((item[0].strip('"/\; ()'), item[1].strip('"/\; ()')))
+
+                    except Exception:
+                        pass
+
+            # Draw as PNG
+            gr.layout(prog='dot')
+            # will get a warning if the graph is too large - not fatal
+            gr.draw('%s/maps/%s_%s_%s_diagram.png' % (logdir, target['url'].split("//")[1], timestamp, target['port']) )
+            target['diagram'] = "X"
+
+        except Exception:
+            error = traceback.format_exc().splitlines()[-3:]
+            error_msg("\n".join(error))
+            output.put("\n    [!] Unable to create site chart: [ %s ]\n\t%s\n" % (target['url'], "\n\t".join(error) ))
+
+
+def parsedata(target, logdir, timestamp, scriptpath, opts):
+    global modules
+
+    x=[" "] * len(flist.split(","))
+
+    for i,v in target.items():
+        target[i] = target[str(i)]
+
+    # identify country if possible
+    if os.path.exists("%s/%s" % (scriptpath, IP_TO_COUNTRY)):
+        ip = target['ipv4'].split('.')
+        ipnum = (int(ip[0])*16777216) + (int(ip[1])*65536) + (int(ip[2])*256) + int(ip[3])
+        for l in re.sub('[\"\r]', '', open("%s/%s" % (scriptpath, IP_TO_COUNTRY)).read()).split('\n'):
+            try:
+                if l != "" and (not "#" in l) and (int(l.split(',')[1]) > ipnum > int(l.split(',')[0])):
+                    target['country'] = "[%s]-%s" % (l.split(',')[4], l.split(',')[6])
+                    break
+
+            except Exception:
+                error = traceback.format_exc().splitlines()[-3:]
+                error_msg("\n".join(error))
+                output.put("  [!] IPtoCountry parse error:\n\t%s\n" % "\n\t".join(error))
+
+    if 'res' in target.keys():
+        # eat cookie now....omnomnom
+        if len(target['res'].cookies) > 0:    
+            try:
+                os.mkdir("cookies")
+
+            except:
+                pass
+
+            open("./cookies/%s_%s.txt" % (target['url'].split("/")[2].split(":")[0], target['port']), 'w').write(str(target['res'].cookies))
+            target['cookies'] = len(target['res'].cookies)
+        
+        target['endurl'] = target['res'].url
+
+        if "server" in target['res'].headers:
+            target['server'] = target['res'].headers['server']
+
+        target['encoding'] = target['res'].encoding
+
+        hist = []
+        for h in target['res'].history:
+            hist.append(h.url)
+
+        if len(hist) > 0: 
+            target['history'] = hist
+
+        target['returncode'] = str(target['res'].status_code)
+
+        target['urls'] = []
+
+        # quicker and not bound to specific elements/attributes
+        for url in re.findall(URL_REGEX, target['res'].text, re.I):
+            target['urls'].append(url.split("'")[0].rstrip(')/.'))
+
+        # Run through any user-defined regex filters.
+        #  *** If a field isn't present in 'flist' (in the settings section), it won't be added at this time.
+        parsermods = []
+        for field, regxp, modtype in modules:
+            try:
+                # MODTYPE_CONTENT - returns all matches, seperates by ';'
+                if modtype == 0:    
+                    for i in (re.findall(regxp, target['res'].text, re.I)):
+                        if not field in target.keys():
+                            target[field] = []
+
+                        target[field].append(i)
+
+                # MODTYPE_TRUEFALSE - returns 'True' or 'False' based on regxp
+                elif modtype == 1:
+                    if len(re.findall(regxp, target['res'].text, re.I)) > 0:
+                        target[field] = "True"
+
+                    else:
+                        target[field] = "False"
+
+                # MODTYPE_COUNT - counts the number of returned matches
+                elif modtype == 2:
+                    target[field] = len(re.findall(regxp, target['res'].text, re.I))
+
+                # PARSER modules
+                elif modtype in [3, 4, 5]:
+                    if type(regxp) == tuple and len(regxp) == 3:
+                        parsermods.append((field, regxp, modtype))
+
+                else:
+                    output.put("  [!] skipping %s - invalid modtype" % (field))
+
+            except Exception:
+                error = traceback.format_exc().splitlines()[-3:]
+                error_msg("\n".join(error))
+                output.put("  [!] skipping module '%s' :\n\t%s\n" % (field, "\n\t".join(error)) )
+
+        # parse the html for different element types
+        try:
+            cxt = html.fromstring(target['res'].content)
+            for el in cxt.iter():
+                items = el.items()
+                tag = el.tag
+
+                # user-defined modules
+                for mod in [m for m in parsermods if str(m[1][0]).lower() == str(tag).lower()]:  # mods that reference the current element tag
+                    val = ""
+                    try:
+                        if "text" in mod[1][1] and el.text is None:
+                            val = el.text
+                
+                        val += " %s" % (" ".join([v for i, v in items if i in mod[1][1]]))
+                        #  [!] skipping module 'jquery_tf':
+                        #      File "/home/axbyers/Desktop/rawr/lib/functions.py", line 521, in parsedata
+                        #        val += " %s" % (" ".join([v for i, v in items if i in mod[1][1]]))
+                        #    TypeError: unsupported operand type(s) for +=: 'NoneType' and 'str'
+
+                        if val != "":
+                            r = (re.findall(mod[1][2], val, re.I))
+
+                            if mod[2] == 3:
+                                for i in r:
+                                    if not mod[0] in target.keys():
+                                        target[mod[0]] = []
+
+                                    target[mod[0]].append(i)
+
+                            elif mod[2] == 4:
+                                if len(r) > 0:
+                                    target[mod[0]] = ["True"]
+                                else:
+                                    target[mod[0]] = ["False"]
+
+                            elif mod[2] == 5:
+                                target[mod[0]] = [len(r)]
+
+                            else:
+                                raise("invalid modtype - %s" % mod[2])
+
+                    except Exception:
+                        error = traceback.format_exc().splitlines()[-3:]
+                        error_msg("\n".join(error))
+                        output.put("  [!] skipping module '%s':\n\t%s\n" % (mod[0], "\n\t".join(error)))
+
+                # some default checks
+                if tag == "meta":
+                    for i,v in items:
+                        if i == "name":
+                            target[v] = el.text
+
+                elif tag == "title":
+                    target['title'] = el.text
+
+                elif tag == "script":
+                    for i, v in items:
+                        if i == "src":
+                            if not 'file_includes' in target.keys():
+                                target['file_includes'] = []
+
+                            target['file_includes'].append(v)
+
+                    target['script'] = len(items)
+
+                elif tag in ['link', 'a']:
+                    for i, v in items:
+                        if i == "href":
+                            if "mailto:" in v:
+                                if not 'emailAddresses' in target.keys():
+                                    target['emailAddresses'] = []
+
+                                target['emailAddresses'].append(v.split(":")[1])
+
+                            else:
+                                target['urls'].append(v)
+
+                elif tag == "input":
+                    for i, v in items:
+                        if v.lower == "password":
+                            if not 'passwordFields' in target.keys():
+                                target['passwordFields'] = []
+
+                            target['passwordFields'].append(html.tostring(el))
+
+                    target['input'] = len(items)
+
+                elif tag in ['iframe', 'applet', 'object', 'embed', 'form']:
+                    target[tag] = len(items)
+
+        except Exception:
+            error = traceback.format_exc().splitlines()
+            error_msg("Error parsing HTML from:\n\t%s\n%s" % (target['url'], "\n\t".join(error)))
+            if opts.verbose:
+                output.put("  [!] Error parsing HTML from:\n\t%s\n" % "\n\t".join(error))
+
+        finally:
+            cxt = None
+
+        # grab all the headers
+        for header in target['res'].headers:
+            target[header] = target['res'].headers[header]
+
+        # check title, service, and server fields for matches in defpass file
+        if opts.defpass:
+            services = []
+            for i in [a for a in ['server', 'version', 'x-powered-by', 'version_info'] if a in target.keys()]:
+                    services.append(target[i].lower())
+
+            target['Defpass'] = []
+            with open("%s/%s" % (scriptpath, DEFPASS_FILE)) as f:
+                for line in f:
+                    use = True
+                    try:
+                        if not (line.startswith("#") or line == ""):                    
+                            for a in line.split(',')[0].lower().split():
+                                if not a in services:
+                                    use = False
+                                    break
+
+                            if use: target['Defpass'].append(':'.join(line.replace("\n", '').split(',')[0:5]))
+
+                    except Exception:
+                        error = traceback.format_exc().splitlines()[-3:]
+                        error_msg("\n".join(error))
+                        output.put("  [!] Error parsing defpass.csv:\n\t%s\n" % "\n\t".join(error))
+
+    if "https" in target['service_name']:
+        if not 'ssl-cert' in target.keys() and 'returncode' in target.keys():  # hosts were loaded by a file that didn't contain SSL info
+            output.put("  [>] Pulling SSL cert for  %s:%s" % (target['hostnames'][0], target['port']))
+            import ssl
+            cert = None
+            try:
+                cert = ssl.get_server_certificate((target['hostnames'][0], int(target['port'])), ssl_version=ssl.PROTOCOL_TLSv1)
+
+            except:
+                try:
+                    cert = ssl.get_server_certificate((target['hostnames'][0], int(target['port'])), ssl_version=ssl.PROTOCOL_SSLv23)
+
+                except:
+                    pass
+
+            finally:
+                if cert:
+                    target['ssl-cert'] = cert
+
+            try:
+                if ['ssl-cert'] in target.keys():
+                    for line in target['ssl-cert'].split('\n'):
+                        if "issuer" in line.lower():
+                            target['SSL_Cert-Issuer'] = line.split(": ")[1]
+
+                        elif "subject" in line.lower() and not 'SSL_Cert-Subject' in target.keys():
+                            target['SSL_Cert-Subject'] = line.split(": ")[1]
+
+                            if "*" in line.split(": ")[1]:
+                                subject = line.split(": ")[1].split("*")[1]
+
+                            else:
+                                subject = line.split(": ")[1]
+
+                            if subject in target['hostnames']:
+                                target['SSL_Cert-Verified'] = "yes"
+
+                        elif "md5" in line.lower() and not 'SSL_Cert-MD5' in target.keys():
+                            target['SSL_Cert-MD5'] = line.split(": ")[1].replace(" ", '')
+
+                        elif "sha-1" in line.lower() and not 'SSL_Cert-SHA-1' in target.keys():
+                            target['SSL_Cert-SHA-1'] = line.split(": ")[1].replace(" ", '')
+
+                        elif "algorithm" in line.lower() and not 'SSL_Cert-KeyAlg' in target.keys():
+                            target['SSL_Cert-KeyAlg'] = "%s" % line.split(": ")[1]
+                            # need to take another look at this one.  no seeing it atm
+
+                        elif "not valid before" in line.lower():
+                            notbefore = line.split(": ")[1].strip()
+                            target['SSL_Cert-notbefore'] = notbefore
+
+                        elif "not valid after" in line.lower():
+                            notafter = line.split(": ")[1].strip()
+                            target['SSL_Cert-notafter'] = notafter
+
+                    try:
+                        notbefore = datetime.strptime(str(notbefore), '%Y-%m-%d %H:%M:%S')
+                        notafter = datetime.strptime(str(notafter), '%Y-%m-%d %H:%M:%S')
+                        vdays = (notafter - notbefore).days
+                        if datetime.now() > notafter:
+                            daysleft = "EXPIRED"
+
+                        else:
+                            daysleft = (notafter - datetime.now()).days
+
+                    except:
+                        vdays = "unk"
+                        daysleft = "unk"
+
+                    target['SSL_Cert-ValidityPeriod'] = vdays
+                    target['SSL_Cert-DaysLeft'] = daysleft
+
+            except Exception:
+                error = traceback.format_exc().splitlines()[-3:]
+                error_msg("\n".join(error))
+                output.put("\n  [!] Error parsing cert:\n\t%s\n" % "\n\t".join(error))
+
+        # Parse cert and write to file
+        if 'ssl-cert' in target.keys():
+            if not (os.path.exists("ssl_certs") or opts.json_min):
+                os.mkdir("ssl_certs")
+
+            open("./ssl_certs/%s_%s.cert" % (target['url'].split("/")[2].split(":")[0], target['port']), 'w').write(target['ssl-cert'])
+
+    if opts.json_min:
+        output.put(target)
+
+    else:
+        if opts.sqlite:
+            write_to_sqlitedb(timestamp, [target])
+
+        if opts.json:
+            output.put(target)
+
+        write_to_html(timestamp, target)
+        write_to_csv(timestamp, target)
+        
+
+def write_to_sqlitedb(timestamp, targets):
+    if not os.path.exists("rawr_%s_sqlite3.db" % timestamp):
+        try:
+            cmd = 'CREATE TABLE hosts ("%s");' % str('", "'.join(flist.replace('"', "'").split(", ")))
+            conn = sqlite3.connect("rawr_%s_sqlite3.db" % timestamp, timeout=10)
+            conn.cursor().execute(cmd)
+            conn.commit()
+
+        except Exception:
+            error = traceback.format_exc().splitlines()[-3:]
+            error_msg("\n".join(error))
+            output.put("\n  [!] Error creating SQLite db:\n\t%s\n" % "\n\t".join(error))
+            opts.sqlite = False
+
+        finally:
+            conn.close()
+
+    try:
+        conn = sqlite3.connect("rawr_%s_sqlite3.db" % timestamp, timeout=45)
+        cursor = conn.cursor()
+
+        for target in targets:
+            x = [" "] * len(flist.split(","))
+
+            for i,v in target.items(): 
+                if i.lower() in flist.lower().split(', '):
+                    if isinstance(v, (list,)):
+                        v = ";".join(v)
+
+                    try:
+                        v = str(v)
+
+                    except UnicodeEncodeError:
+                        v = unicode(v).encode('unicode_escape')
+
+                    x[flist.lower().split(", ").index(i.lower())] = re.sub('[\n\r,]', '', "%s" % v)
+
+            cmd = 'INSERT INTO hosts VALUES (%s);' % ("?, " * len(flist.split(", "))).rstrip(", ")
+            cursor.execute(cmd, (tuple(x)))
+
+        conn.commit()
+
+    except Exception:
+        error = traceback.format_exc().splitlines()[-3:]
+        error_msg("\n".join(error))
+        output.put("\n  [!] Error writing to SQLite db:\n\t%s\n" % "\n\t".join(error))
+
+    finally:
+        conn.close()
+
+
+def write_to_csv(timestamp, target):
+    x = [" "] * len(flist.split(","))
+
+    if not os.path.exists("rawr_%s_serverinfo.csv" % timestamp):
+        open("rawr_%s_serverinfo.csv" % timestamp, 'w').write(flist)
+
+    for i, v in target.items():
+        if i.lower() in flist.lower().split(', '):
+            try:
+                v = str(v)
+
+            except UnicodeEncodeError:
+                v = unicode(v).encode('unicode_escape')
+                
+            x[flist.lower().split(", ").index(i.lower())] = re.sub('[\n\r,]', '', str(v))
+
+    try:
+        open("rawr_%s_serverinfo.csv" % timestamp, 'a').write("\n%s" % (str(','.join(x))))
+
+    except Exception:
+        error = traceback.format_exc().splitlines()[-3:]
+        error_msg("\n".join(error))
+        output.put("\n  [!] Unable to write .csv:\n\t%s\n" % "\n\t".join(error))
+
+
+def write_to_html(timestamp, target):
+    x = [" "] * len(flist.split(","))
+
+    for i, v in target.items():
+        if i.lower() in flist.lower().split(', '):
+            try:
+                v = str(v)
+
+            except UnicodeEncodeError:
+                v = unicode(v).encode('unicode_escape')
+
+            try:
+                x[flist.lower().split(", ").index(i.lower())] = re.sub('[\n\r,]', '', str(v))
+
+            except Exception:
+                error_msg("\n".join(traceback.format_exc().splitlines()[-3:]))
+
+    try:
+        open('index_%s.html' % timestamp, 'a').write("\n%s" % (str(','.join(x))))
+
+    except Exception:
+        error = traceback.format_exc().splitlines()[-3:]
+        error_msg("\n".join(error))
+        output.put("\n  [!] Unable to write .html:\n\t%s\n" % "\n\t".join(error))
+
+
+# Our parsers:
+def parseCSV(filename):
+    targets = []
+    body = False
+    with open(filename) as r:
+        for line in r:
+            try:
+                if not body:  # first line has to be headers...
+                    headers = line.strip("\n").split(",")
+                    body = True
+                    continue
+
+                if body and line.strip() != "":
+                    target = {}
+                    target['hostnames'] = []
+                    line = line.strip("\n").replace('"', '').split(',')
+                    for header in headers:
+                        if header == "host":
+                            target['ipv4'] = line[headers.index(header)]
+                            target['hostnames'] = [line[headers.index(header)]]
+
+                        elif header == "dns":
+                            target['hostnames'].append[str(line[headers.index(header)])]
+
+                        elif header == "proto":
+                            target['protocol'] = line[headers.index(header)]
+
+                        elif header == "name":
+                            target['service_name'] = line[headers.index(header)]
+
+                        elif header == "info":
+                            target['service_version'] = line[headers.index(header)]
+
+                        else:
+                            target[header] = line[headers.index(header)]
+
+                    field = [s for s in ('ipv4', 'port', 'hostnames', 'service_name', 'service_version') if not s in target.keys()]
+                    if len(field) == 0:
+                        if "http" in target['service_name']:
+                            t = [s for s in ("ssl", "https", "tls") if s in target['service_version'].lower()]
+                            if len(t) > 0: 
+                                target['service_tunnel'] = t[0]
+                                target['service_name'] = "https"
+                
+                            else:
+                                target['service_name'] = "http"
+
+                        targets.append(target)
+
+                    else:
+                        field = [s for s in ('host', 'port', 'name', 'info') if not s in headers]
+                        print("\t[!] Parse Error: missing required field(s): %s" % field)
+                        break
+
+            except Exception:
+                error = traceback.format_exc().splitlines()[-3:]
+                error_msg("\n".join(error))
+                print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
+
+    return targets
+
+
+def parseQualysPortServiceCSV(filename):
+    targets = []
+    body = False
+    with open(filename) as r:
+        for line in r:
+            try:
+                if line.startswith('"IP"'):
+                    body = True
+                    continue
+
+                if body and line.strip() != "":
+                    target = {}
+                    line = line.replace('"', '').split(',')
+                    target['ipv4'] = line[0]
+                    target['hostnames'] = [line[1], line[0]]
+                    target['service_version'] = "%s %s" % (line[2], line[5])
+                    target['protocol'] = line[3]
+                    target['port'] = line[4]
+                    if any(s in line[5].lower() for s in ["ssl", "https", "tls"]):
+                        target['service_name'] = 'https'
+
+                    else:
+                        target['service_name'] = 'http'
+
+                    targets.append(target)
+
+            except Exception:
+                error = traceback.format_exc().splitlines()[-3:]
+                error_msg("\n".join(error))
+                print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
+
+    return targets
+
+
+def parseOpenVASXML(r):     # need a scan of a server using SSL!
+    targets = []
+    for port in r.xpath("//report/report/ports/port"):
+        try:
+            target = {}
+            target['protocol'] = port.text.split("/")[1].strip(")")
+            target['port'] = port.text.split("(")[1].split("/")[0]
+            target['service_name'] = port.text.split()[0]
+            target['ipv4'] = port.xpath("host/text()")[0]
+            target['hostnames'] = [target['ipv4']]
+
+            target['service_version'] = ""
+            for result in r.xpath("//report/report/results/result[host/text()='%s' and port/text()='%s' and nvt/family/text()='Product detection']" % (target['ipv4'], port.text)):
+                target['service_version'] += result.xpath("description/text()")[0].split("\n")[0].replace("Detected ", '').replace("version: ",'').split(" under")[0] + ","
+
+            targets.append(target)
+
+        except Exception:
+            error = traceback.format_exc().splitlines()[-3:]
+            error_msg("\n".join(error))
+            print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
+
+    return targets
+
+
+def parseNexposeXML(r):     # need a scan of a server using SSL!
+    targets = []
+    for node in r.xpath("//NexposeReport/nodes/node"):
+        try:
+            for endpoint in node.xpath("endpoints/endpoint"):
+                target = {}
+
+                target['ipv4'] = node.attrib['address']
+
+                target['hostnames'] = list(set([x.lower() for x in node.xpath("names/name/text()")]))
+                target['hostnames'].append(target['ipv4'])
+
+                try:
+                    vals = node.xpath("fingerprints/os")[0].attrib.values()
+                    target['os_info'] = "(%s%s) %s" % (vals[0], "%", " ".join(vals[1:]))
+                except:
+                    pass  # nothing to see here
+
+                target['protocol'] = endpoint.attrib['protocol']
+                target['port'] = endpoint.attrib['port']
+                target['service_name'] = endpoint.xpath("services/service/@name")[0].lower()
+                # target['service_tunnel'] = 'ssl'   ???
+                # target['ssl-cert'] = ???
+
+                try:
+                    vals = endpoint.xpath("services/service/fingerprints/fingerprint")[0].attrib.values()
+                    target['service_version'] = "(%s%s) %s" % (vals[0], "%", " ".join(vals[1:]))
+                except:
+                    pass  # nothing to see here
+
+                targets.append(target)
+
+        except Exception:
+            error = traceback.format_exc().splitlines()[-3:]
+            error_msg("\n".join(error))
+            print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
+
+    return targets
+
+
+def parseNexposeSimpleXML(r):     # need a scan of a server using SSL!
+    targets = []
+    for node in r.xpath("//NeXposeSimpleXML/devices/device"):
+        try:
+            for service in node.xpath("services/service"):
+                target = {}
+                target['ipv4'] = node.attrib['address']
+
+                target['hostnames'] = []  # DNS? HOSTNAME?
+                target['hostnames'].append(target['ipv4'])
+
+                try:
+                    target['os_info'] = node.xpath("fingerprint/description/text()")[0]
+                except:
+                    pass  # nothing to see here
+
+                target['protocol'] = service.attrib['protocol']
+                target['port'] = service.attrib['port']
+                target['service_name'] = service.attrib['name'].lower()
+                # target['service_tunnel'] = 'ssl'   ???
+                # target['ssl-cert'] = ???
+
+                try:
+                    target['service_version'] = service.xpath("fingerprint/description/text()")[0]
+                except:
+                    pass  # nothing to see here
+
+                targets.append(target)
+
+        except Exception:
+            error = traceback.format_exc().splitlines()[-3:]
+            error_msg("\n".join(error))
+            print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
+
+    return targets
+
+
+def parseQualysScanReportXML(r):
+    targets = []
+    for host in r.xpath("//ASSET_DATA_REPORT/HOST_LIST/HOST"):
+        try:
+            for vuln in host.xpath('VULN_INFO_LIST/VULN_INFO'):
+                target = {}
+                target['ipv4'] = host.xpath("IP/text()")[0]
+
+                t = host.xpath('DNS/text()')
+                if t: 
+                    target['hostnames'] = [t[0].lower()]
+
+                t = host.xpath('NETBIOS/text()')
+                if t and (not t[0].lower() in target['hostnames'][0]):
+                    target['hostnames'].append(t[0].lower())
+
+                target['hostnames'].append(target['ipv4'])
+                target['hostnames'] = list(set(target['hostnames']))
+
+                t = host.xpath("OPERATING_SYSTEM/text()")
+                if t and (not t[0].lower() in target['hostnames'][0]):
+                    target['os_info'] = t[0]
+
+                target['port'] = vuln.xpath("PORT/text()")[0]
+                target['protocol'] = vuln.xpath("PROTOCOL/text()")[0]
+
+                qid = vuln.xpath('QID')[0].text
+                if qid in ("86000", "86001"):
+                    fqdn = vuln.xpath("FQDN/text()")
+                    if fqdn and not fqdn[0].lower() in target['hostnames']:
+                        target['hostnames'].append(fqdn[0].lower())
+
+                    target['service_version'] = vuln.xpath("RESULT/text()")[0]
+
+                    if qid == "86001":  # SSL
+                        target['service_name'] = 'https'
+                        target['ssl-cert'] = host.xpath("VULN_INFO_LIST/VULN_INFO[PORT/text()='%s' and QID/text()='86002']/RESULT/text()" % target['port'])[0]
+                        for line in target['ssl-cert'].split('(1)')[0].split('(0)'):
+                            if "ISSUER NAME" in line:
+                                for item in line.split('\n'):
+                                    if "commonName" in item:
+                                        target['SSL_Cert-Issuer'] = item.split('\t')[1]
+
+                            if "SUBJECT NAME" in line:
+                                for item in line.split('\n'):
+                                    if "commonName" in item:
+                                        target['SSL_Cert-Subject'] = item.split('\t')[1]
+
+                            elif "commonName" in line and not 'SSL_Common-Name' in target.keys():
+                                target['SSL_Common-Name'] = line.split("\t")[1].replace(" ", '')
+
+                            elif "organizationName" in line and not 'SSL_Organization' in target.keys():
+                                target['SSL_Organization'] = "%s" % line.split("\t")[1].replace('\n','')
+
+                            elif "Public Key Algorithm" in line and not 'SSL_Cert-KeyAlg' in target.keys():
+                                target['SSL_Cert-KeyAlg'] = "%s" % line.split("\t")[1].replace('\n','')
+
+                            elif "Signature Algorithm" in line and not 'SSL_Cert-SigAlg' in target.keys():
+                                target['SSL_Cert-SigAlg'] = "%s" % line.split("\t")[1].replace('\n','')
+
+                            elif "RSA Public Key" in line and not 'SSL_KeyLength' in target.keys():
+                                target['SSL_KeyLength'] = "%s" % line.split("\t")[1].replace('\n','')
+
+                            elif "Valid From" in line:
+                                notbefore = line.split("\t")[1].strip()
+                                target['SSL_Cert-notbefore'] = notbefore
+
+                            elif "Valid Till" in line:
+                                notafter = line.split("\t")[1].strip()
+                                target['SSL_Cert-notafter'] = notafter
+
+                        notbefore = datetime.strptime(notbefore, '%b %d %H:%M:%S %Y %Z')
+                        notafter = datetime.strptime(notafter, '%b %d %H:%M:%S %Y %Z')
+                        vdays = (notafter - notbefore).days
+                        if datetime.now() > notafter:
+                            daysleft = "EXPIRED"
+
+                        else:
+                            daysleft = (notafter - datetime.now()).days
+
+                        target['SSL_Cert-ValidityPeriod'] = vdays
+                        target['SSL_Cert-DaysLeft'] = daysleft
+
+                    else:
+                        target['service_name'] = 'http'
+
+                    targets.append(target)
+
+        except Exception:
+            error = traceback.format_exc().splitlines()[-3:]
+            error_msg("\n".join(error))
+            print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
+
+    return targets
+
+
+def parseNessusXML(r):
+    targets = []
+    for node in r.xpath("//ReportHost"):
+        try:  # one line can fail, and the rest of the doc completes
+            for item in node.xpath('ReportItem'):
+                if item.attrib['pluginName'] == "Service Detection":
+                    target = {}
+                    target['os_info'] = ""
+                    target['hostnames'] = [node.attrib['name']]
+                    for subele in node.xpath('HostProperties/tag'):
+
+                        name = subele.get('name')
+                        val = subele.text
+
+                        if name == "host-ip":
+                            target['ipv4'] = val
+                            target['hostnames'].append(val)
+
+                        elif name in ("host-fqdn", "netbios-name"):
+                            target['hostnames'].append(val.lower())
+
+                        elif name in ("operating-system", "system-type"):
+                            target['os_info'] += "%s " % val
+
+                        elif name == "mac-address":
+                            target['mac_address'] = val
+                    
+                    target['hostnames'] = list(set(target['hostnames']))
+                    target['protocol'] = item.attrib['protocol']
+                    target['service_name'] = item.attrib['svc_name']
+                    target['port'] = item.attrib['port']
+
+                    try:  # because i'm not sure this format is static
+                        target['service_version'] = node.xpath("ReportItem[@port='%s' and @pluginName='HTTP Server Type and Version']/plugin_output/text()" % target['port'])[0].split("\n\n")[1]
+
+                    except:
+                        pass
+
+                    if item.attrib['svc_name'] in ["www", "http?", "https?"]:
+                        target['service_name'] = "http"
+
+                        tunnel = [s in item.xpath("./plugin_output/text()")[0].lower() for s in ["ssl", "tls"]]
+                        if tunnel[0]:
+                            target['service_tunnel'] = "ssl"
+
+                        elif tunnel[1]:
+                            target['service_tunnel'] = "ssl"
+
+                        if 'service_tunnel' in target.keys():
+                            target['service_name'] = "https"
+                            target['ssl-cert'] = node.xpath("ReportItem[@port='%s' and @pluginName='SSL Certificate Information']/plugin_output/text()" % target['port'])[0]
+                            target['SSL_Tunnel-Ciphers'] = list(node.xpath("ReportItem[@port='%s' and @pluginName='SSL / TLS Versions Supported']/plugin_output/text()" % target['port'])[0].split('\n')[1].split())[3].strip('.')  # yeah, it's dirty.
+                            target["SSL_Tunnel-Weakest"] = target['SSL_Tunnel-Ciphers'].split('/')[0]
+                            target['SSL_Cert-Issuer'] = target['ssl-cert'].split("Issuer Name")[0].split("Common Name:")[1].split('\n\n')[0].split('\n')[0].strip()
+                            target['SSL_Cert-Subject'] = target['ssl-cert'].split("Serial Number")[0].split("Common Name:")[1].split('\n\n')[0].split('\n')[0].strip()
+
+                            for line in target['ssl-cert'].split("\n\n"):
+                                if "Organization" in line and not 'SSL_Organization' in target.keys():
+                                    target['SSL_Organization'] = "%s" % line.split('\n')[0].split(": ")[1]
+
+                                elif "Signature Algorithm" in line:
+                                    target['SSL_Cert-KeyAlg'] = "%s" % line.split(": ")[1]
+
+                                elif "Key Length" in line and not 'SSL_KeyLength' in target.keys():
+                                    target['SSL_KeyLength'] = "%s" % line.split('\n')[1].split(": ")[1]
+
+                                elif "Not Valid Before" in line:
+                                    notbefore = line.split('\n')[0].split(": ")[1].strip('\n\n')
+                                    notafter = line.split('\n')[1].split(": ")[1].strip('\n\n')
+                                    target['SSL_Cert-notbefore'] = notbefore
+                                    target['SSL_Cert-notafter'] = notafter
+
+                            notbefore = datetime.strptime(notbefore, '%b %d %H:%M:%S %Y %Z')
+                            notafter = datetime.strptime(notafter, '%b %d %H:%M:%S %Y %Z')
+                            vdays = (notafter - notbefore).days
+                            if datetime.now() > notafter:
+                                daysleft = "EXPIRED"
+
+                            else:
+                                daysleft = (notafter - datetime.now()).days
+
+                            target['SSL_Cert-ValidityPeriod'] = vdays
+                            target['SSL_Cert-DaysLeft'] = daysleft
+
+                    else:
+                        target['service_name'] = item.attrib['svc_name']
+
+                    targets.append(target)
+
+        except Exception:
+            error = traceback.format_exc().splitlines()[-3:]
+            error_msg("\n".join(error))
+            print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
+
+    return targets
+
+
+def parseNMapXML(r):
+    targets = []
+    for el_port in r.xpath("//port"):
+        try:  # one line can fail, and the rest of the doc completes
+            if el_port.find("state").attrib["state"] == "open":
+                target = {}
+                target['hostnames'] = []
+                el_host = el_port.getparent().getparent()
+                for el_add in el_host.xpath("address"):
+                    target[el_add.attrib['addrtype']] = el_add.attrib['addr']
+
+                if 'ipv4' in target.keys():
+                    target['hostnames'].append(target['ipv4'])
+
+                for el_hn in el_host.xpath("*/hostname"):
+                    target['hostnames'].append(el_hn.attrib['name'])
+
+                target['hostnames'] = list(set(target['hostnames']))
+
+                for el_svc in el_port.xpath("service"):
+                    for key in el_svc.keys():
+                        if key == "tunnel":
+                            target["service_tunnel"] = el_svc.attrib[key]
+
+                        elif key in ("product", "version", "extrainfo", "ostype"):
+                            target["service_version"] = el_svc.attrib[key]
+
+                        else: 
+                            target["service_"+key] = el_svc.attrib[key]
+            
+                for el_scpt in el_port.xpath("script"):
+                    if el_scpt.attrib['id'] == "ssl-cert":
+                        target['ssl-cert'] = el_scpt.attrib['output']
+                        for line in target['ssl-cert'].split('\n'):
+                            if "issuer" in line.lower():
+                                target['SSL_Cert-Issuer'] = line.split(": ")[1]
+
+                            elif "subject" in line.lower() and not 'SSL_Cert-Subject' in target.keys():
+                                target['SSL_Cert-Subject'] = line.split(": ")[1]
+
+                                if "*" in line.split(": ")[1]:
+                                    subject = line.split(": ")[1].split("*")[1]
+
+                                else:
+                                    subject = line.split(": ")[1]
+
+                                if subject in target['hostnames']:
+                                    target['SSL_Cert-Verified'] = "yes"
+
+                            elif "md5" in line.lower() and not 'SSL_Cert-MD5' in target.keys():
+                                target['SSL_Cert-MD5'] = line.split(": ")[1].replace(" ", '')
+
+                            elif "sha-1" in line.lower() and not 'SSL_Cert-SHA-1' in target.keys():
+                                target['SSL_Cert-SHA-1'] = line.split(": ")[1].replace(" ", '')
+
+                            elif "algorithm" in line.lower() and not 'SSL_Cert-KeyAlg' in target.keys():
+                                target['SSL_Cert-KeyAlg'] = "%s" % line.split(": ")[1]
+                                # need to take another look at this one.  no seeing it atm
+
+                            elif "not valid before" in line.lower():
+                                notbefore = line.split(": ")[1].strip()
+                                target['SSL_Cert-notbefore'] = notbefore
+
+                            elif "not valid after" in line.lower():
+                                notafter = line.split(": ")[1].strip()
+                                target['SSL_Cert-notafter'] = notafter
+
+                        notbefore = datetime.strptime(str(notbefore), '%Y-%m-%d %H:%M:%S')
+                        notafter = datetime.strptime(str(notafter), '%Y-%m-%d %H:%M:%S')
+                        vdays = (notafter - notbefore).days
+                        if datetime.now() > notafter:
+                            daysleft = "EXPIRED"
+
+                        else:
+                            daysleft = (notafter - datetime.now()).days
+
+                        target['SSL_Cert-ValidityPeriod'] = vdays
+                        target['SSL_Cert-DaysLeft'] = daysleft
+
+                    if el_scpt.attrib['id'] == "ssl-enum-ciphers":
+                        target["SSL_Tunnel-Ciphers"] = el_scpt.attrib['output'].replace("\n", ";")
+                        target["SSL_Tunnel-Weakest"] = el_scpt.attrib['output'][-1].strip('\n ')
+
+                for el_hn in el_host.xpath('owner'):
+                    target['owner'].append(el_hn.attrib['name'])
+
+                target['port'] = el_port.attrib['portid']
+                target['protocol'] = el_port.attrib['protocol']
+
+                if not 'service_name' in target.keys():
+                    if target['port'] == 80:
+                        target['service_name'] = "http"
+
+                    else:
+                        target['service_name'] = "unk"
+
+                targets.append(target)
+
+        except Exception:
+            error = traceback.format_exc().splitlines()[-3:]
+            error_msg("\n".join(error))
+            print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
+    
+    return targets
 
 
 def update(force, ckinstall, pjs_path, scriptpath):
-	os.chdir(scriptpath)
+    os.chdir(scriptpath)
 
-	# remove any files left over from versions < 0.1.5
-	#   we'll leave this in until 0.1.6
-	for pre_ver5_file in ["CHANGELOG","README","LICENSE","report_template.html","screenshot.js","nmap.xsl","jquery.js","defpass.csv","IpToCountry.csv"]:
-		if os.path.exists(pre_ver5_file): os.remove(pre_ver5_file)
+    if os.path.exists("phantomjs"):
+        def onerror(func, path):
+            if not os.access(path, os.W_OK):
+                os.chmod(path, stat.S_IWUSR)
+                func(path)
 
-	if os.path.exists("phantomjs"):
-		def onerror(func, path, exc_info):
-			if not os.access(path, os.W_OK):
-				os.chmod(path, stat.S_IWUSR)
-				func(path)
+        shutil.rmtree("phantomjs", onerror=onerror)
 
-		shutil.rmtree("phantomjs",onerror=onerror)
+    url = REPO_DL_PATH + VER_FILE
+    print("  [>] Checking current versions...  \n   %s\n" % url)
+    try:
+        ver_data = requests.get(url).text
+        defpass_ver = ver_data.split(",")[1].replace('\n', '')
+        ip2c_ver = ver_data.split(",")[2].replace('\n', '')
+        pJS_ver = ver_data.split(",")[3].replace('\n', '')
 
+    except Exception:
+        error = traceback.format_exc().splitlines()[-3:]
+        error_msg("\n".join(error))
+        print("  [x] Update Failed:\n\t%s\n" % "\n\t".join(error))
+        sys.exit(1)
 
-	url = REPO_DL_PATH + VER_FILE
-	print "  ++ Checking current versions...  >\n   %s\n"%url
-	try:
-		ver_data = urllib2.urlopen(url).read()
-		script_ver = ver_data.split(",")[0].split(":")[0].replace('\n','')
-		script_files = ver_data.split(",")[0].split(":")[1:]
-		defpass_ver = ver_data.split(",")[1].replace('\n','')
-		ip2c_ver = ver_data.split(",")[2].replace('\n','')
-		pJS_ver = ver_data.split(",")[3].replace('\n','')
+    if ckinstall:
+        # nmap
+        if not (inpath("nmap") or inpath("nmap.exe")):
+            print("  [i]  NMap not found in $PATH.  You'll need to install it to use RAWR.  \n")
 
-	except Exception, ex:
-		print "  !! Failed:  %s\n"%ex
-		sys.exit(1)
+        else:
+            proc = subprocess.Popen(['nmap', '-V'], stdout=subprocess.PIPE)
+            ver = proc.stdout.read().split(' ')[2]
+            main_ver = ver.split('.')[0]
+            if int(main_ver) < 6: 
+                print(" [i]  ** NMap %s found, but versions prior to 6.00 won't return all SSL data. **\n" % ver)
 
-	# check for updated version of script
-	if script_ver > VERSION:
-		choice = raw_input('\n  ** Update RAWR v%s to v%s? [Y/n]:' % (VERSION, script_ver))
-		if (choice.lower() in ("y","yes",'')):
-			print "\n  ++ Updating  RAWR v%s >> v%s\n" % (VERSION, script_ver)
-			url = REPO_DL_PATH + "rawr_" + script_ver + ".tar"
-			print "\tPulling - " + url
-			try:
-				data = urllib2.urlopen(url).read()
-				open("rawr_" + script_ver + ".tar", 'w+b').write( urllib2.urlopen(url).read() )
-				tarfile.open("rawr_" + script_ver + ".tar").extractall('../')
-				os.remove("rawr_" + script_ver + ".tar")
+            else:
+                print("  [i]  ++ NMap %s found ++\n" % ver)
 
-			except Exception, ex:
-				print "\n    !! Error pulling: " + url + "\n\t\t - " + str(ex)
-				print "     Try pulling lastest version from %s\n\n" & REPO_DL_PATH
-				sys.exit(1)
+        try:
+            proc = subprocess.Popen([pjs_path, '-v'], stdout=subprocess.PIPE)
+            pJS_curr = re.sub('[\n\r]', '', proc.stdout.read())
 
-			print "\n     ++ Update successful.  Restarting script... ++  \n\n"
-			time.sleep(3)
-			python = sys.executable
-			os.execl(python, python, * sys.argv)
-		else:
-			print "\n  ++ RAWR v%s found (current is %s) ++\n" % (VERSION, script_ver)
+        except:
+            pJS_curr = ""
 
-	else:
-		print "  ++ RAWR v%s found (current) ++\n" % VERSION
+        if force or (pJS_ver > pJS_curr) or not (inpath("phantomjs") or inpath("phantomjs.exe") or os.path.exists("data/phantomjs/bin/phantomjs") or os.path.exists("data/phantomjs/phantomjs.exe")):
+            if not force:        
+                if pJS_curr != "" and (pJS_ver > pJS_curr):
+                    txt = '\n  [i] phantomJS %s found (current is %s) - do you want to update? [Y/n]: ' % (pJS_curr, pJS_ver)
+                    choice = raw_input(txt)
+                else:
+                    choice = raw_input('\n  !! phantomJS was not found - do you want to install it? [Y/n]: ')
+                    if not (choice.lower() in ("y", "yes", '')):
+                        print("\n  [!] Exiting...\n\n")
+                        sys.exit(0)
+            
+            if force or (choice.lower() in ("y", "yes", '')):
+                # phantomJS
+                pre = "phantomjs-%s" % pJS_ver
+                if platform.system() in "CYGWIN|Windows":
+                    fname = pre+"-windows.zip"
+                elif platform.system().lower() in "darwin": 
+                    fname = pre+"-macosx.zip"
+                elif sys.maxsize > 2**32: 
+                    fname = pre+"-linux-x86_64.tar.bz2"
+                else: 
+                    fname = pre+"-linux-i686.tar.bz2"  # default is 32bit *nix
 
+                url = "%s%s" % (PJS_REPO, fname)
+                print("\n[>] Pulling/installing phantomJS >\n   %s" % url)
 
-	if ckinstall:
-		# nmap
-		if not (inpath("nmap") or inpath("nmap.exe")):
-			print "  !! NMap not found in $PATH.  You'll need to install it to use RAWR.  \n"
-		else:
-			proc = subprocess.Popen(['nmap','-V'], stdout=subprocess.PIPE)
-			ver = proc.stdout.read().split(' ')[2]
-			main_ver = ver.split('.')[0]
-			if int(main_ver) < 6: 
-				print "  ** NMap %s found, but versions prior to 6.00 won't return all SSL data. **\n"%ver
-			else:
-				print "  ++ NMap %s found ++\n"%ver
+                try:
+                    fname = "data/" + fname
+                    data = requests.get(url).content
+                    open(fname, 'w+b').write(data)
 
-		try:
-			proc = subprocess.Popen([pjs_path,'-v'], stdout=subprocess.PIPE)
-			pJS_curr = re.sub('[\n\r]', '', proc.stdout.read())
-		except:
-			pJS_curr = ""
+                    if os.path.exists("data/phantomjs"):
+                        def onerror(func, path):
+                            if not os.access(path, os.W_OK):
+                                os.chmod(path, stat.S_IWUSR)
+                                func(path)
 
-		if force or (pJS_ver > pJS_curr) or not (inpath("phantomjs") or inpath("phantomjs.exe") or os.path.exists("data/phantomjs/bin/phantomjs") or os.path.exists("data/phantomjs/phantomjs.exe")):
-			if not force:		
-				if pJS_curr != "" and (pJS_ver > pJS_curr):
-					txt = '\n  !! phantomJS %s found (current is %s) - do you want to update? [Y/n]: '%(pJS_curr,pJS_ver)
-					choice = raw_input(txt)
-				else:
-					choice = raw_input('\n  !! phantomJS was not found - do you want to install it? [Y/n]: ')
-					if not (choice.lower() in ("y","yes",'')): 
-						print "\n  !! Exiting...\n\n"
-						sys.exit(0)
-			
-			if force or (choice.lower() in ("y","yes",'')): 
-				# phantomJS
-				pre = "phantomjs-%s"%pJS_ver
-				if  platform.system() in "CYGWIN|Windows": 
-					fname = pre+"-windows.zip"
-				elif platform.system().lower() in "darwin": 
-					fname = pre+"-macosx.zip"
-				elif sys.maxsize > 2**32: 
-					fname = pre+"-linux-x86_64.tar.bz2"
-				else: 
-					fname = pre+"-linux-i686.tar.bz2"  # default is 32bit *nix
+                        shutil.rmtree("data/phantomjs", onerror=onerror)
 
-				url = "%s%s"%(PJS_REPO, fname)
-				print "\n  ++ Pulling/installing phantomJS >\n   %s"%url
+                    if fname.endswith(".zip"):
+                        import zipfile
+                        zipfile.ZipFile(fname).extractall('./data')
+                    else: 
+                        tarfile.open(fname).extractall('./data')        
+                
+                    os.rename(str(os.path.splitext(fname)[0].replace(".tar", '')), "data/phantomjs")
+                    os.remove(fname)
 
-				try:
-					fname = "data/" + fname
-					open(fname,'w+b').write( urllib2.urlopen(url).read() )
+                    if platform.system().lower() in "darwin": 
+                        os.chmod("data/phantomjs/bin/phantomjs", 755)
+                        # Mac OS X: Prevent showing the icon on the dock and stealing screen focus.
+                        #   http://code.google.com/p/phantomjs/issues/detail?id=281
+                        f = open("data/phantomjs/bin/Info.plist", 'w')
+                        f.write(OSX_PLIST)
+                        f.close()
+                    
+                    print("  [+] Success\n")
 
-					if os.path.exists("data/phantomjs"):
-						def onerror(func, path, exc_info):
-							if not os.access(path, os.W_OK):
-								os.chmod(path, stat.S_IWUSR)
-								func(path)
+                except Exception:
+                    error = traceback.format_exc().splitlines()[-3:]
+                    error_msg("\n".join(error))
+                    print("  [!] Download Failed:\n\t%s\n" % "\n\t".join(error))
 
-						shutil.rmtree("data/phantomjs",onerror=onerror)
+        else:
+            print("  [i] phantomJS %s found (current supported version) ++\n" % pJS_curr)
 
-					if fname.endswith(".zip"):
-						import zipfile
-						zipfile.ZipFile(fname).extractall('./data')
-					else: 
-						tarfile.open(fname).extractall('./data')		
-				
-					os.rename(str(os.path.splitext(fname)[0].replace(".tar",'')), "data/phantomjs")
-					os.remove(fname)
+    defpass_curr = 0
+    if os.path.exists(DEFPASS_FILE):
+        ofile = open(DEFPASS_FILE).readlines()
+        for line in ofile:
+            if line.startswith("#"):
+                defpass_curr = line.split(' ')[1].replace('\n', '')
 
-					if platform.system().lower() in "darwin": 
-						os.chmod("data/phantomjs/bin/phantomjs",755)
-						# Mac OS X: Prevent showing the icon on the dock and stealing screen focus.
-						#   http://code.google.com/p/phantomjs/issues/detail?id=281
-						f = open("data/phantomjs/bin/Info.plist",'w')
-						f.write(OSX_PLIST)
-						f.close()
-					
-					print "     ++ Success ++\n"
-				except Exception, ex:
-					print "  !! Failed:  %s\n"%ex
+    if not os.path.exists(DEFPASS_FILE) or force or (defpass_ver > defpass_curr):
+        # defpass
+        url = REPO_DL_PATH + DEFPASS_FILE.split("/")[1]
+        print("  [>] Updating %s rev.%s >> rev.%s\n   %s" % (DEFPASS_FILE, defpass_curr, defpass_ver, url))
+        try:
+            data = requests.get(url).content
+            open("data/defpass_tmp.csv", 'w').write(data)
+            try: 
+                os.remove(DEFPASS_FILE)
 
-		else:
-			print "  ++ phantomJS %s found (current supported version) ++\n"%pJS_curr
+            except: 
+                pass
 
+            os.rename("data/defpass_tmp.csv", DEFPASS_FILE)
+            c = len(open(DEFPASS_FILE).read().split('\n'))
+            print("  [+] Success - (Contains %s entries) " % c)
 
-	defpass_curr = 0
-	if os.path.exists(DEFPASS_FILE):
-		ofile = open(DEFPASS_FILE).readlines()
-		for line in ofile:
-			if line.startswith("#"):
-				defpass_curr = line.split(' ')[1].replace('\n','')
+        except Exception:
+            error = traceback.format_exc().splitlines()[-3:]
+            error_msg("\n".join(error))
+            print("  [x] Failed:\n\t%s\n" % "\n\t".join(error))
+    else:
+        print("  [i] %s - already at rev.%s" % (DEFPASS_FILE, defpass_ver))
 
-	if not os.path.exists(DEFPASS_FILE) or force or (defpass_ver > defpass_curr):
-		# defpass
-		url = REPO_DL_PATH + DEFPASS_FILE.split("/")[1]
-		print "  ++ Updating %s rev.%s >> rev.%s\n   %s" % (DEFPASS_FILE, defpass_curr, defpass_ver, url)
-		try:
-			open("data/defpass_tmp.csv",'w').write( urllib2.urlopen(url).read() )
-			try: 
-				os.remove(DEFPASS_FILE)
-			except: 
-				pass
+    ip2c_curr = 0
+    if os.path.exists(IP_TO_COUNTRY):
+        ofile = open(IP_TO_COUNTRY).readlines()
+        for line in ofile:
+            if "# Software Version" in line:
+                ip2c_curr = line.split(" ")[5].replace('\n', '')
+                break
 
-			os.rename("data/defpass_tmp.csv", DEFPASS_FILE)
-			c = 0 
-			for line in open(DEFPASS_FILE).read().split('\n'):
-				c += 1
+    if not os.path.exists(IP_TO_COUNTRY) or force or (ip2c_ver > ip2c_curr):
+        # IpToCountry
+        url = REPO_DL_PATH + IP_TO_COUNTRY.split("/")[1] + ".tar.gz"
+        print("\n  [>] Updating %s ver.%s >> ver.%s\n   %s" % (IP_TO_COUNTRY, ip2c_curr, ip2c_ver, url))
+        try:
+            data = requests.get(url).content
+            open(IP_TO_COUNTRY + ".tar.gz", 'w+b').write(data)
+            tarfile.open(IP_TO_COUNTRY + ".tar.gz").extractall('./data')
+            os.remove(IP_TO_COUNTRY + ".tar.gz")
+            print("  [+] Success\n")
 
-			print "     ++ Success - (Contains %s entries)  ++" % c
-		except Exception, ex:
-			print "     !! Failed:  %s\n" % ex
-	else:
-		print "     -- NOT updating %s - already at rev.%s" % (DEFPASS_FILE, defpass_ver)
+        except Exception:
+            error = traceback.format_exc().splitlines()[-3:]
+            error_msg("\n".join(error))
+            print("  [x] Update Failed:\n\t%s\n" % "\n\t".join(error))
+            sys.exit(1)
+    else:
+        print("\n  [i] %s - already at ver.%s\n" % (IP_TO_COUNTRY, ip2c_ver))
 
-	ip2c_curr = 0
-	if os.path.exists(IP_TO_COUNTRY):
-		ofile = open(IP_TO_COUNTRY).readlines()
-		for line in ofile:
-			if "# Software Version" in line:
-				ip2c_curr = line.split(" ")[5].replace('\n','')
-				break
-
-	if not os.path.exists(IP_TO_COUNTRY) or force or (ip2c_ver > ip2c_curr):
-		# IpToCountry
-		url = REPO_DL_PATH + IP_TO_COUNTRY.split("/")[1] + ".tar.gz"
-		print "\n  ++ Updating %s ver.%s >> ver.%s\n   %s" % (IP_TO_COUNTRY, ip2c_curr,ip2c_ver,url)
-		try:
-			open(IP_TO_COUNTRY + ".tar.gz",'w+b').write( urllib2.urlopen(url).read() )
-			tarfile.open(IP_TO_COUNTRY + ".tar.gz").extractall('./data')
-			os.remove(IP_TO_COUNTRY + ".tar.gz")
-			print "     ++ Success ++\n"
-
-		except Exception, ex:
-			print "     !! Failed:  %s\n" % ex
-			sys.exit(1)
-	else:
-		print "\n     -- NOT updating %s - already at ver.%s\n" % (IP_TO_COUNTRY, ip2c_ver)
-
-	print "  ++  Update Complete  ++\n\n"
+    print("  [i] Update Complete  ++\n\n")
+    sys.exit(2)
 
 
 def inpath(app):
-	for path in os.environ["PATH"].split(os.pathsep):
-		exe_file = os.path.join(path, app)
-		if os.path.isfile(exe_file) and os.access(exe_file, os.X_OK):
-			return exe_file
+    for path in os.environ["PATH"].split(os.pathsep):
+        exe_file = os.path.join(path, app)
+        if os.path.isfile(exe_file) and os.access(exe_file, os.X_OK):
+            return exe_file
 
 
-def writelog(msg, logfile):
-	print msg
-	open(logfile, 'a').write(msg + "\n")
+def error_msg(msg):
+    open('error.log', 'a').write("Error:%s\n\n" % msg)
 
+
+def writelog(msg, logfile, opts):
+    if type(msg) == {}:
+        print(msg)
+    elif not (opts.json_min or opts.json):
+        print(msg)
+        open(logfile, 'a').write("%s\n" % msg)

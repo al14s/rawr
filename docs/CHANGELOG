@@ -1,44 +1,171 @@
+Ideas:
+		look for a .cfg file in the conf folder, accept .cfg file as arg, then accept args
+		HTML - add small charts to 'printable' mode
+		output to SQL server
+		BUG --downgrade doesn't work - putting this off until i can figure out how to use http1.0 with requests
+		pull generic data from spidered links
+		curses interface (show queue/thread status, maybe status of each thread?)
 
-ToDo (in order of priority):
-		BUGs:
-			EC2 instance - screenshots don't work!
 
-		inputs:
-			accept Nexpose simple XML
-			pull SSL info from Nexpose XML if available
-			pull SSL info from Qualys XML if available
-			pull SSL info from Nessus XML if available
+ToDo:
+		BUG - EC2 instances - screenshots don't work
+		merge identical targets pulled from all inputs
+		CSV field quotes showing up in Excel
 
-		enum:
-			finish modules and test them
-				#implement parser
-			test/tweak spidering
+        dynamic throttling
+		SSL parsing/testing for Nexpose (XML/2&Simple) and OpenVAS
 
-		outputs:
-			#sql db	
-			#json
-			urlparse - pull vars from URLs
-			clean up output messages (tabbing)
-			clean up data in csv
-			option to forgo the log folder --->  straight to stdout (json)
-			make screenshot optional
-			HTML cleanup
-				redesign info display window
-					added flist to JS vars
-				add small charts to 'printable' mode
-				redesign iplist and selection params
-					use an id # for each entry and select only that one
-				add 'maps' button to HTML if maps are available - another page?
+		flist changeup
+			make target fields cumulative
+			change flist to apply only to CSV
+				make flist a user-defined 'starter'
+				make cumulative .keys() list
+				make "add_rest" t/f value for appending all of the other fields
+			sqliteDB - create table of cumulative flist
 
+
+Done (* = major changes):
+    9/25/2013
+		catch agraph() errors - now escaping quotes to prevent the current error.  will revisit if different errors occur
+		SSL parsing/testing Nessus & Qualys XML
+
+
+	9/24/2013
+	    *code cleanup/optimization
+		*Decided to make RAWR a linux-only project.
+			i'll leave the WIN/OSX code that is currently in place - in the event someone wants to create a windows or OSX fork
+		fixed error messages - variable ref needed to be updated
+
+
+	9/23/2013
+		fixed - HTML - 'show only these' button inop.
+		added '-m', which makes an attack surface matrix from the inputs and exits
+		removed 'port' if/then from "Pulling" msg - it adds the port automatically if it's not 80 or 443...
+		removed pygraphviz from lib/ - _graphviz.so doesn't run on OSX (x64?)
+		use 'diagram' key in HTML (for missing diagrams) - added it to flist (must be present for now)
+
+
+	9/22/2013	
+		added '-v' to show spidering updates
+		added crawl 'overall' timeout, url limit
+		added a "diag" key to target obj upon successful creation of diagram
+		added timeout and 'not found' error handling to requests
+		improved output
+		improved error displays
+		*Added/tested ability to parse the following formats (tested against metasploitable2)
+			Nexpose - XML+v2  *parse v1 and v2 w/ the same setup*
+		   OpenVAS XML
+
+
+	9/21/2013
+		*Added/tested ability to parse the following formats (tested against metasploitable2)
+			Nexpose    - Simple XML
+		improvements to output
+		using traceback to send more info to the new error.log
+		fixed a type/casting error with the binged ports array
+		ported requests and pygraphviz into our lib/ folder (working on lxml)
+		fixed issue with file processing in -f switch
+		fixed bug in defpass parsing
+
+
+	9/20/2013
+		*Added/tested ability to parse the following formats (tested against metasploitable2)
+			NMap       - XML
+			Nessus     - XMLv2   (requires "Service Detection" plugin)
+			Metasploit - CSV
+			Qualys     - Port Services Report CSV
+			Qualys     - Asset Search XML (requires QIDs 86000,86001,86002)
+			any CSV with at least the following fields: host,port,name,info (ip, port, http|https|ssl|tls|www, service info)
+				~~! must have headers as first row of document
+
+		added --parsertest to output the first 3 targets and exit (to aide in parser dev)
+		fixed bugs in .nessus file parser
+		added ssl-cert pull to .nessus file parser
+
+
+	9/19/2013
+		fixed a bug in SSL cert parsing
+		added hostname to ASM
+		added fallback ssl cert grab - when pulling hosts from a file without cert info
+		added the creation of an attack surface matrix - csv (different output for -a?)
+			very simple for now... thinking of expanding to include top talkers, etc.
+		accept hosts from Qualys csv port/service export
+
+
+	9/18/2013
+		removed script updater (use repo)
+		HTML rehash
+			BUG - arrows cover 'printable' button
+			BUG - '+' too close to 'Results'
+			redesign info display window
+				add cert info
+			use an id # for each entry and select only that one (IPLIST)
+			write flist as a list
+			only process as many entries as we're showing  ;)
+			add button for diagram (m = map)
+			
+
+	9/17/2013
+		*add module code to the parser func.
+
+
+	9/16/2013
+		fixed BUG - Alive threads count... counts?
+		dead threads shouldn't hinder a scan from finishing - added another try/except to catch and warn of errors
+		fixed BUG - now catching errors from lxml parser
+		small supplements to url regex
+		fixed BUG - sqlite data issue - parameterized the queries
+		fixed BUG - -e was operating backwards, disabled defpass unless specified
+		fixed BUG - duplicate diagram entries w/ and w/o "/" on end of url
+		fixed BUG - character/string formatting errors
+		add checks at beginning for python-requests python-lxml
+		added error messages for extra web calls
+		disabled further web calls if main call fails
+
+
+	9/15/2013
+		split PARSER modules from WHOLEDOC ones
+		*threads now feed all but the first hostname back to the queue - does more to distribute the load
+		fixed a double-feed issue with the individual XML parsers
+		fixed a double-feed issue with Bing>DNS
+
+
+	9/14/2013
+		revisit meta tags & parser
+		make site layout left to right, more readable - moved from libgv-python/pygraph to pygraphviz
+		fixed json output so that it doesn't walk all over itself...
+		test/tweak spidering
+		
 
 	9/13/2013
+		clean up output messages (tabbing)
+		--json, --json-min fully implemented
+		urlparse - pull vars from URLs - deemed unneccessary for now
+		implemented html parser (lxml)
+		clean up data in csv
+		added sqlite3 db file output
 		add 'threads active' back into status msg
 		BUGFIX: SSL parsing error
+		made --noss gracefully deal w/ 'found' pngs and images folder creation
+
+
+	8/15/2013
+		*read all files as streams
+		*change xml parser to lxml
+		*switched to optparse
+		*switched to requests from urllib2
+		made screenshot optional
+		forgo saving nmap data and use header data from pull
+		*use dict object for target info
+		*rehash NMAP and NESSUS doc parse
+		*break xml parsing functions out into functions.py
+		allow spidering without PNG output
+		add redirect history to target object
 
 
 	8/03/2013
-		finished first implementation of spider/map
-		split rawr up into folders/files for easier understanding
+		*finished first implementation of spider/map
+		*split rawr up into folders/files for easier understanding
 			- my thanks to the Cuckoo crew for setting a good example!
 		added more code comments
 		added AUTHORS doc
@@ -54,13 +181,13 @@ ToDo (in order of priority):
 
 
 	7/26/2013
-		add ability to spider links (only enumerate links on that domain)
+		*add ability to spider links (only enumerate links on that domain)
 		add modules for java, JS, flash, jquery, etc.
-		create graph from spider (https://code.google.com/p/python-graph/)
+		*create graph from spider (https://code.google.com/p/python-graph/)
 
 
 	7/25/2013
-		updated usage and -h (+examples) with new options
+		*updated usage and -h (+examples) with new options
 		move modules to beginning of script or to another file and call them all during data parse
 
 
@@ -77,8 +204,8 @@ ToDo (in order of priority):
 
 	6/24/2013
 		recreated changelog
-		optimize XML parsing
-		HTML report 'print mode' with user's logo in header
+		*optimize XML parsing
+		*HTML report 'print mode' with user's logo in header
 			class 'Header' >> hidden
 			ignore mouseovers
 			ignore keystrokes - except for 'esc', which reloads the page
