@@ -62,6 +62,7 @@ class sithread(threading.Thread):
         global binging
         global q
         global nthreads
+        global threads
 
         while not self.terminate:
             time.sleep(0.5)
@@ -683,11 +684,11 @@ def parsedata(target, logdir, timestamp, scriptpath, opts):
                             # need to take another look at this one.  no seeing it atm
 
                         elif "not valid before" in line.lower():
-                            notbefore = line.split(": ")[1].strip()
+                            notbefore = line.split(": ")[1].strip().replace("T",' ').split("+")[0]
                             target['SSL_Cert-notbefore'] = notbefore
 
                         elif "not valid after" in line.lower():
-                            notafter = line.split(": ")[1].strip()
+                            notafter = line.split(": ")[1].strip().replace("T",' ').split("+")[0]
                             target['SSL_Cert-notafter'] = notafter
 
                     try:
@@ -1286,11 +1287,11 @@ def parseNMapXML(r):
                                 # need to take another look at this one.  no seeing it atm
 
                             elif "not valid before" in line.lower():
-                                notbefore = line.split(": ")[1].strip()
+                                notbefore = line.split(": ")[1].strip().replace("T",'').split("+")[0]
                                 target['SSL_Cert-notbefore'] = notbefore
 
                             elif "not valid after" in line.lower():
-                                notafter = line.split(": ")[1].strip()
+                                notafter = line.split(": ")[1].strip().replace("T",'').split("+")[0]
                                 target['SSL_Cert-notafter'] = notafter
 
                         notbefore = datetime.strptime(str(notbefore), '%Y-%m-%d %H:%M:%S')
