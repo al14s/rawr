@@ -273,7 +273,6 @@ def screenshot(target, logdir, timestamp, scriptpath, pjs_path, output):
     try:
         with open("%s/rawr_%s.log" % (logdir, timestamp), 'ab') as log_pipe:
             start = datetime.now()
-            print(target['url'])
             process = subprocess.Popen([pjs_path, "--web-security=no", "--ignore-ssl-errors=yes", "--ssl-protocol=any",
                                         scriptpath + "/data/screenshot.js", target['url'], filename, useragent,
                                         str(ss_delay)], stdout=log_pipe, stderr=log_pipe)
