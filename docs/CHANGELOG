@@ -25,6 +25,15 @@ ToDo:
 
 
 Done (* = major changes):
+    10/4/2013
+        fixed folder deletion when updating/installing phantomjs
+        fixed some output inconsistancies
+        fixed SSL identification error in NMap parser
+        fixed (muted for now) null hostname error
+        fixed thread exception where target['url'] is empty (kills thread, causes a continual run)
+        shortened HTML parsing error to make them less dominant, added url to msg
+
+
     9/25/2013
 		catch agraph() errors - now escaping quotes to prevent the current error.  will revisit if different errors occur
 		SSL parsing/testing Nessus & Qualys XML
