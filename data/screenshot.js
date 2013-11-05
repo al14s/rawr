@@ -10,13 +10,13 @@ page.settings.userAgent = useragent;
 page.open(url, function (status) {
     if (status !== 'success') {
         //console.log('[Screenshot]  Failed: Unable to load the address.  ' + url);
-		phantom.exit();
+        page.close();
     } else {
 		page.evaluate(function() { document.body.bgColor = 'white'; });
         window.setTimeout(function () {
             page.render(filename);
 		    //console.log('[Screenshot] '+url+' >> ' + filename);
-			phantom.exit();
+            page.close();
         }, timeout*1000);
-    }
+    };
 });

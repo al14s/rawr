@@ -12,13 +12,14 @@ RAWR would not be possible if it weren't for all of Tom and Bryan's input on
 
 
 	CONTRIBUTORS:  
-		Tom Moore				Project Direction	@c0ncealed
-		Chris Teodorski			Tester			@can0beans
+		Tom Moore			Project Direction	@c0ncealed
+		Chris Teodorski		Tester			@can0beans
 		Bryan Tobey			Tester			@_fmm
-		Artis Schlossberg		Tester, SSL suggestion			
+		Artis Schlossberg	Tester, SSL suggestion
 		human39				Tester
-		justbill				Tester
+		justbill			Tester
 		fyodor				Source, scanme.nmap.org
-		WEBNet77.net			Source, IPtoCountry.csv
-		Ariya Hidayat			Creator, PhantomJS
+		WEBNet77.net		Source, IPtoCountry.csv
+		Ariya Hidayat		Creator, PhantomJS
+		Richard Stevens     Tester
 

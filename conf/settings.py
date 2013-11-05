@@ -6,7 +6,7 @@ timeout = 10          # timeout in seconds for each web call (screenshots and ge
 ss_delay = 1          # delay in seconds or page to render before screenshot
 nmapspeed = 4         # nmap
 nthreads = 25         # number of threads for the info run
-useragent = 'Mozilla/5.0 (Windows; U; MSIE 9.0; WIndows NT 9.0; en-US))'  # for the info run and screenshots.
+useragent = 'Mozilla/5.0 (Windows; U; MSIE 9.0; WIndows NT 9.0; en-US)'  # for the info run and screenshots.
 ports = "80,443,8080,8088,8443"	 # default scan ports
 fuzzdb = "66,80,81,443,445,457,1080,1100,1241,1352,1433,1434,1521,1944,2301,3128,3306,4000,4001" + \
     ",4002,4100,5000,5432,5800,5801,5802,6346,6347,7001,7002,8080,8088,8443,8888,30821"
