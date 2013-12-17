@@ -1046,8 +1046,6 @@ def parseNexposeXML(r):     # need a scan of a server using SSL!
                 target['protocol'] = endpoint.attrib['protocol']
                 target['port'] = endpoint.attrib['port']
                 target['service_name'] = endpoint.xpath("services/service/@name")[0].lower()
-                # target['service_tunnel'] = 'ssl'   ???
-                # target['ssl-cert'] = ???
 
                 try:
                     vals = endpoint.xpath("services/service/fingerprints/fingerprint")[0].attrib.values()
@@ -1084,8 +1082,6 @@ def parseNexposeSimpleXML(r):     # need a scan of a server using SSL!
                 target['protocol'] = service.attrib['protocol']
                 target['port'] = service.attrib['port']
                 target['service_name'] = service.attrib['name'].lower()
-                # target['service_tunnel'] = 'ssl'   ???
-                # target['ssl-cert'] = ???
 
                 try:
                     target['service_version'] = service.xpath("fingerprint/description/text()")[0]

@@ -333,9 +333,16 @@ if opts.nmap_il or opts.nmaprng:
         else:
             outputs = "-oA"
 
+        proc = subprocess.Popen(['nmap', '-V'], stdout=subprocess.PIPE)
+        ver = proc.stdout.read().split(' ')[2]
+
+        # greatly increases scan speed, introduced in nmap v.6.4
+        if float(ver) > 6.3:
+            cmd.append("--max-retries 0")
+
         cmd += "-p", ports, "-T%s" % nmapspeed, "-vv", "-sV", sslscripts, outputs, "rawr_" + timestamp, "--open"
 
-        if opts.nmap_il: 
+        if opts.nmap_il:
             cmd += "-iL", opts.nmap_il
         else:
             cmd.append(opts.nmaprng)

@@ -11,7 +11,7 @@ ToDo
             make folder 'files' containing ./<host>_<filename>
             give ability to check for directory
 
-		SSL parsing/testing for Nexpose (XML/2&Simple) and OpenVAS
+		SSL parsing/testing for OpenVAS
 
 		'targets' object changeup
             create sqlite db at beginning and work from it (queue only holds a small ID for the task)
@@ -25,6 +25,10 @@ ToDo
 
 
 Done (* = major changes):
+    11/5/2013
+        added '--max-retries 0' to nmap if version is > 6.3  - greatly increases speed of scan
+
+
     11/4/2013
 		fixed: ANNOYANCE - CSV field quotes showing up in Excel
         made a special '401' image for the HTML report for easy identification(?)

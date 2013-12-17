@@ -22,9 +22,9 @@ Requirements:
     phantomJS          - tested with 1.9.1 - if not installed, can be downloaded into data/ folder during --check-install
     python-lxml        - for quick file parsing
     graphviz           - (optional) for creating site diagrams
-    pygraphviz         - (optional) for creating site diagrams
+    python-pygraphviz  - (optional) for creating site diagrams
 
-    'requests' has been ported and is included in the lib/ folder
+    'requests' has been ported to the lib/ folder
 
 
 Installation:
@@ -59,74 +59,81 @@ RAWR can parse the following formats:
 			headers must be on first row of doc
 			use --parsertest to output the first 3 targets and exit (to aide in parser dev)
 
-Usage: 
-   ./rawr.py [-n <range> (-p <ports> -s <port> -t <timing>)|-f <xml>|-i <list>]
-              [-d <dir>] [--sslv] [-aboqrz] [--downgrade] [--json] [--json-min]
-                [-e] [--title <title>] [--logo <file>] [--sqlite3] [--spider]
-                  [-u|-U] [--check-install|--force-install]
+ ./rawr.py
+        [-n <range> (-p <ports> -s <src port> -t <timing>)|-f <csv>|-i <list>]
+          [-d <dir>] [--sslv] [-aboqrvxz] [--downgrade] [--json] [--json-min]
+              [-e] [--title <title>] [--logo <file>] [--sqlite] [--spider]
+                [--noss] [--proxy <ip:port>] [-m] [--parsertest] [-u|-U]
+                           [--check-install|--force-install]
 
 Options:
-  --version          show program's version number and exit
-  -h, --help         show this help message and exit
-  -a                 Include all open ports in .csv, not just web interfaces.
-                     Creates a threat matrix as well.
-  -f XMLFILE         NMap|Nessus|Nexpose|Qualys|OpenVAS file or dir from which
-                     to pull files. See README for valid formats. Use quotes
-                     when using wildcards. ex:  -f "*.nessus" will parse all
-                     .nessus files in directory.
-  -i NMAP_IL         Target an input list.  [NMap format] [can't be used with
-                     -n]
-  -n NMAPRNG         Target the specified range or host.  [NMap format]
-  -p PORTS           Specify port(s) to scan.   [default is
-                     '80,443,8080,8088']
-  -s SOURCEPORT      Specify a source port for the NMap scan.
-  -t NMAPSPEED       Set a custom NMap scan timing.   [default is 4]
-  -y                 
-  --sslv             Assess the SSL security of each target.  [considered
-                     intrusive]
+  --version            show program's version number and exit
+  -h, --help           show this help message and exit
+  -a                   Include all open ports in .csv, not just web
+                       interfaces. Creates a threat matrix as well.
+  -f <file>            NMap|Nessus|Nexpose|Qualys|OpenVAS file or dir from
+                       which to pull files. See README for valid formats. Use
+                       quotes when using wildcards. ex:  -f "*.nessus" will
+                       parse all .nessus files in directory.
+  -i <file>            Target an input list.  [NMap format] [can't be used
+                       with -n]
+  -n <range>           Target the specified range or host.  [NMap format]
+  -m                   Take any inputs, create an Attack Surface Matrix, and
+                       exit.
+  -p <port(s)>         Specify port(s) to scan.   [default is
+                       '80,443,8080,8088']
+  -s <port>            Specify a source port for the NMap scan.
+  -t (1-5)             Set a custom NMap scan timing.   [default is 4]
+  -v                   Verbose - Shows messages like spider status updates.
+  -y
+  --sslv               Assess the SSL security of each target.  [considered
+                       intrusive]
 
   Enumeration Options:
-    -b               Use Bing to gather external hostnames. (good for shared
-                     hosting)
-    -o               Make an 'OPTIONS' call to grab the site's available
-                     methods.
-    -r               Make an additional web call to get "robots.txt"
-    --downgrade      Make requests using HTTP 1.0
-    --noss           Disable screenshots.
-    --spider         Enumerate all urls in target's HTML, create site layout
-                     graph.  Will record but not follow links outside of the
-                     target's domain.  Creates a map (.png) for that site in
-                     the <logfolder>/maps folder.
+    -b                 Use Bing to gather external hostnames. (good for shared
+                       hosting)
+    -o                 Make an 'OPTIONS' call to grab the site's available
+                       methods.
+    -r                 Make an additional web call to get "robots.txt"
+    -x                 Make an additional web call to get "crossdomain.xml"
+    --noss             Disable screenshots.
+    --proxy=<ip:port>  <ip:port> Use Burp/Zap/W3aF to feed credentials to all
+                       sites.  ** Recommended only for internal sites **
+    --spider           Enumerate all urls in target's HTML, create site layout
+                       graph.  Will record but not follow links outside of the
+                       target's domain.  Creates a map (.png) for that site in
+                       the <logfolder>/maps folder.
 
   Output Options:
-    -d LOGDIR        Directory in which to create log folder [default is "./"]
-    -q, --quiet      Won't show splash screen.
-    -z               Compress log folder when finished.
-    --sqlite         Put output into an additional sqlite3 db file.
-    --json           stdout will include only JSON strings. Log folders and
-                     files are created normally.
-    --json-min       The only output of this script will be JSON strings to
-                     stdout.
-    --parsertest     Will display targets pulled from a parsed doc and exit.
+    -d <folder>        Directory in which to create log folder [default is
+                       "./"]
+    -q, --quiet        Won't show splash screen.
+    -z                 Compress log folder when finished.
+    --sqlite           Put output into an additional sqlite3 db file.
+    --json             stdout will include only JSON strings. Log folders and
+                       files are created normally.
+    --json-min         The only output of this script will be JSON strings to
+                       stdout.
+    --parsertest       Will parse inputs, display the first 3, and exit.
 
   Report Options:
-    -e               Exclude default username/password data from output.
-    --logo=LOGO      Specify a logo file for the HTML report. max = 400x80
-    --title=TITLE    Specify a custom title for the HTML report.
+    -e                 Exclude default username/password data from output.
+    --logo=<file>      Specify a logo file for the HTML report.
+    --title="Title"    Specify a custom title for the HTML report.
 
   Update Options:
-    -u               Check for newer version of IpToCountry.csv and
-                     defpass.csv.
-    -U               Force update of IpToCountry.csv and defpass.csv.
-    --check-install  Check for newer IpToCountry.csv and defpass.csv. Check
-                     for presence of NMap and its version. Check for presence
-                     of phantomJS, prompts if installing.
-    --force-install  Force update - IpToCountry.csv, defpass,csv, phantomJS.
-                     Also check for presence of NMap and its version.
+    -u                 Check for newer version of IpToCountry.csv and
+                       defpass.csv.
+    -U                 Force update of IpToCountry.csv and defpass.csv.
+    --check-install    Update IpToCountry.csv and defpass.csv. Check for
+                       presence of NMap and its version. Check for presence of
+                       phantomJS, prompts if installing.
+    --force-install    Force update - IpToCountry.csv, defpass,csv, phantomJS.
+                       Also check for presence of NMap and its version.
 
 
 
-   SUMMARY:
+  SUMMARY:
 
          Uses NMap, Qualys, Nexpose, or Nessus scan data to target web
              services for enumeration. Visits each host on each port with an
@@ -177,7 +184,7 @@ Options:
                                                 `--            --'
 
 
-   EXAMPLES:
+  EXAMPLES:
 
      ./rawr.py -n scanme.nmap.org --spider
           Create log folders in current directory [./log_<date>_<time>_rawr/]
