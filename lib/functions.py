@@ -332,7 +332,7 @@ def screenshot(target, logdir, timestamp, scriptpath, proxy, pjs_path, output):
             cmd = [pjs_path]
 
             if proxy:
-                cmd += "--proxy=%s" % proxy['http'] # At this point, the same ip:port is used for both http and https.
+                cmd.append("--proxy=%s" % proxy['http']) # At this point, the same ip:port is used for both http and https.
 
             cmd += "--web-security=no", "--ignore-ssl-errors=yes", "--ssl-protocol=any",\
                    (scriptpath + "/data/screenshot.js"), target['url'], filename, useragent, str(ss_delay)
@@ -1443,21 +1443,30 @@ def update(force, ckinstall, pjs_path, scriptpath):
                     txt = '\n  [i] phantomJS %s found (current is %s) - do you want to update? [Y/n]: ' % (pJS_curr, pJS_ver)
                     choice = raw_input(txt)
                 else:
-                    choice = raw_input('\n  !! phantomJS was not found - do you want to install it? [Y/n]: ')
-                    if not (choice.lower() in ("y", "yes", '')):
+                    if platform.machine() == "armv7":
+                        print("      [i] Please install phantomJS via apt-get.")
                         print("\n  [!] Exiting...\n\n")
                         sys.exit(0)
+
+                    else:
+                        choice = raw_input('\n  !! phantomJS was not found - do you want to install it? [Y/n]: ')
+                        if not (choice.lower() in ("y", "yes", '')):
+                            print("\n  [!] Exiting...\n\n")
+                            sys.exit(0)
             
             if force or (choice.lower() in ("y", "yes", '')):
                 # phantomJS
                 pre = "phantomjs-%s" % pJS_ver
                 if platform.system() in "CYGWIN|Windows":
                     fname = pre+"-windows.zip"
-                elif platform.system().lower() in "darwin": 
+
+                elif platform.system().lower() in "darwin":
                     fname = pre+"-macosx.zip"
-                elif sys.maxsize > 2**32: 
+
+                elif sys.maxsize > 2**32:
                     fname = pre+"-linux-x86_64.tar.bz2"
-                else: 
+
+                else:
                     fname = pre+"-linux-i686.tar.bz2"  # default is 32bit *nix
 
                 url = "%s%s" % (PJS_REPO, fname)
@@ -1483,20 +1492,20 @@ def update(force, ckinstall, pjs_path, scriptpath):
                     if fname.endswith(".zip"):
                         import zipfile
                         zipfile.ZipFile(fname).extractall('./data')
-                    else: 
-                        tarfile.open(fname).extractall('./data')        
-                
+                    else:
+                        tarfile.open(fname).extractall('./data')
+
                     os.rename(str(os.path.splitext(fname)[0].replace(".tar", '')), "data/phantomjs")
                     os.remove(fname)
 
-                    if platform.system().lower() in "darwin": 
+                    if platform.system().lower() in "darwin":
                         os.chmod("data/phantomjs/bin/phantomjs", 755)
                         # Mac OS X: Prevent showing the icon on the dock and stealing screen focus.
                         #   http://code.google.com/p/phantomjs/issues/detail?id=281
                         f = open("data/phantomjs/bin/Info.plist", 'w')
                         f.write(OSX_PLIST)
                         f.close()
-                    
+
                     print("        [+] Success\n")
 
                 except Exception:

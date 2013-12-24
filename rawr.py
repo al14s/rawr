@@ -338,7 +338,7 @@ if opts.nmap_il or opts.nmaprng:
 
         # greatly increases scan speed, introduced in nmap v.6.4
         if float(ver) > 6.3:
-            cmd.append("--max-retries 0")
+            cmd += "--max-retries", "0"
 
         cmd += "-p", ports, "-T%s" % nmapspeed, "-vv", "-sV", sslscripts, outputs, "rawr_" + timestamp, "--open"
 
