@@ -173,10 +173,15 @@ class sithread(threading.Thread):
 
                         try:
                             target['res'] = requests.get(target['url'], headers={"user-agent": useragent}, verify=False,
-                                                         timeout=timeout, allow_redirects=False)
+                                                         timeout=timeout, allow_redirects=False,
+                                                         proxies=self.opts.proxy_dict)
+
                             msg = ["  [+] Finished", ""]
 
                         except requests.ConnectionError:
+                            if target['res'].status_code == 401:
+                                open("./auth_fail.log", 'w').write(target['url'])
+
                             msg = ["  [x] Not found", ""]
 
                         except timeout:
@@ -193,7 +198,8 @@ class sithread(threading.Thread):
                         if self.opts.getoptions and 'res' in target.keys():
                             try:
                                 res = (requests.options(target['url'], headers={"user-agent":useragent}, verify=False,
-                                                        timeout=timeout, allow_redirects=False))
+                                                        timeout=timeout, allow_redirects=False,
+                                                        proxies=self.opts.proxy_dict))
 
                                 if 'allow' in res.headers:
                                     target['options'] = res.headers['allow'].replace(",", " | ")
@@ -209,15 +215,51 @@ class sithread(threading.Thread):
                             except Exception:
                                 error = traceback.format_exc().splitlines()[-3:]
                                 error_msg("\n".join(error))
-                                self.output.put("      [x] Failed pulling OPTIONS: [ %s ]\n\t%s\n" % (target['url'], "\n\t".join(error)))
+                                self.output.put("      [x] Failed pulling OPTIONS: [ %s ]\n\t%s\n" % (target['url'],
+                                                                                                      "\n\t".join(error)))
 
                         if not self.opts.noss and 'res' in target.keys():
-                            screenshot(target, self.logdir, self.timestamp, self.scriptpath, self.pjs_path, self.output)
+                            screenshot(target, self.logdir, self.timestamp, self.scriptpath,
+                                       self.opts.proxy_dict, self.pjs_path, self.output)
+
+                        if self.opts.getcrossdomain and 'res' in target.keys():
+                            try:
+                                res = requests.get("%s/crossdomain.xml" % target['url'], verify=False,
+                                                   timeout=timeout, allow_redirects=False, proxies=self.opts.proxy_dict)
+                                if res.status_code == 200:
+                                    if not self.opts.json_min:
+                                        if not os.path.exists("cross_domain"):
+                                            try:
+                                                os.makedirs("cross_domain")
+
+                                            except:
+                                                pass
+
+                                        try:
+                                            v = str(res.text)
+
+                                        except UnicodeEncodeError:
+                                            v = unicode(res.text).encode('unicode_escape')
+
+                                        open("./cross_domain/%s_%s_crossdomain.xml" % (hostname, target['port']), 'w').write(v)
+                                        self.output.put("      [r] Pulled crossdomain.xml:  ./cross_domain/%s_%s_crossdomain.xml  " % (hostname, target['port']))
+                                    target['crossdomain'] = "y"
+
+                            except requests.ConnectionError:
+                                msg = ["  [x] Not found", ""]
+
+                            except requests.Timeout:
+                                self.output.put("      [x] Timed out pulling crossdomain.xml: [ %s%s ]" % (hostname, port))
+
+                            except Exception:
+                                error = traceback.format_exc().splitlines()[-3:]
+                                error_msg("\n".join(error))
+                                self.output.put("      [x] Failed pulling crossdomain.xml:\n\t%s\n" % "\n\t".join(error))
 
                         if self.opts.getrobots and 'res' in target.keys():
                             try:
                                 res = requests.get("%s/robots.txt" % target['url'], verify=False,
-                                                   timeout=timeout, allow_redirects=False)
+                                                   timeout=timeout, allow_redirects=False, proxies=self.opts.proxy_dict)
                                 if res.status_code == 200 and "llow:" in res.text:
                                     if not self.opts.json_min:
                                         if not os.path.exists("robots"):
@@ -273,12 +315,13 @@ class sithread(threading.Thread):
                     if t.busy:
                         busy_count += 1
     
-                self.output.put("  [i] Main queue size [ %s ] - Threads Busy/Total [ %s/%s ]" % (str(q.qsize()), busy_count, nthreads))
+                self.output.put("  [i] Main queue size [ %s ] - Threads Busy/Total [ %s/%s ]" % (str(q.qsize()),
+                                                                                                 busy_count, nthreads))
 
                 q.task_done()
 
 
-def screenshot(target, logdir, timestamp, scriptpath, pjs_path, output):
+def screenshot(target, logdir, timestamp, scriptpath, proxy, pjs_path, output):
     filename = "%s/%s_%s_%s.png" % ("%s/images" % logdir, target['url'].split("/")[2].split(":")[0],
                                     timestamp, target['port'])
     err = '.'
@@ -286,9 +329,15 @@ def screenshot(target, logdir, timestamp, scriptpath, pjs_path, output):
     try:
         with open("%s/rawr_%s.log" % (logdir, timestamp), 'ab') as log_pipe:
             start = datetime.now()
-            process = subprocess.Popen([pjs_path, "--web-security=no", "--ignore-ssl-errors=yes", "--ssl-protocol=any",
-                                        scriptpath + "/data/screenshot.js", target['url'], filename, useragent,
-                                        str(ss_delay)], stdout=log_pipe, stderr=log_pipe)
+            cmd = [pjs_path]
+
+            if proxy:
+                cmd.append("--proxy=%s" % proxy['http']) # At this point, the same ip:port is used for both http and https.
+
+            cmd += "--web-security=no", "--ignore-ssl-errors=yes", "--ssl-protocol=any",\
+                   (scriptpath + "/data/screenshot.js"), target['url'], filename, useragent, str(ss_delay)
+
+            process = subprocess.Popen(cmd, stdout=log_pipe, stderr=log_pipe)
 
             while process.poll() is None:
                 time.sleep(0.1)
@@ -312,10 +361,12 @@ def screenshot(target, logdir, timestamp, scriptpath, pjs_path, output):
                 output.put('      [X] Screenshot :     [ %s ] Failed - 0 byte file. Deleted.' % target['url'])
                 try:
                     os.remove(filename)
+                    shutil.copyfile(scriptpath + "/data/error.png", filename)
                 except:
                     pass
         else:
             output.put('      [X] Screenshot :     [ %s ] Failed - %s' % (target['url'], err))
+            shutil.copyfile(scriptpath + "/data/error.png", filename)
 
     except Exception:
         error = traceback.format_exc().splitlines()[-3:]
@@ -328,7 +379,8 @@ def crawl(target, logdir, timestamp, opts):
 
     def recurse(url_t1, urls_t2, tabs, depth=0):
         if opts.verbose:
-            output.put("      [i] depth %s - time %d - urls %s" % (depth, (datetime.now() - time_start).total_seconds(), len(list(set(urls_visited))) ))
+            output.put("      [i] depth %s - time %d - urls %s" % (depth, (datetime.now() - time_start).total_seconds(),
+                                                                   len(list(set(urls_visited))) ))
         
         url_t1 = url_t1.replace(":", "-").split("'")[0].split("<")[0].split("--")[0].rstrip("%)/.")  # supplement our regex
 
@@ -364,14 +416,18 @@ def crawl(target, logdir, timestamp, opts):
                     if url_t2_hn in url_t1 and not url_t2 in urls_visited:
                         urls_visited.append(url_t2)
                         try:
-                            html = requests.get(url_t2_f, headers={"user-agent":useragent}, verify=False, timeout=timeout, allow_redirects=False).text.replace("\n","")
+                            html = requests.get(url_t2_f, headers={"user-agent":useragent}, verify=False,
+                                                timeout=timeout, allow_redirects=False,
+                                                proxies=opts.proxy_dict).text.replace("\n","")
+
                             urls_t3_r = list(set(re.findall(URL_REGEX, html, re.I)))
                             urls_t3 = []
                             for url_t3 in urls_t3_r:
                                 urls_t3.append(url_t3.rstrip('/'))
 
-                            if len(urls_t3) > 0 and not (len(list(set(urls_visited))) > spider_url_limit or depth > spider_depth or (datetime.now() - time_start).total_seconds() > spider_timeout):
-                                recurse(url_t2, urls_t3, tabs + "\t", depth + 1)
+                            if len(urls_t3) > 0:
+                                if not (len(list(set(urls_visited))) > spider_url_limit or depth > spider_depth or (datetime.now() - time_start).total_seconds() > spider_timeout):
+                                    recurse(url_t2, urls_t3, tabs + "\t", depth + 1)
 
                         except Exception:
                             pass
@@ -811,10 +867,10 @@ def write_to_csv(timestamp, target):
             except UnicodeEncodeError:
                 v = unicode(v).encode('unicode_escape')
                 
-            x[flist.lower().split(", ").index(i.lower())] = re.sub('[\n\r,]', '', str(v))
+            x[flist.lower().split(", ").index(i.lower())] = re.sub('[\n\r,]', '', str(v).replace('"','""'))
 
     try:
-        open("rawr_%s_serverinfo.csv" % timestamp, 'a').write("\n%s" % (str(','.join(x))))
+        open("rawr_%s_serverinfo.csv" % timestamp, 'a').write('\n"%s"' % (str('","'.join(x))))
 
     except Exception:
         error = traceback.format_exc().splitlines()[-3:]
@@ -990,8 +1046,6 @@ def parseNexposeXML(r):     # need a scan of a server using SSL!
                 target['protocol'] = endpoint.attrib['protocol']
                 target['port'] = endpoint.attrib['port']
                 target['service_name'] = endpoint.xpath("services/service/@name")[0].lower()
-                # target['service_tunnel'] = 'ssl'   ???
-                # target['ssl-cert'] = ???
 
                 try:
                     vals = endpoint.xpath("services/service/fingerprints/fingerprint")[0].attrib.values()
@@ -1028,8 +1082,6 @@ def parseNexposeSimpleXML(r):     # need a scan of a server using SSL!
                 target['protocol'] = service.attrib['protocol']
                 target['port'] = service.attrib['port']
                 target['service_name'] = service.attrib['name'].lower()
-                # target['service_tunnel'] = 'ssl'   ???
-                # target['ssl-cert'] = ???
 
                 try:
                     target['service_version'] = service.xpath("fingerprint/description/text()")[0]
@@ -1391,21 +1443,30 @@ def update(force, ckinstall, pjs_path, scriptpath):
                     txt = '\n  [i] phantomJS %s found (current is %s) - do you want to update? [Y/n]: ' % (pJS_curr, pJS_ver)
                     choice = raw_input(txt)
                 else:
-                    choice = raw_input('\n  !! phantomJS was not found - do you want to install it? [Y/n]: ')
-                    if not (choice.lower() in ("y", "yes", '')):
+                    if platform.machine() == "armv7":
+                        print("      [i] Please install phantomJS via apt-get.")
                         print("\n  [!] Exiting...\n\n")
                         sys.exit(0)
+
+                    else:
+                        choice = raw_input('\n  !! phantomJS was not found - do you want to install it? [Y/n]: ')
+                        if not (choice.lower() in ("y", "yes", '')):
+                            print("\n  [!] Exiting...\n\n")
+                            sys.exit(0)
             
             if force or (choice.lower() in ("y", "yes", '')):
                 # phantomJS
                 pre = "phantomjs-%s" % pJS_ver
                 if platform.system() in "CYGWIN|Windows":
                     fname = pre+"-windows.zip"
-                elif platform.system().lower() in "darwin": 
+
+                elif platform.system().lower() in "darwin":
                     fname = pre+"-macosx.zip"
-                elif sys.maxsize > 2**32: 
+
+                elif sys.maxsize > 2**32:
                     fname = pre+"-linux-x86_64.tar.bz2"
-                else: 
+
+                else:
                     fname = pre+"-linux-i686.tar.bz2"  # default is 32bit *nix
 
                 url = "%s%s" % (PJS_REPO, fname)
@@ -1431,20 +1492,20 @@ def update(force, ckinstall, pjs_path, scriptpath):
                     if fname.endswith(".zip"):
                         import zipfile
                         zipfile.ZipFile(fname).extractall('./data')
-                    else: 
-                        tarfile.open(fname).extractall('./data')        
-                
+                    else:
+                        tarfile.open(fname).extractall('./data')
+
                     os.rename(str(os.path.splitext(fname)[0].replace(".tar", '')), "data/phantomjs")
                     os.remove(fname)
 
-                    if platform.system().lower() in "darwin": 
+                    if platform.system().lower() in "darwin":
                         os.chmod("data/phantomjs/bin/phantomjs", 755)
                         # Mac OS X: Prevent showing the icon on the dock and stealing screen focus.
                         #   http://code.google.com/p/phantomjs/issues/detail?id=281
                         f = open("data/phantomjs/bin/Info.plist", 'w')
                         f.write(OSX_PLIST)
                         f.close()
-                    
+
                     print("        [+] Success\n")
 
                 except Exception:

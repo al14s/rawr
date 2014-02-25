@@ -1,30 +1,48 @@
-Ideas:
-		look for a .cfg file in the conf folder, accept .cfg file as arg, then accept args
-		HTML - add small charts to 'printable' mode
+
+ToDo
+        PwnPad RAWR report viewer
 		output to SQL server
-		BUG --downgrade doesn't work - putting this off until i can figure out how to use http1.0 with requests
+		--downgrade doesn't work - putting this off until i can figure out how to use http1.0 with requests
 		pull generic data from spidered links
-		curses interface (show queue/thread status, maybe status of each thread?)
 
+        consolidate '--find' into one function in the modules
+            make folder 'files' containing ./<host>_<filename>
+            give ability to check for directory
 
-ToDo:
-		BUG - EC2 instances - screenshots don't work
-		merge identical targets pulled from all inputs
-		CSV field quotes showing up in Excel
-
-        dynamic throttling
-		SSL parsing/testing for Nexpose (XML/2&Simple) and OpenVAS
-
-		flist changeup
+		'targets' object changeup
+            create nosql db at beginning and work from it (queue only holds a small ID for the task)
+		    merge identical targets pulled from all inputs
 			make target fields cumulative
 			change flist to apply only to CSV
 				make flist a user-defined 'starter'
 				make cumulative .keys() list
 				make "add_rest" t/f value for appending all of the other fields
-			sqliteDB - create table of cumulative flist
+			DB - create table of cumulative flist
 
 
 Done (* = major changes):
+    12/24/2013
+        fixed --proxy function - tested w/ burp
+            (was building the phantomjs command incorrectly.)
+        tested RAWR on pwnpad
+        added --check-install message for PwnPad users - "Please install phantomJS via apt-get."
+
+    11/5/2013
+        added '--max-retries 0' to nmap if version is > 6.3  - greatly increases speed of scan
+
+
+    11/4/2013
+		fixed: ANNOYANCE - CSV field quotes showing up in Excel
+        made a special '401' image for the HTML report for easy identification(?)
+        added --proxy <ip:port>, so you can have Zap/Burp/w3af feed creds to the sites
+		added a check for crossdomain.xml
+        added './<logfolder>/auth_fail.log' - containing all 401's
+
+
+    10/18/2013
+		BUG - EC2 instances - screenshots don't work  -  have worked footprint down to minimum for now
+
+
     10/4/2013
         fixed folder deletion when updating/installing phantomjs
         fixed some output inconsistancies

@@ -39,16 +39,16 @@ from lib.functions import *
 parser = optparse.OptionParser(usage=usage, version=VERSION)
 parser.add_option('-a', help='Include all open ports in .csv, not just web interfaces. Creates a threat matrix as well.',
                   dest='allinfo', action='store_true', default=False)
-parser.add_option('-f', help='NMap|Nessus|Nexpose|Qualys|OpenVAS file or dir from which to pull files. '
+parser.add_option('-f', metavar="<file>", help='NMap|Nessus|Nexpose|Qualys|OpenVAS file or dir from which to pull files. '
                              'See README for valid formats. Use quotes when using wildcards. '
                              'ex:  -f "*.nessus" will parse all .nessus files in directory.', dest='xmlfile')
-parser.add_option('-i', help="Target an input list.  [NMap format] [can't be used with -n]", dest='nmap_il')
-parser.add_option('-n', help="Target the specified range or host.  [NMap format]", dest='nmaprng')
+parser.add_option('-i', metavar="<file>", help="Target an input list.  [NMap format] [can't be used with -n]", dest='nmap_il')
+parser.add_option('-n', metavar="<range>", help="Target the specified range or host.  [NMap format]", dest='nmaprng')
 parser.add_option('-m', help="Take any inputs, create an Attack Surface Matrix, and exit.", dest='asm', action='store_true',
                   default=False)
-parser.add_option('-p', help="Specify port(s) to scan.   [default is '80,443,8080,8088']", dest='ports')
-parser.add_option('-s', help='Specify a source port for the NMap scan.', dest='sourceport', type='int')
-parser.add_option('-t', help='Set a custom NMap scan timing.   [default is 4]', dest='nmapspeed', type='int')
+parser.add_option('-p', metavar="<port(s)>", help="Specify port(s) to scan.   [default is '80,443,8080,8088']", dest='ports')
+parser.add_option('-s', metavar="<port>", help='Specify a source port for the NMap scan.', dest='sourceport', type='int')
+parser.add_option('-t', metavar="(1-5)", help='Set a custom NMap scan timing.   [default is 4]', dest='nmapspeed', type='int')
 parser.add_option('-v', help='Verbose - Shows messages like spider status updates.', dest='verbose', action='store_true',
                   default=False)
 parser.add_option('-y', help='', dest='y', action='store_true', default=False)
@@ -62,8 +62,12 @@ group.add_option('-o', help="Make an 'OPTIONS' call to grab the site's available
                  action='store_true', default=False)
 group.add_option('-r', help='Make an additional web call to get "robots.txt"', dest='getrobots', action='store_true',
                  default=False)
-group.add_option('--downgrade', help='Make requests using HTTP 1.0', dest='ver_dg', action='store_true', default=False)
+group.add_option('-x', help='Make an additional web call to get "crossdomain.xml"', dest='getcrossdomain', action='store_true',
+                 default=False)
+#group.add_option('--downgrade', help='Make requests using HTTP 1.0', dest='ver_dg', action='store_true', default=False)
 group.add_option('--noss', help='Disable screenshots.', dest='noss', action='store_true', default=False)
+group.add_option('--proxy', metavar="<ip:port>", help="<ip:port> Use Burp/Zap/W3aF to feed credentials to all sites.  " +
+                                  "** Recommended only for internal sites **", dest='proxy_dict')
 group.add_option('--spider', help="Enumerate all urls in target's HTML, create site layout graph.  " +
                                   "Will record but not follow links outside of the target's domain." +
                                   "  Creates a map (.png) for that site in the <logfolder>/maps folder.",
@@ -71,7 +75,7 @@ group.add_option('--spider', help="Enumerate all urls in target's HTML, create s
 parser.add_option_group(group)
 
 group = optparse.OptionGroup(parser, "Output Options")
-group.add_option('-d', help='Directory in which to create log folder [default is "./"]', dest='logdir')
+group.add_option('-d', metavar="<folder>", help='Directory in which to create log folder [default is "./"]', dest='logdir')
 group.add_option('-q', '--quiet', help="Won't show splash screen.", dest='quiet', action='store_true', default=False)
 group.add_option('-z', help='Compress log folder when finished.', dest='compress_logs', action='store_true', default=False)
 group.add_option('--sqlite', help='Put output into an additional sqlite3 db file.', dest='sqlite', action='store_true',
@@ -87,8 +91,8 @@ parser.add_option_group(group)
 group = optparse.OptionGroup(parser, "Report Options")
 group.add_option('-e', help='Exclude default username/password data from output.', dest='defpass', action='store_false',
                  default=True)
-group.add_option('--logo', help='Specify a logo file for the HTML report.', dest='logo')
-group.add_option('--title', help='Specify a custom title for the HTML report.', dest='title')
+group.add_option('--logo', metavar="<file>", help='Specify a logo file for the HTML report.', dest='logo')
+group.add_option('--title', metavar='"Title"', help='Specify a custom title for the HTML report.', dest='title')
 parser.add_option_group(group)
 
 group = optparse.OptionGroup(parser, "Update Options")
@@ -158,6 +162,7 @@ if pjs_path == "" and not opts.noss:
 if (opts.nmap_il and opts.nmaprng) or (opts.xmlfile and (opts.nmap_il or opts.nmaprng)):
     parser.error("  [x] Can't use -f, -i, or -n in the same command.")
     sys.exit(1)
+
 
 # Take a look at our inputs
 if opts.xmlfile:
@@ -294,9 +299,11 @@ if not opts.json_min:
     writelog("\n  [+] Log Folder created :\n      %s \n" % logdir, logfile, opts)
 
 
-if opts.ver_dg:
-    writelog("  [i] Downgrade not implemented yet.  :\   *skipping*", logfile, opts)
+#if opts.ver_dg:
+#    writelog("  [i] Downgrade not implemented yet.  :\   *skipping*", logfile, opts)
 
+if opts.proxy_dict:
+    opts.proxy_dict = { "http":opts.proxy_dict, "https":opts.proxy_dict }
 
 delthis = False
 
@@ -326,9 +333,16 @@ if opts.nmap_il or opts.nmaprng:
         else:
             outputs = "-oA"
 
+        proc = subprocess.Popen(['nmap', '-V'], stdout=subprocess.PIPE)
+        ver = proc.stdout.read().split(' ')[2]
+
+        # greatly increases scan speed, introduced in nmap v.6.4
+        if float(ver) > 6.3:
+            cmd += "--max-retries", "0"
+
         cmd += "-p", ports, "-T%s" % nmapspeed, "-vv", "-sV", sslscripts, outputs, "rawr_" + timestamp, "--open"
 
-        if opts.nmap_il: 
+        if opts.nmap_il:
             cmd += "-iL", opts.nmap_il
         else:
             cmd.append(opts.nmaprng)
@@ -556,8 +570,10 @@ if q.qsize() > 0:
                 except:
                     hosts[target['ipv4']] = [[target['port']], target['hostnames'][0]]
 
-        # sort the targets dict by ipv4
-        #hosts.sort(key= lambda line: ("%3s%3s%3s%3s" % tuple(hosts.split('.'))), reverse=False)
+        #    sort by ipv4 address
+        # sorted_x = sorted(x.iteritems(), key=operator.itemgetter(1))
+        # import operator
+        # hosts.sort(key=lambda hosts: ("%3s%3s%3s%3s" % tuple(operator.itemgetter(1).split('.'))), reverse=False)
 
         t = {}
         for i in set(cols):
@@ -571,7 +587,7 @@ if q.qsize() > 0:
         cols.append("TOTAL")
 
         with open(asm_f, 'a') as f:
-            f.write('"%s"\n' % '", "'.join(cols))  # write the column headers
+            f.write('"%s"\n' % '","'.join(cols))  # write the column headers
 
             for host in hosts:    # fill out each line with data from the target
                 line = [" "] * len(cols)
@@ -581,7 +597,7 @@ if q.qsize() > 0:
                     line[cols.index(port)] = "x"
 
                 line[-1] = (str(line.count("x")))
-                f.write('"%s"\n' % '", "'.join(line))
+                f.write('"%s"\n' % '","'.join(line))
 
             line = [" "] * len(cols)
             for p in t:
@@ -589,7 +605,7 @@ if q.qsize() > 0:
 
             line[0] = "TOTAL"
 
-            f.write('\n"%s"\n' % '", "'.join(line))
+            f.write('\n"%s"\n' % '","'.join(line))
 
     except Exception:
         error = traceback.format_exc().splitlines()
@@ -599,6 +615,7 @@ if q.qsize() > 0:
     if opts.asm:  # quit after creating the asm
         exit(0)
 
+    target = None
     targets = None   # it's all in the queue, so we can free up that memory...  :)
 
     # Begin processing any hosts found
@@ -661,7 +678,7 @@ if q.qsize() > 0:
             writelog("\n  [!] Unable to locate nmap.xsl.\n", logfile, opts)
 
         if not os.path.exists("rawr_%s_serverinfo.csv" % timestamp):
-            open("rawr_%s_serverinfo.csv" % timestamp, 'w').write(flist)
+            open("rawr_%s_serverinfo.csv" % timestamp, 'w').write('"' + flist.replace(', ', '","') + '"')
 
         writelog("\n  [>] Beginning enumeration of [ %s ] host(s)\n" % q.qsize(), logfile, opts)
 

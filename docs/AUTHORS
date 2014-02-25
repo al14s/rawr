@@ -1,8 +1,8 @@
                                     AUTHORS
 
-RAWR would not be possible if it weren't for all of Tom and Bryan's input on
- what RAWR needed in order to make their job easier. My sincere thanks to 
- everyone who tested for your valuable feedback.  
+RAWR would not be possible if it weren't for all of your feedback on what it
+ needed to be in order to make your job easier. My sincere thanks to everyone
+ who tested, for your valuable feedback.
 
 	...except for Tom, who finds new ways to break it after every update.
 
@@ -12,13 +12,14 @@ RAWR would not be possible if it weren't for all of Tom and Bryan's input on
 
 
 	CONTRIBUTORS:  
-		Tom Moore				Project Direction	@c0ncealed
-		Chris Teodorski			Tester			@can0beans
+		Tom Moore			Project Direction	@c0ncealed
 		Bryan Tobey			Tester			@_fmm
-		Artis Schlossberg		Tester, SSL suggestion			
+		Chris Teodorski		Tester			@can0beans
+		Artis Schlossberg	Tester, SSL suggestion
 		human39				Tester
-		justbill				Tester
+		justbill			Tester
 		fyodor				Source, scanme.nmap.org
-		WEBNet77.net			Source, IPtoCountry.csv
-		Ariya Hidayat			Creator, PhantomJS
+		WEBNet77.net		Source, IPtoCountry.csv
+		Ariya Hidayat		Creator of PhantomJS
+		Richard Stevens     Tester
 
