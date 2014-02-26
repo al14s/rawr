@@ -37,20 +37,27 @@ from lib.functions import *
 
 # pull&parse our commandline args
 parser = optparse.OptionParser(usage=usage, version=VERSION)
-parser.add_option('-a', help='Include all open ports in .csv, not just web interfaces. Creates a threat matrix as well.',
+parser.add_option('-a',
+                  help='Include all open ports in .csv, not just web interfaces. Creates a threat matrix as well.',
                   dest='allinfo', action='store_true', default=False)
-parser.add_option('-f', metavar="<file>", help='NMap|Nessus|Nexpose|Qualys|OpenVAS file or dir from which to pull files. '
-                             'See README for valid formats. Use quotes when using wildcards. '
-                             'ex:  -f "*.nessus" will parse all .nessus files in directory.', dest='xmlfile')
-parser.add_option('-i', metavar="<file>", help="Target an input list.  [NMap format] [can't be used with -n]", dest='nmap_il')
-parser.add_option('-n', metavar="<range>", help="Target the specified range or host.  [NMap format]", dest='nmaprng')
-parser.add_option('-m', help="Take any inputs, create an Attack Surface Matrix, and exit.", dest='asm', action='store_true',
-                  default=False)
-parser.add_option('-p', metavar="<port(s)>", help="Specify port(s) to scan.   [default is '80,443,8080,8088']", dest='ports')
-parser.add_option('-s', metavar="<port>", help='Specify a source port for the NMap scan.', dest='sourceport', type='int')
-parser.add_option('-t', metavar="(1-5)", help='Set a custom NMap scan timing.   [default is 4]', dest='nmapspeed', type='int')
-parser.add_option('-v', help='Verbose - Shows messages like spider status updates.', dest='verbose', action='store_true',
-                  default=False)
+parser.add_option('-f', metavar="<file>",
+                  help='NMap|Nessus|Nexpose|Qualys|OpenVAS file or dir from which to pull files. '
+                  'See README for valid formats. Use quotes when using wildcards. '
+                  'ex:  -f "*.nessus" will parse all .nessus files in directory.', dest='xmlfile')
+parser.add_option('-i', metavar="<file>",
+                  help="Target an input list.  [NMap format] [can't be used with -n]", dest='nmap_il')
+parser.add_option('-n', metavar="<range>",
+                  help="Target the specified range or host.  [NMap format]", dest='nmaprng')
+parser.add_option('-m', help="Take any inputs, create an Attack Surface Matrix, and exit.",
+                  dest='asm', action='store_true', default=False)
+parser.add_option('-p', metavar="<port(s)>",
+                  help="Specify port(s) to scan.   [default is '80,443,8080,8088']", dest='ports')
+parser.add_option('-s', metavar="<port>",
+                  help='Specify a source port for the NMap scan.', dest='sourceport', type='int')
+parser.add_option('-t', metavar="(1-5)",
+                  help='Set a custom NMap scan timing.   [default is 4]', dest='nmapspeed', type='int')
+parser.add_option('-v', help='Verbose - Shows messages like spider status updates.',
+                  dest='verbose', action='store_true', default=False)
 parser.add_option('-y', help='', dest='y', action='store_true', default=False)
 parser.add_option('--sslv', help='Assess the SSL security of each target.  [considered intrusive]', dest='sslopt',
                   action='store_true', default=False)
@@ -62,22 +69,25 @@ group.add_option('-o', help="Make an 'OPTIONS' call to grab the site's available
                  action='store_true', default=False)
 group.add_option('-r', help='Make an additional web call to get "robots.txt"', dest='getrobots', action='store_true',
                  default=False)
-group.add_option('-x', help='Make an additional web call to get "crossdomain.xml"', dest='getcrossdomain', action='store_true',
-                 default=False)
+group.add_option('-x', help='Make an additional web call to get "crossdomain.xml"',
+                 dest='getcrossdomain', action='store_true', default=False)
 #group.add_option('--downgrade', help='Make requests using HTTP 1.0', dest='ver_dg', action='store_true', default=False)
 group.add_option('--noss', help='Disable screenshots.', dest='noss', action='store_true', default=False)
-group.add_option('--proxy', metavar="<ip:port>", help="<ip:port> Use Burp/Zap/W3aF to feed credentials to all sites.  " +
-                                  "** Recommended only for internal sites **", dest='proxy_dict')
+group.add_option('--proxy', metavar="<ip:port>",
+                 help="<ip:port> Use Burp/Zap/W3aF to feed credentials to all sites.  " +
+                 "** Recommended only for internal sites **", dest='proxy_dict')
 group.add_option('--spider', help="Enumerate all urls in target's HTML, create site layout graph.  " +
-                                  "Will record but not follow links outside of the target's domain." +
-                                  "  Creates a map (.png) for that site in the <logfolder>/maps folder.",
+                 "Will record but not follow links outside of the target's domain." +
+                 "  Creates a map (.png) for that site in the <logfolder>/maps folder.",
                  dest='crawl', action='store_true', default=False)
 parser.add_option_group(group)
 
 group = optparse.OptionGroup(parser, "Output Options")
-group.add_option('-d', metavar="<folder>", help='Directory in which to create log folder [default is "./"]', dest='logdir')
+group.add_option('-d', metavar="<folder>",
+                 help='Directory in which to create log folder [default is "./"]', dest='logdir')
 group.add_option('-q', '--quiet', help="Won't show splash screen.", dest='quiet', action='store_true', default=False)
-group.add_option('-z', help='Compress log folder when finished.', dest='compress_logs', action='store_true', default=False)
+group.add_option('-z', help='Compress log folder when finished.',
+                 dest='compress_logs', action='store_true', default=False)
 group.add_option('--sqlite', help='Put output into an additional sqlite3 db file.', dest='sqlite', action='store_true',
                  default=False)
 group.add_option('--json', help='stdout will include only JSON strings. Log folders and files are created normally.',
@@ -111,7 +121,13 @@ parser.add_option_group(group)
 (opts, args) = parser.parse_args()
 
 if opts.y:
-    import random;i=words.split(':'); e="%s %s of %s %s"%(random.choice(i[0].split(',')),random.choice(i[1].split(',')),random.choice(i[2].split(',')),random.choice(i[3].split(','))); e=(" "*((18-len(e)/2)))+e+(" "*((18-len(e)/2))); print(banner.replace("  Rapid Assessment of Web Resources ",e[0:36])); sys.exit()
+    import random
+    i = words.split(':')
+    e = "%s %s of %s %s" % (random.choice(i[0].split(',')), random.choice(i[1].split(',')),
+                            random.choice(i[2].split(',')), random.choice(i[3].split(',')))
+    e = (" "*((18-len(e)/2)))+e+(" "*((18-len(e)/2)))
+    print(banner.replace("  Rapid Assessment of Web Resources ", e[0:36]))
+    sys.exit()
 
 # Remove the big dinosaur...  :\
 if not (opts.quiet or opts.json or opts.json_min):
@@ -171,7 +187,7 @@ if opts.xmlfile:
         for f in opts.xmlfile:
             ftemp.append(f)
 
-    elif os.path.isdir(opts.xmlfile): # it's a directory
+    elif os.path.isdir(opts.xmlfile):  # it's a directory
         for f in glob("%s/*" % opts.xmlfile):
             if os.path.isfile(f):
                 ftemp.append(f)
@@ -236,6 +252,9 @@ else:
 if opts.logdir:
     # redefine logdir based on user request
     logdir = os.path.realpath(opts.logdir) + "/log_%s_rawr" % timestamp
+
+elif platform.machine() == "armv7":
+    logdir = "/c0ncealed/needs/to/provide/the/path/to/the/pwnpad/documents/dir/"
 
 
 logfile = "%s/rawr_%s.log" % (logdir, timestamp)
@@ -303,7 +322,7 @@ if not opts.json_min:
 #    writelog("  [i] Downgrade not implemented yet.  :\   *skipping*", logfile, opts)
 
 if opts.proxy_dict:
-    opts.proxy_dict = { "http":opts.proxy_dict, "https":opts.proxy_dict }
+    opts.proxy_dict = {"http": opts.proxy_dict, "https": opts.proxy_dict}
 
 delthis = False
 
@@ -311,7 +330,16 @@ delthis = False
 if opts.nmap_il or opts.nmaprng:
     files = []
     # Run NMap to provide discovery [xml] data
-    if opts.nmap_il != "" or (re.match('^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,6}(:[0-9]{1,5})?(\/.*)?$', opts.nmaprng) or (re.match('^((25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{1}[0-9]{1}|[1-9]{1}){1}([-,](25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{1}[0-9]{1}|[1-9]{1}){1}){0,}|\*)\.(((25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{0,1}[0-9]{1}){1}([-,](25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{0,1}[0-9]{1}){1}){0,}|\*)\.){2}((25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{0,1}[0-9]{1}){1}([-,](25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{0,1}[0-9]{1}){1}){0,}|\*|([0]{1}\/(8|9|[1-2]{1}[0-9]{1}|30|31|32){1})){1}$', opts.nmaprng) and not re.match('([-][0-9]{1,3}[-])|(([,-].*[/]|[/].*[,-])|([*].*[/]|[/].*[*]))', opts.nmaprng) and not re.match('([-][0-9]{1,3}[-])|(([,-].*[/]|[/].*[,-])|([*].*[/]|[/].*[*]))', opts.nmaprng))):
+    if opts.nmap_il != "" \
+        or (re.match('^[a-z0-9]+([\-\.][a-z0-9]+)*\.[a-z]{2,6}(:[0-9]{1,5})?(/.*)?$', opts.nmaprng)
+            or (re.match('^((25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{1}[0-9]{1}|[1-9]{1}){1}([-,](25[0-4]' +
+                         '{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{1}[0-9]{1}|[1-9]{1}){1}){0,}|\*)\.(((25[0-4]{1}' +
+                         '|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{0,1}[0-9]{1}){1}([-,](25[0-4]{1}|2[0-4]{1}[0-9]{1}' +
+                         '|1[0-9]{2}|[1-9]{0,1}[0-9]{1}){1}){0,}|\*)\.){2}((25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]' +
+                         '{2}|[1-9]{0,1}[0-9]{1}){1}([-,](25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{0,1}[0-9]' +
+                         '{1}){1}){0,}|\*|([0]{1}\/(8|9|[1-2]{1}[0-9]{1}|30|31|32){1})){1}$', opts.nmaprng)
+            and not re.match('([-][0-9]{1,3}[-])|(([,-].*[/]|[/].*[,-])|([*].*[/]|[/].*[*]))', opts.nmaprng)
+            and not re.match('([-][0-9]{1,3}[-])|(([,-].*[/]|[/].*[,-])|([*].*[/]|[/].*[*]))', opts.nmaprng))):
         # ^^ check for valid nmap input (can use hostnames, subnets (ex. 192.168.0.0/24), stars (ex. 192.168.*.*),
         # and split ranges (ex. 192.168.1.1-10,14))
         if not (inpath("nmap") or inpath("nmap.exe")):
@@ -319,7 +347,7 @@ if opts.nmap_il or opts.nmaprng:
             sys.exit(1)
 
         # Build the NMap command args
-        cmd = ["nmap","-Pn"]
+        cmd = ["nmap", "-Pn"]
 
         if opts.sourceport:
             cmd += "-g", str(opts.sourceport)
@@ -398,7 +426,8 @@ elif newdir:
 
 # Look for and copy any images from previous scans
 if not newdir and not (glob("*.png") or glob("images/*.png")): 
-    writelog("\n  [!] No thumbnails found in [%s/]\n      or in [.%s/images/]. **\n" % (os.getcwd(), os.getcwd()), logfile, opts)
+    writelog("\n  [!] No thumbnails found in [%s/]\n      or in [.%s/images/]. **\n" %
+             (os.getcwd(), os.getcwd()), logfile, opts)
     if not opts.noss:
         writelog("      Will take website screenshots during the enumeration. ", logfile, opts)
 
@@ -421,14 +450,14 @@ for filename in files:
                 head = ' '.join([r.next() for x in xrange(2)])
 
             if 'Asset Group:' in head:
-                for target in parseQualysPortServiceCSV(filename):
+                for target in parse_qualys_port_service_csv(filename):
                     if "http" in target['service_name']:
                         c+=1
 
                     targets.append(target)
 
             else:  # generic CSV
-                for target in parseCSV(filename):
+                for target in parse_csv(filename):
                     if "http" in target['service_name']:
                         c += 1
 
@@ -438,7 +467,7 @@ for filename in files:
             r = etree.parse(filename)
 
             if len(r.xpath('//NessusClientData_v2')) > 0:
-                for target in parseNessusXML(r):
+                for target in parse_nessus_xml(r):
                     if "http" in target['service_name']:
                         c += 1
 
@@ -452,35 +481,35 @@ for filename in files:
             r = etree.parse(filename)
 
             if len(r.xpath('//NexposeReport')) > 0:
-                for target in parseNexposeXML(r):
+                for target in parse_nexpose_xml(r):
                     if "http" in target['service_name']:
                         c += 1
 
                     targets.append(target)
 
             elif len(r.xpath('//NeXposeSimpleXML')) > 0:
-                for target in parseNexposeSimpleXML(r):
+                for target in parse_nexpose_simple_xml(r):
                     if "http" in target['service_name']:
                         c += 1
 
                     targets.append(target)
 
             elif len(r.xpath('//ASSET_DATA_REPORT')) > 0:
-                for target in parseQualysScanReportXML(r):
+                for target in parse_qualys_scan_report_xml(r):
                     if "http" in target['service_name']:
                         c += 1
 
                     targets.append(target)
                 
             elif len(r.xpath('//nmaprun')) > 0:
-                for target in parseNMapXML(r):
+                for target in parse_nmap_xml(r):
                     if "http" in target['service_name']:
                         c += 1
 
                     targets.append(target)
 
             elif len(r.xpath('//report[@extension="xml" and @type="scan"]')) > 0:
-                for target in parseOpenVASXML(r):
+                for target in parse_openvas_xml(r):
                     if "http" in target['service_name']:
                         c += 1
 
@@ -546,7 +575,7 @@ if opts.sqlite:
 
 if opts.sqlite and opts.allinfo and len(sqltargets) > 0:
     writelog("\n  [>] Populating sqlite db", logfile, opts)        
-    write_to_sqlitedb(timestamp, targets)
+    write_to_sqlitedb(timestamp, targets, opts)
 
 if q.qsize() > 0:
     writelog("\n  [>] Building Attack surface matrix", logfile, opts)
@@ -639,6 +668,8 @@ if q.qsize() > 0:
             filedat = filedat.replace('<!-- REPLACEWITHLINK -->', fname)
             filedat = filedat.replace('<!-- REPLACEWITHDATE -->', datetime.now().strftime("%b %d, %Y"))
             filedat = filedat.replace('<!-- REPLACEWITHTITLE -->', report_title)
+
+            report_range = ""
             if opts.nmap_il:
                 report_range = str(opts.nmap_il)
             
@@ -654,7 +685,7 @@ if q.qsize() > 0:
 
             filedat = filedat.replace('<!-- REPLACEWITHRANGE -->', report_range)
             filedat = filedat.replace('<!-- REPLACEWITHTIMESTAMP -->', timestamp)
-            filedat = filedat.replace('<!-- REPLACEWITHFLIST -->', flist)
+            filedat = filedat.replace('<!-- REPLACEWITHFLIST -->', ("hist, " + flist.replace('hist, ', '')))
 
             if opts.logo:
                 shutil.copy(logo_file, "./html_res/")
@@ -704,7 +735,7 @@ if q.qsize() > 0:
         output.put("\n\n  [i]   ** Finished.  Stopping Threads. **\n")
 
     except KeyboardInterrupt:
-        output.put("\n\n  [i]  ******  Ctrl+C recieved - All threads halted.  ****** \n")
+        print("\n\n  [i]  ******  Ctrl+C recieved - All threads halted.  ****** \n\n")
 
     for t in threads:
         t.terminate = True
@@ -727,8 +758,8 @@ if q.qsize() > 0:
         headers = data_list[0]
         data_list = data_list[1:]
         # Format IP adresses so we can sort them effectively
-        if re.match("^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$",
-                    line.split(",")[i]):
+        if re.match("^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}" +
+                    "([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$", line.split(",")[i]):
             key = "%3s%3s%3s%3s" % tuple(line.split(",")[i].split('.'))
 
         else: 
@@ -768,4 +799,3 @@ if q.qsize() > 0:
 
 else:
     writelog("\n  [!] No data returned. \n\n", logfile, opts)
-

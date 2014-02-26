@@ -1,26 +1,56 @@
 
 ToDo
-        PwnPad RAWR report viewer
-		output to SQL server
-		--downgrade doesn't work - putting this off until i can figure out how to use http1.0 with requests
-		pull generic data from spidered links
+        PwnPad
+            find better way of platform identification
+            get user feedback to determine how to make it easier to use on the tablet
+
+		--downgrade doesn't work - putting this off until i can figure out how to use http 1.0 with requests/urllib3
+		populate 'docs' column when docs are found & collect meta, parse for phone,email,cc,etc...
+		** fix ctrl+alt+del detection
+		give option during crawl to limit # of times a url is hit (regardless of vars)
+
+        html
+    		move index arrows to the right (overlaps the list button)
+    		don't allow the '!' image to be previewed
+    		make display quicker
+    		change 'html5' to show t/f
+		    report scope value may be 'None' if using multiple files
+		    line 54 - should take data[start:end] to make it more efficient
+                will avoid parsing records 1-50 if we're on page 2....
 
         consolidate '--find' into one function in the modules
             make folder 'files' containing ./<host>_<filename>
             give ability to check for directory
 
-		'targets' object changeup
-            create nosql db at beginning and work from it (queue only holds a small ID for the task)
-		    merge identical targets pulled from all inputs
+		'targets' changeup
+		    https://code.google.com/p/nosqlite/ - queue only holds a small ID for the task
+		    spider_url_hit_limit - needs nosqlite to be efficient
+		    drop identical targets
 			make target fields cumulative
 			change flist to apply only to CSV
 				make flist a user-defined 'starter'
 				make cumulative .keys() list
 				make "add_rest" t/f value for appending all of the other fields
-			DB - create table of cumulative flist
 
 
 Done (* = major changes):
+    2/26/2014
+        fixed regex for bing result detection
+
+    2/25/2014
+        * performed code cleanup
+        set botched pic hue from 0 to 256, so they'll go at the end of the line w/ the lighter colors
+
+    2/24/2014
+		added 'order thumbnails by color weight'
+        crawl now uses prior link as 'referer'
+        fixed bug in SSL cert date parsing
+
+    1/8/2014
+        added more fields to the CSV
+        added check for charset specification in Content-Type and cookies
+        if it's on a PwnPad, default logdir changes - *** need path to android docs folder ***
+
     12/24/2013
         fixed --proxy function - tested w/ burp
             (was building the phantomjs command incorrectly.)
