@@ -27,14 +27,14 @@ flist = "url, ipv4, port, x-powered-by, options, returncode, hostnames, notes, T
         "SSL_Cert-notafter, country, service_version, Server, robots.txt, rpc_info, endURL, Date, " + \
         "analytics_ID, owner, Content-MD5, Content-Type, Last-Modified, Trailer, Transfer-Encoding, " + \
         "Warning, WWW-Authenticate, Proxy-Authenticate, Age, Keywords, " + \
-        "Description, Author, Revised, passwordFields, emailAddresses, HTML5, Defpass, diagram"
+        "Description, Author, Revised, docs, passwordFields, email_addresses, HTML5, comments, Defpass, diagram"
 # 'flist' contains the column headers for the csv generated post-scan.
 #     Add, Rearrange, or Remove fields as desired.
 #     Tip: 'notes' is not a field used in html headers and will contain no data,
 #            so it can be used for entering notes during followup.
 #
 # DISABLED COLUMNS (use the line below to store columns you don't want to see in the csv):
-# 	SSL_Tunnel-CiphersRaw, protocol, form_start, info, SSL_Cert-KeyAlg, SSL_Tunnel-Ciphers,
+# 	doc_count, SSL_Tunnel-CiphersRaw, protocol, form_start, info, SSL_Cert-KeyAlg, SSL_Tunnel-Ciphers,
 # SSL_Tunnel-Weakest, SSL_Cert-Raw, SSL_Cert-Subject, SSL_Cert-Verified, SSL_Cert-Issuer, x-aspnet-version
 # Cache-Control, Connection, Content-Encoding, Content-Language, Content-Length, meta, Content-Location,
 

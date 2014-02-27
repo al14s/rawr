@@ -12,6 +12,7 @@ import sqlite3
 import traceback
 import Image
 import colorsys
+import socket
 from urlparse import urlparse
 from datetime import datetime
 from Queue import Queue
@@ -66,269 +67,273 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
         global q
         global nthreads
 
-        while not self.terminate:
-            time.sleep(0.5)
+        try:
+            while not self.terminate:
+                time.sleep(0.5)
 
-            if not q.empty():
-                self.busy = True
-                target = q.get()
-                hostname = ''
-                port = ''
-                
-                try:
-                    prefix = "http://"
-                    if target['service_name'] == "https":
-                        prefix = "https://"
+                if not q.empty():
+                    self.busy = True
+                    target = q.get()
+                    hostname = ''
+                    port = ''
 
-                    if not target['port'] in ["80", "443"]:
-                        port = ":" + target['port']
+                    try:
+                        prefix = "http://"
+                        if target['service_name'] == "https":
+                            prefix = "https://"
 
-                    if self.opts.bing_dns and (not 'is_bing_result' in target.keys()):
-                        # Don't do Bing>DNS lookups for non-routable IPs
-                        routable = True
-                        nrips = ["10.", "172.", "192.168.", "127.16-31", "169."]
-                        for nrip in nrips:
-                            if "-" in nrip:
-                                a = int(nrip.split(".")[1].split("-")[0])
-                                while not a <= int(nrip.split(".")[1].split("-")[1]):
-                                    if target['ipv4'].startswith('.'.join([nrip.split('.')[0], str(a)])):
-                                        routable = False
-                                    a += 1
+                        if not target['port'] in ["80", "443"]:
+                            port = ":" + target['port']
 
-                            elif target['ipv4'].startswith(nrip):
-                                routable = False
+                        if self.opts.bing_dns and (not 'is_bing_result' in target.keys()):
+                            # Don't do Bing>DNS lookups for non-routable IPs
+                            routable = True
+                            nrips = ["10.", "172.", "192.168.", "127.16-31", "169."]
+                            for nrip in nrips:
+                                if "-" in nrip:
+                                    a = int(nrip.split(".")[1].split("-")[0])
+                                    while not a <= int(nrip.split(".")[1].split("-")[1]):
+                                        if target['ipv4'].startswith('.'.join([nrip.split('.')[0], str(a)])):
+                                            routable = False
+                                        a += 1
 
-                        if routable:
-                            if target['ipv4'] in binged.keys():
-                                if target['port'] in binged[target['ipv4']][1]:
-                                    self.output.put("  [.] Bing>DNS\t: " + target['ipv4'] + " (" +
-                                                    target['hostnames'][0] + ") - duplicate, skipping...")
+                                elif target['ipv4'].startswith(nrip):
+                                    routable = False
+
+                            if routable:
+                                if target['ipv4'] in binged.keys():
+                                    if target['port'] in binged[target['ipv4']][1]:
+                                        self.output.put("  [.] Bing>DNS\t: " + target['ipv4'] + " (" +
+                                                        target['hostnames'][0] + ") - duplicate, skipping...")
+
+                                    else:
+                                        binged[target['ipv4']][1].append(target['port'])
+                                        self.output.put("  [.] Bing>DNS\t: " + target['ipv4'] + " (" +
+                                                        target['hostnames'][0] + ") - pulling from cache...")
+                                        target['hostnames'] = binged[target['ipv4']][0]
 
                                 else:
-                                    binged[target['ipv4']][1].append(target['port'])
-                                    self.output.put("  [.] Bing>DNS\t: " + target['ipv4'] + " (" +
-                                                    target['hostnames'][0] + ") - pulling from cache...")
-                                    target['hostnames'] = binged[target['ipv4']][0]
+                                    while binging:  # The intention here is to avoid flooding Bing with requests.
+                                        time.sleep(0.5)
+
+                                    binging = True
+                                    self.output.put("  [@] Bing>DNS\t: " + target['ipv4'])
+                                    cookies = dict(SRCHHPGUSR='NRSLT=150')
+
+                                    try:
+                                        bing_res = requests.get("http://www.bing.com/search?q=ip%3a" + target['ipv4'],
+                                                                cookies=cookies).text.split("sb_meta")
+
+                                    except Exception:
+                                        error = traceback.format_exc().splitlines()
+                                        error_msg("\n".join(error))
+                                        self.output.put("  [x] Bing>DNS:\n\t%s\n" % "\n\t".join(error))
+                                        bing_res = ""
+
+                                    hostnames = []
+                                    for line in bing_res:
+                                        res = re.findall(r"<cite>(.*?)</cite>", line)
+                                        if res:
+                                            res = res[0].replace("https", '').replace("http", '').replace("://", '').split('/')[0]
+                                            if res != '':
+                                                hostnames.append(res)
+
+                                    if len(hostnames) > 0:
+                                        # remove any duplicates from our list of domains...
+                                        hostnames = list(set(hostnames))
+                                        self.output.put("  [+] Bing>DNS\t: found %s DNS names for %s" % (len(hostnames), target['ipv4']))
+
+                                        # distribute the load
+                                        for hostname in hostnames:
+                                            if not hostname.strip(': ') in [target['ipv4'], "https", "http", '']:
+                                                new_target = target.copy()
+                                                new_target['is_bing_result'] = True
+                                                new_target['hostnames'] = [hostname.strip()]
+                                                self.output.put("  [+] Bing>DNS\t: [ %s ] injected into queue." % (new_target['hostnames'][0]))
+                                                q.put(new_target)
+
+                                    else:
+                                        self.output.put("  [x] Bing>DNS\t: found no DNS entries for %s" % (target['ipv4']))
+
+                                    binged[target['ipv4']] = [hostnames, [target['port']]]
+
+                                    binging = False
 
                             else:
-                                while binging:  # The intention here is to avoid flooding Bing with requests.
-                                    time.sleep(0.5)
+                                self.output.put("  [-] %s is not routable. Skipping Bing>DNS for this host." %
+                                                target['ipv4'])
 
-                                binging = True
-                                self.output.put("  [@] Bing>DNS\t: " + target['ipv4'])
-                                cookies = dict(SRCHHPGUSR='NRSLT=150')
+                        if len(target['hostnames']) > 1:
+                            # distribute the load
+                            for hostname in target['hostnames'][1:]:
+                                new_target = target.copy()
+                                new_target['hostnames'] = [hostname.strip()]
+                                q.put(new_target)
+                                self.output.put("  [+] Off-loaded %s:%s to the queue. [ %s%s ]" %
+                                                (new_target['hostnames'][0],
+                                                 new_target['port'],
+                                                 target['ipv4'], port))
 
+                        if len(target['hostnames']) > 0:
+                            hostname = target['hostnames'][0]
+
+                            target['url'] = prefix + hostname + port
+                            self.output.put("  [>] Pulling\t: " + hostname + port)
+
+                            try:
+                                target['res'] = requests.get(target['url'], headers={"user-agent": useragent}, verify=False,
+                                                             timeout=timeout, allow_redirects=False,
+                                                             proxies=self.opts.proxy_dict)
+
+                                msg = ["  [+] Finished", ""]
+
+                            except requests.ConnectionError:
+                                if target['res'].status_code == 401:
+                                    open("./auth_fail.log", 'w').write(target['url'])
+
+                                msg = ["  [x] Not found", ""]
+
+                            except socket.timeout:
+                                msg = ["  [x] Timed out", ""]
+
+                            except Exception:
+                                error = traceback.format_exc().splitlines()
+                                error_msg("\n".join(error))
+                                msg = ["  [x] Error ", ":\n\t%s\n" % "\n\t".join(error)]
+
+                            if self.opts.getoptions and 'res' in target.keys():
                                 try:
-                                    bing_res = requests.get("http://www.bing.com/search?q=ip%3a" + target['ipv4'],
-                                                            cookies=cookies).text.split("sb_meta")
+                                    res = (requests.options(target['url'], headers={"user-agent": useragent}, verify=False,
+                                                            timeout=timeout, allow_redirects=False,
+                                                            proxies=self.opts.proxy_dict))
+
+                                    if 'allow' in res.headers:
+                                        target['options'] = res.headers['allow'].replace(",", " | ")
+
+                                    self.output.put("      [o] Pulled OPTIONS : [ %s ]" % target['url'])
+
+                                except requests.ConnectionError:
+                                    msg = ["  [x] Not found", ""]
+
+                                except socket.timeout:
+                                    self.output.put("      [x] Timed out pulling OPTIONS: [ %s ]" % target['url'])
 
                                 except Exception:
                                     error = traceback.format_exc().splitlines()
                                     error_msg("\n".join(error))
-                                    self.output.put("  [x] Bing>DNS:\n\t%s\n" % "\n\t".join(error))
-                                    bing_res = ""
+                                    self.output.put("      [x] Failed pulling OPTIONS: [ %s ]\n\t%s\n" % (target['url'],
+                                                                                                          "\n\t".join(error)))
+                            target['hist'] = 256
+                            if not self.opts.noss and 'res' in target.keys():
+                                target['hist'] = screenshot(target, self.logdir, self.timestamp, self.scriptpath,
+                                                            self.opts.proxy_dict, self.pjs_path, self.output)
 
-                                hostnames = []
-                                for line in bing_res:
-                                    res = re.findall(r"<cite>(.*?)</cite>", line)
-                                    if res:
-                                        res = res[0].replace("https", '').replace("http", '').replace("://", '').split('/')[0]
-                                        if res != '':
-                                            hostnames.append(res)
-
-                                if len(hostnames) > 0:
-                                    # remove any duplicates from our list of domains...
-                                    hostnames = list(set(hostnames))
-                                    self.output.put("  [+] Bing>DNS\t: found %s DNS names for %s" % (len(hostnames), target['ipv4']))
-
-                                    # distribute the load
-                                    for hostname in hostnames:
-                                        if not hostname.strip(': ') in [target['ipv4'], "https", "http", '']:
-                                            new_target = target.copy()
-                                            new_target['is_bing_result'] = True
-                                            new_target['hostnames'] = [hostname.strip()]
-                                            self.output.put("  [+] Bing>DNS\t: [ %s ] injected into queue." % (new_target['hostnames'][0]))
-                                            q.put(new_target)
-
-                                else:
-                                    self.output.put("  [x] Bing>DNS\t: found no DNS entries for %s" % (target['ipv4']))
-
-                                binged[target['ipv4']] = [hostnames, [target['port']]]
-
-                                binging = False
-
-                        else:
-                            self.output.put("  [-] %s is not routable. Skipping Bing>DNS for this host." %
-                                            target['ipv4'])
-
-                    if len(target['hostnames']) > 1:
-                        # distribute the load
-                        for hostname in target['hostnames'][1:]:
-                            new_target = target.copy()
-                            new_target['hostnames'] = [hostname.strip()]
-                            q.put(new_target)
-                            self.output.put("  [+] Off-loaded %s:%s to the queue. [ %s%s ]" %
-                                            (new_target['hostnames'][0],
-                                             new_target['port'],
-                                             target['ipv4'], port))
-
-                    if len(target['hostnames']) > 0:
-                        hostname = target['hostnames'][0]
-
-                        target['url'] = prefix + hostname + port
-                        self.output.put("  [>] Pulling\t: " + hostname + port)
-
-                        try:
-                            target['res'] = requests.get(target['url'], headers={"user-agent": useragent}, verify=False,
-                                                         timeout=timeout, allow_redirects=False,
-                                                         proxies=self.opts.proxy_dict)
-
-                            msg = ["  [+] Finished", ""]
-
-                        except requests.ConnectionError:
-                            if target['res'].status_code == 401:
-                                open("./auth_fail.log", 'w').write(target['url'])
-
-                            msg = ["  [x] Not found", ""]
-
-                        except requests.Timeout:
-                            msg = ["  [x] Timed out", ""]
-
-                        except Exception:
-                            error = traceback.format_exc().splitlines()
-                            error_msg("\n".join(error))
-                            msg = ["  [x] Error ", ":\n\t%s\n" % "\n\t".join(error)]
-
-                        if self.opts.getoptions and 'res' in target.keys():
-                            try:
-                                res = (requests.options(target['url'], headers={"user-agent": useragent}, verify=False,
-                                                        timeout=timeout, allow_redirects=False,
-                                                        proxies=self.opts.proxy_dict))
-
-                                if 'allow' in res.headers:
-                                    target['options'] = res.headers['allow'].replace(",", " | ")
-
-                                self.output.put("      [o] Pulled OPTIONS : [ %s ]" % target['url'])
-
-                            except requests.ConnectionError:
-                                msg = ["  [x] Not found", ""]
-
-                            except requests.Timeout:
-                                self.output.put("      [x] Timed out pulling OPTIONS: [ %s ]" % target['url'])
-
-                            except Exception:
-                                error = traceback.format_exc().splitlines()
-                                error_msg("\n".join(error))
-                                self.output.put("      [x] Failed pulling OPTIONS: [ %s ]\n\t%s\n" % (target['url'],
-                                                                                                      "\n\t".join(error)))
-                        target['hist'] = 256
-                        if not self.opts.noss and 'res' in target.keys():
-                            target['hist'] = screenshot(target, self.logdir, self.timestamp, self.scriptpath,
-                                                        self.opts.proxy_dict, self.pjs_path, self.output)
-
-                        if self.opts.getcrossdomain and 'res' in target.keys():
-                            try:
-                                res = requests.get("%s/crossdomain.xml" % target['url'], verify=False,
-                                                   timeout=timeout, allow_redirects=False, proxies=self.opts.proxy_dict)
-                                if res.status_code == 200:
-                                    if not self.opts.json_min:
-                                        if not os.path.exists("cross_domain"):
-                                            try:
-                                                os.makedirs("cross_domain")
-
-                                            except:
-                                                pass
-
-                                        try:
-                                            v = str(res.text)
-
-                                        except UnicodeEncodeError:
-                                            v = unicode(res.text).encode('unicode_escape')
-
-                                        open("./cross_domain/%s_%s_crossdomain.xml" %
-                                             (hostname, target['port']), 'w').write(v)
-                                        self.output.put("      [r] Pulled crossdomain.xml:" +
-                                                        "./cross_domain/%s_%s_crossdomain.xml  " %
-                                                        (hostname, target['port']))
-                                    target['crossdomain'] = "y"
-
-                            except requests.ConnectionError:
-                                msg = ["  [x] Not found", ""]
-
-                            except requests.Timeout:
-                                self.output.put("      [x] Timed out pulling crossdomain.xml: [ %s%s ]" %
-                                                (hostname, port))
-
-                            except Exception:
-                                error = traceback.format_exc().splitlines()
-                                error_msg("\n".join(error))
-                                self.output.put("      [x] Failed pulling crossdomain.xml:\n\t%s\n" %
-                                                "\n\t".join(error))
-
-                        if self.opts.getrobots and 'res' in target.keys():
-                            try:
-                                res = requests.get("%s/robots.txt" % target['url'], verify=False,
-                                                   timeout=timeout, allow_redirects=False, proxies=self.opts.proxy_dict)
-                                if res.status_code == 200 and "llow:" in res.text:
-                                    if not self.opts.json_min:
-                                        if not os.path.exists("robots"):
-                                            try:
-                                                os.makedirs("robots")
-
-                                            except:
-                                                pass
-
-                                        try:
-                                            v = str(res.text)
-
-                                        except UnicodeEncodeError:
-                                            v = unicode(res.text).encode('unicode_escape')
-
-                                        open("./robots/%s_%s_robots.txt" % (hostname, target['port']), 'w').write(v)
-                                        self.output.put("      [r] Pulled robots.txt:  ./robots/%s_%s_robots.txt  " %
-                                                        (hostname, target['port']))
-                                    target['robots'] = "y"
-
-                            except requests.ConnectionError:
-                                msg = ["  [x] Not found", ""]
-
-                            except requests.Timeout:
-                                self.output.put("      [x] Timed out pulling robots.txt: [ %s%s ]" % (hostname, port))
-
-                            except Exception:
-                                error = traceback.format_exc().splitlines()
-                                error_msg("\n".join(error))
-                                self.output.put("      [x] Failed pulling robots.txt:\n\t%s\n" % "\n\t".join(error))
-
-                        if self.opts.crawl and not self.opts.json_min and 'res' in target.keys():
-                            if not os.path.exists("maps"):
+                            if self.opts.getcrossdomain and 'res' in target.keys():
                                 try:
-                                    os.makedirs("maps")
+                                    res = requests.get("%s/crossdomain.xml" % target['url'], verify=False,
+                                                       timeout=timeout, allow_redirects=False, proxies=self.opts.proxy_dict)
+                                    if res.status_code == 200:
+                                        if not self.opts.json_min:
+                                            if not os.path.exists("cross_domain"):
+                                                try:
+                                                    os.makedirs("cross_domain")
 
-                                except:
-                                    pass
+                                                except:
+                                                    pass
 
-                            crawl(target, self.logdir, self.timestamp, self.opts)
+                                            try:
+                                                v = str(res.text)
 
-                        parsedata(target, self.logdir, self.timestamp, self.scriptpath, self.opts)
-                        self.output.put("%s  [ %s%s ]%s" % (msg[0], hostname, port, msg[1]))
+                                            except UnicodeEncodeError:
+                                                v = unicode(res.text).encode('unicode_escape')
 
-                except Exception:
-                    error = traceback.format_exc().splitlines()
-                    error_msg("\n".join(error))
-                    self.output.put("  [x] Failed : [ %s%s ]\n\t%s\n" % (hostname, port, "\n\t".join(error) ))
+                                            open("./cross_domain/%s_%s_crossdomain.xml" %
+                                                 (hostname, target['port']), 'w').write(v)
+                                            self.output.put("      [c] Pulled crossdomain.xml:" +
+                                                            "./cross_domain/%s_%s_crossdomain.xml  " %
+                                                            (hostname, target['port']))
+                                        target['crossdomain'] = "y"
 
-                self.busy = False
+                                except requests.ConnectionError:
+                                    msg = ["  [x] Not found", ""]
 
-                busy_count = 0
-                for t in threads:
-                    if t.busy:
-                        busy_count += 1
-    
-                self.output.put("  [i] Main queue size [ %s ] - Threads Busy/Total [ %s/%s ]" % (str(q.qsize()),
-                                                                                                 busy_count, nthreads))
+                                except socket.timeout:
+                                    self.output.put("      [x] Timed out pulling crossdomain.xml: [ %s%s ]" %
+                                                    (hostname, port))
 
-                q.task_done()
+                                except Exception:
+                                    error = traceback.format_exc().splitlines()
+                                    error_msg("\n".join(error))
+                                    self.output.put("      [x] Failed pulling crossdomain.xml:\n\t%s\n" %
+                                                    "\n\t".join(error))
+
+                            if self.opts.getrobots and 'res' in target.keys():
+                                try:
+                                    res = requests.get("%s/robots.txt" % target['url'], verify=False,
+                                                       timeout=timeout, allow_redirects=False, proxies=self.opts.proxy_dict)
+                                    if res.status_code == 200 and "llow:" in res.text:
+                                        if not self.opts.json_min:
+                                            if not os.path.exists("robots"):
+                                                try:
+                                                    os.makedirs("robots")
+
+                                                except:
+                                                    pass
+
+                                            try:
+                                                v = str(res.text)
+
+                                            except UnicodeEncodeError:
+                                                v = unicode(res.text).encode('unicode_escape')
+
+                                            open("./robots/%s_%s_robots.txt" % (hostname, target['port']), 'w').write(v)
+                                            self.output.put("      [r] Pulled robots.txt:  ./robots/%s_%s_robots.txt  " %
+                                                            (hostname, target['port']))
+                                        target['robots'] = "y"
+
+                                except requests.ConnectionError:
+                                    msg = ["  [x] Not found", ""]
+
+                                except socket.timeout:
+                                    self.output.put("      [x] Timed out pulling robots.txt: [ %s%s ]" % (hostname, port))
+
+                                except Exception:
+                                    error = traceback.format_exc().splitlines()
+                                    error_msg("\n".join(error))
+                                    self.output.put("      [x] Failed pulling robots.txt:\n\t%s\n" % "\n\t".join(error))
+
+                            if self.opts.crawl and not self.opts.json_min and 'res' in target.keys():
+                                if not os.path.exists("maps"):
+                                    try:
+                                        os.makedirs("maps")
+
+                                    except:
+                                        pass
+
+                                crawl(target, self.logdir, self.timestamp, self.opts)
+
+                            parsedata(target, self.logdir, self.timestamp, self.scriptpath, self.opts)
+                            self.output.put("%s  [ %s%s ]%s" % (msg[0], hostname, port, msg[1]))
+
+                    except Exception:
+                        error = traceback.format_exc().splitlines()
+                        error_msg("\n".join(error))
+                        self.output.put("  [x] Failed : [ %s%s ]\n\t%s\n" % (hostname, port, "\n\t".join(error) ))
+
+                    self.busy = False
+
+                    busy_count = 0
+                    for t in threads:
+                        if t.busy:
+                            busy_count += 1
+
+                    self.output.put("  [i] Main queue size [ %s ] - Threads Busy/Total [ %s/%s ]" % (str(q.qsize()),
+                                                                                                     busy_count, nthreads))
+
+                    q.task_done()
+
+        except KeyboardInterrupt:
+            pass
 
 
 def screenshot(target, logdir, timestamp, scriptpath, proxy, pjs_path, o):
@@ -357,7 +362,7 @@ def screenshot(target, logdir, timestamp, scriptpath, proxy, pjs_path, o):
                         sig = getattr(signal, 'SIGKILL', signal.SIGTERM)
                         os.kill(process.pid, sig)
                         os.waitpid(-1, os.WNOHANG)
-                        err = ' - Timed Out.'
+                        err = ' Timed Out.'
 
                     except:
                         pass
@@ -390,13 +395,13 @@ def screenshot(target, logdir, timestamp, scriptpath, proxy, pjs_path, o):
                 o.put('      [X] Screenshot :     [ %s ] Failed - 0 byte file. Deleted.' % target['url'])
                 try:
                     os.remove(filename)
-                    shutil.copyfile(scriptpath + "/data/error.png", filename)
+                    shutil.copyfile(scriptpath + "/data/error.png", "%s/images/error.png" % logdir)
 
                 except:
                     pass
         else:
             o.put('      [X] Screenshot :     [ %s ] Failed - %s' % (target['url'], err))
-            shutil.copyfile(scriptpath + "/data/error.png", filename)
+            shutil.copyfile(scriptpath + "/data/error.png", "%s/images/error.png" % logdir)
 
     except:
         error = traceback.format_exc().splitlines()
@@ -406,13 +411,14 @@ def screenshot(target, logdir, timestamp, scriptpath, proxy, pjs_path, o):
 
 def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
     output.put("      [>] Spidering  :     [ %s ]" % target['url'])
+    target['docs'] = []
 
     def recurse(url_t1, urls_t2, tabs, depth=0):
         if opts.verbose:
             output.put("      [i] depth %s - time %d - urls %s" % (depth, (datetime.now() - time_start).total_seconds(),
                                                                    len(list(set(urls_visited))) ))
         
-        url_t1 = url_t1.replace(":", "-").split("'")[0].split("<")[0].split("--")[0].rstrip("%)/.")  # supplement regx
+        url_t1 = url_t1.replace(":", "-")  # supplement regx
 
         for url_t2 in urls_t2:
             if depth > spider_depth:
@@ -428,46 +434,84 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                     output.put("      [!] Spidering stopped :   [ %s ] - Timed out" % target['url'])
                 break
 
-            url_t2_f = url_t2.split('"')[0].split("'")[0].split("<")[0].split("--")[0].rstrip('%)/.')  # supplement regx
-            if not url_t2_f in ("https://ssl", "http://www", "http://", "http:", "https:"):  # google analytics junk
-                url_t2 = url_t2_f.replace(":", "-")
+            if not url_t2 in ("https://ssl", "http://www", "http://", "http://-", "http:", "https:"):  # ga junk
+                coll.append((url_t1, url_t2.replace(":", "-")))
 
-                coll.append((url_t1, url_t2))
+                open('%s/maps/links_%s_%s__%s.txt' %
+                     (logdir, hname, target['port'], timestamp), 'a').write(tabs + url_t2 + "\n")
 
-                open('%s/maps/%s_%s_map.txt' % (logdir, hname, timestamp), 'a').write(tabs + url_t2 + "\n")
+                if not url_t2 in urls_visited:
+                    urls_visited.append(url_t2)
+                    p = urlparse(url_t2)
 
-                if len(url_t2.split("/")) > 2:
-                    if spider_follow_subdomains:
-                        url_t2_hn = ".".join((url_t2.split("/")[2]).split(".")[-2:])
+                    if p.path.split(".")[-1].lower() in FILE_TYPES and url_t2 not in target['docs']:
+                        output.put("          [+] File found  - %s" % url_t2)
+                        target['docs'].append(str(url_t2))
 
-                    else:
-                        url_t2_hn = url_t2.split("/")[2]
+                        open('%s/maps/docs_%s_%s__%s.txt' %
+                             (logdir, hname, target['port'], timestamp), 'a').write(url_t2 + "\n")
 
-                    if url_t2_hn in url_t1 and not url_t2 in urls_visited:
-                        urls_visited.append(url_t2)
-                        try:
-                            d = requests.get(url_t2_f, headers={"user-agent": useragent, "referer": url_t1},
-                                             verify=False, timeout=timeout, allow_redirects=False,
-                                             proxies=opts.proxy_dict).text.replace("\n", "")
+                    elif len(url_t2.split("/")) > 2:
+                        if spider_follow_subdomains:
+                            url_t2_hn = ".".join((url_t2.split("/")[2]).split(".")[-2:])
 
-                            urls_t3_r = list(set(re.findall(URL_REGEX, d, re.I)))
-                            urls_t3 = []
-                            for url_t3 in urls_t3_r:
-                                urls_t3.append(url_t3.rstrip('/'))
+                        else:
+                            url_t2_hn = url_t2.split("/")[2]
 
-                            if len(urls_t3) > 0:
-                                if not (len(list(set(urls_visited))) > spider_url_limit or depth > spider_depth or
-                                   (datetime.now() - time_start).total_seconds() > spider_timeout):
-                                    recurse(url_t2, urls_t3, tabs + "\t", depth + 1)
+                        if url_t2_hn in url_t1:
+                            try:
+                                d = requests.get(url_t2, headers={"user-agent": useragent, "referer": url_t1},
+                                                 verify=False, timeout=timeout, allow_redirects=False,
+                                                 proxies=opts.proxy_dict).text.replace("\n", "")
 
-                        except Exception:
-                            pass
+                                urls_t3 = []
+                                for u in list(set(re.findall(URL_REGEX, d, re.I))):
+                                    urls_t3.append(u.split('"')[0].split("'")[0].split(
+                                                   "<")[0].split("--")[0].rstrip('%)/.'))  # supplement the regex
+
+                                try:  # parse the html for tags w/ href or source
+                                    cxt = html.fromstring(d)
+                                    for el in cxt.iter():
+                                        if el.tag in ['link', 'a', 'script', 'iframe',
+                                                      'applet', 'object', 'embed', 'form']:
+                                            for i, v in el.items():
+                                                if i in ("src", "href"):
+                                                    if "mailto" in v:
+                                                        try:
+                                                            if not v.split(":")[1] in target['email_addresses']:
+                                                                target['email_addresses'].append(v.split(":")[1])
+
+                                                        except:
+                                                            target['email_addresses'] = [v.split(":")[1]]
+
+                                                    else:
+                                                        if not "//" in v:  # a relative link
+                                                            v = v.replace("../",'')
+                                                            if not v.startswith("/"):
+                                                                v = "/" + v
+
+                                                            v = p.scheme + "://" + p.netloc + v
+
+                                                        urls_t3.append(v)
+
+                                except:
+                                    pass
+
+                                urls_t3 = list(set(urls_t3))
+                                if len(urls_t3) > 0:
+                                    if not (len(list(set(urls_visited))) > spider_url_limit or depth > spider_depth or
+                                       (datetime.now() - time_start).total_seconds() > spider_timeout):
+                                        recurse(url_t2, urls_t3, tabs + "\t", depth + 1)
+
+                            except Exception:
+                                pass
 
     coll = []
     urls_visited = []
     hname = target['url'].split("/")[2]
     time_start = datetime.now()
     recurse(target['url'], [target['url']], "\t")
+    target['doc_count'] = len(target['docs'])
 
     if len(coll) > 1:
         try: 
@@ -503,7 +547,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
             # Draw as PNG
             gr.layout(prog='dot')
             # will get a warning if the graph is too large - not fatal
-            gr.draw('%s/maps/%s_%s_%s_diagram.png' % (logdir, target['url'].split("//")[1], timestamp, target['port']) )
+            gr.draw('%s/maps/diagram_%s_%s__%s.png' % (logdir, urlparse(target['url']).netloc, target['port'], timestamp) )
             target['diagram'] = "X"
 
         except Exception:
@@ -587,7 +631,7 @@ def parsedata(target, logdir, timestamp, scriptpath, opts):  # Takes raw site re
                         if not field in target.keys():
                             target[field] = []
 
-                        target[field].append(i)
+                        target[field].append(str(i))
 
                 # MODTYPE_TRUEFALSE - returns 'True' or 'False' based on regxp
                 elif modtype == 1:
@@ -685,10 +729,10 @@ def parsedata(target, logdir, timestamp, scriptpath, opts):  # Takes raw site re
                     for i, v in items:
                         if i == "href":
                             if "mailto:" in v:
-                                if not 'emailAddresses' in target.keys():
-                                    target['emailAddresses'] = []
+                                if not 'email_addresses' in target.keys():
+                                    target['email_addresses'] = []
 
-                                target['emailAddresses'].append(v.split(":")[1])
+                                target['email_addresses'].append(str(v.split(":")[1]))
 
                             else:
                                 target['urls'].append(v)
@@ -714,6 +758,9 @@ def parsedata(target, logdir, timestamp, scriptpath, opts):  # Takes raw site re
 
         finally:
             cxt = None
+
+        if "email_addresses" in target.keys():
+            target['email_addresses'] = list(set(target['email_addresses']))
 
         # grab all the headers
         for header in target['res'].headers:
@@ -1368,7 +1415,7 @@ def parse_nmap_xml(r):
                     target['hostnames'].append(target['ipv4'])
 
                 for el_hn in el_host.xpath("*/hostname"):
-                    target['hostnames'].append(el_hn.attrib['name'])
+                    target['hostnames'].append(str(el_hn.attrib['name']))
 
                 target['hostnames'] = list(set(target['hostnames']))
 

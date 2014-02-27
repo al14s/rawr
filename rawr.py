@@ -71,7 +71,7 @@ group.add_option('-r', help='Make an additional web call to get "robots.txt"', d
                  default=False)
 group.add_option('-x', help='Make an additional web call to get "crossdomain.xml"',
                  dest='getcrossdomain', action='store_true', default=False)
-#group.add_option('--downgrade', help='Make requests using HTTP 1.0', dest='ver_dg', action='store_true', default=False)
+group.add_option('--downgrade', help='Make requests using HTTP 1.0', dest='ver_dg', action='store_true', default=False)
 group.add_option('--noss', help='Disable screenshots.', dest='noss', action='store_true', default=False)
 group.add_option('--proxy', metavar="<ip:port>",
                  help="<ip:port> Use Burp/Zap/W3aF to feed credentials to all sites.  " +
@@ -318,8 +318,11 @@ if not opts.json_min:
     writelog("\n  [+] Log Folder created :\n      %s \n" % logdir, logfile, opts)
 
 
-#if opts.ver_dg:
-#    writelog("  [i] Downgrade not implemented yet.  :\   *skipping*", logfile, opts)
+if opts.ver_dg:
+    writelog("  [i] Downgrading all requests to HTTP/1.0...\n", logfile, opts)
+    import httplib
+    httplib.HTTPConnection._http_vsn = 10
+    httplib.HTTPConnection._http_vsn_str = 'HTTP/1.0'
 
 if opts.proxy_dict:
     opts.proxy_dict = {"http": opts.proxy_dict, "https": opts.proxy_dict}
@@ -725,17 +728,16 @@ if q.qsize() > 0:
         t.daemon = True
         t.start()
 
-    # Wait until the queue is cleared or Ctrl+C is pressed
     try:
         while q.qsize() > 0:
             sleep(0.5)
             q.join()
 
-        # Queue is clear, tell the threads to close.
-        output.put("\n\n  [i]   ** Finished.  Stopping Threads. **\n")
-
     except KeyboardInterrupt:
         print("\n\n  [i]  ******  Ctrl+C recieved - All threads halted.  ****** \n\n")
+
+    # Queue is clear, tell the threads to close.
+    output.put("\n\n  [i]   ** Finished.  Stopping Threads. **\n")
 
     for t in threads:
         t.terminate = True

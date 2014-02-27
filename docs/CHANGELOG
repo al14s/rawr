@@ -1,40 +1,37 @@
 
 ToDo
         PwnPad
-            find better way of platform identification
-            get user feedback to determine how to make it easier to use on the tablet
+            better platform identification
+            ease of use
 
-		--downgrade doesn't work - putting this off until i can figure out how to use http 1.0 with requests/urllib3
-		populate 'docs' column when docs are found & collect meta, parse for phone,email,cc,etc...
-		** fix ctrl+alt+del detection
-		give option during crawl to limit # of times a url is hit (regardless of vars)
-
-        html
-    		move index arrows to the right (overlaps the list button)
-    		don't allow the '!' image to be previewed
-    		make display quicker
-    		change 'html5' to show t/f
-		    report scope value may be 'None' if using multiple files
-		    line 54 - should take data[start:end] to make it more efficient
-                will avoid parsing records 1-50 if we're on page 2....
-
-        consolidate '--find' into one function in the modules
-            make folder 'files' containing ./<host>_<filename>
-            give ability to check for directory
-
-		'targets' changeup
-		    https://code.google.com/p/nosqlite/ - queue only holds a small ID for the task
-		    spider_url_hit_limit - needs nosqlite to be efficient
+		'targets' changeup (nosqlite - https://code.google.com/p/nosqlite/)
+		    ** html result to thumbnail matchup issues when scanning external websites w/ multiple handles (IP, hn, port)
+		    queue only holds a small ID for the task in memory
+		    spider_url_hit_limit - needs nosqlite
 		    drop identical targets
 			make target fields cumulative
 			change flist to apply only to CSV
-				make flist a user-defined 'starter'
-				make cumulative .keys() list
-				make "add_rest" t/f value for appending all of the other fields
 
 
 Done (* = major changes):
     2/26/2014
+        fixed inconsistency with email_addresses, also now removing duplicates
+        ctrl+c is now much more effective in stopping the process.
+            * screenshot & spider take a second to die, but script finishes out properly after threads are closed.
+        fixed --downgrade, verified via wireshark (screenshots are still pulled via 1.1, so expect that in a pcap)
+        corrected the 'timeout' exception reference -> socket.timeout
+        report scope value may be 'None' if using multiple files
+        don't allow the '!' image to be previewed
+    	changed 'html5' to true/false instead of content
+    	added module for comments >>> 'comments' column
+        spider
+            doesn't attempt to crawl links that are already in the host's urls visited
+            populates 'docs' and 'doc_count' columns when docs are found during spider
+                new file "_docs" under 'maps' contains links to all docs found
+            now notifies of docs found during crawl
+            doesn't attempt to crawl files
+            now parsing html (using html.fromstring(html) iterator) as well as hitting the doc w/ a regex
+    	move index arrows to the right (overlaps the list button)
         fixed regex for bing result detection
 
     2/25/2014

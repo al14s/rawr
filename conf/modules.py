@@ -16,29 +16,21 @@ modules = [
         """["']UA-[0-9]{8}-[0-9]{1}["']""",
         WHOLEDOC_CONTENT),
     (
-        "emailaddresses",                               # store the results in the 'emailaddresses' field
+        "email_addresses",                               # store the results in the 'emailaddresses' field
         """[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}""",   # In the whole response content - look for email addresses
         WHOLEDOC_CONTENT),
     (
         "HTML5",
         """<!DOCTYPE html>""",
-        WHOLEDOC_CONTENT),
+        WHOLEDOC_TRUEFALSE),
     (
         "jquery",
         ("script", ("src", "href"), """jquery"""),       # SCRIPT tags in SRC & HREF attr - look for the regxp "jquery"
         PARSER_CONTENT),
-    #(
-    #    "jquery_tf",
-    #    ("script", "text", """jquery"""),             # SCRIPT tags in the text - look for the regxp "jquery"
-    #    PARSER_TRUEFALSE),
-    #(
-    #    "notes",
-    #	("script", ("moo"), """jquery"""),
-    #   PARSER_COUNT),
-    #(
-    #    "notes",
-    #    ("script", ("src","href"), """jquery"""),
-    #    7),
+    (
+        "comments",
+        """<!--(.*?)-->""",
+        WHOLEDOC_CONTENT),
     #(
     #    "ga_docwrites",
     #    """old google analytics doc.writes'""",

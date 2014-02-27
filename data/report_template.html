@@ -84,7 +84,7 @@
 						if ( use == 1 ) {   // display this line
 							m++;   // results that are useful
 
-							if ( (r <= n) && (i >= ((p-1)*n)) ){  // make sure we're under the limits for this page
+							if ( (r <= n) && (i >= ((p-1)*n)) ){  // make sure we're within the limits for this page
 								item.id = r;
 								ip_port = item.ipv4 + ":" + item.port;
 								ip_url = item.url.split("/")[0] + "//" + ip_port;
@@ -98,13 +98,13 @@
 								$.ajax({ type: "GET", url: picurl, error: function() {
 									picurl = "images/" + item.ipv4 + "_" + timestamp + "_" + item.port + ".png";
 									$.ajax({ type: "GET", url: picurl, error: function() {
-										picurl="data:image/png;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="; // 1px x 1px white .png
+										picurl = "images/error.png";
 									}});
 								}});
 
 								// no pic, no clickie
-								if ( picurl.substr(0,5) == "data:" ) {
-										pic = "<div class='img_div noimg'></div> "; }
+								if ( picurl == "images/error.png" ) {
+										pic = "<div class='img_div noimg'><img class='thumb' style='display:none;' src='" + picurl + "' width=100% /></div> "; }
 								else {
 									pic = "<div class='img_div' onclick='showpic($(this).children(\"img\"),\"" + picurl + "\",\"" + item['url'] + "\");' style='height:" + (picsize-20) + "px;' ><img class='thumb' style='display:none;' src='" + picurl + "' width=100% /></div>"; }
 
