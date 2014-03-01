@@ -31,10 +31,11 @@ banner = """
 
 usage = """
  ./rawr.py
-        [-n <range> (-p <ports> -s <src port> -t <timing>)|-f <csv>|-i <list>]
-          [-d <dir>] [--sslv] [-aboqrvxz] [--downgrade] [--json] [--json-min]
-              [-e] [--title <title>] [--logo <file>] [--sqlite] [--spider]
-                [--noss] [--proxy <ip:port>] [-m] [--parsertest] [-u|-U]
-                           [--check-install|--force-install]"""
+        [-n <range>|-i <list> (-p <ports> -s <src port> -t <timing>)|-f <file>]
+             [-d <dir>] [--sslv] [-aboqrvxz] [--downgrade] [--noss]
+           [--proxy <ip:port>] [-m] [--sqlite] [--json] [--json-min]
+          [--spider] [--spider-opts <opts>] [--alt-domains <domains>]
+                    [-e] [--title <title>] [--logo <file>]
+           [--parsertest] [-u|-U] [--check-install|--force-install]"""
 
 words = "Random,Ragged,Rabid,Rare,Radical,Rational,Risky,Remote,Rowdy,Rough,Rampant,Ruthless:Act,Audit,Arming,Affront,Arc,Attack,Apex,Assault,Answer,Assembly,Attempt,Alerting,Arrest,Account,Apparel,Approval,Army:Wily,Weird,Wonky,Wild,Wascawy,Wimpy,Winged,Willing,Working,Warring,Wacky,Wasteful,Wealthy,Worried:Ravioli,Rats,Rabbits,Rhinos,Robots,Rigatoni,Reindeer,Roosters,Robins,Raptors,Raccoons,Reptiles"

@@ -26,6 +26,7 @@ from conf.modules import *
 from conf.settings import useragent, flist, timeout, ss_delay, spider_depth,\
     spider_follow_subdomains, spider_url_limit, spider_timeout, nthreads
 
+
 binged = {}
 binging = False
 
@@ -40,7 +41,6 @@ class out_thread(threading.Thread):  # Worker class that displays msgs in the 'o
         self.queue = queue
         self.logfile = logfile
         self.opts = opts
-        global writelog
 
     def run(self):
         while True:
@@ -49,14 +49,14 @@ class out_thread(threading.Thread):  # Worker class that displays msgs in the 'o
 
 
 class sithread(threading.Thread):  # Threading class that enumerates hosts contained in the 'q' queue.
-    def __init__(self, timestamp, scriptpath, pjs_path, logdir, output, opts):
+    def __init__(self, timestamp, scriptpath, pjs_path, logdir, o, opts):
         threading.Thread.__init__(self)        
         self.timestamp = timestamp
         self.scriptpath = scriptpath
-        self.pjs_path = pjs_path
         self.logdir = logdir
-        self.output = output
+        self.output = o
         self.opts = opts
+        self.pjs_path = pjs_path
         self.terminate = False
         self.busy = False
 
@@ -65,7 +65,6 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
         global binged
         global binging
         global q
-        global nthreads
 
         try:
             while not self.terminate:
@@ -134,14 +133,16 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
                                     for line in bing_res:
                                         res = re.findall(r"<cite>(.*?)</cite>", line)
                                         if res:
-                                            res = res[0].replace("https", '').replace("http", '').replace("://", '').split('/')[0]
+                                            res = res[0].replace("https", '').replace(
+                                                "http", '').replace("://", '').split('/')[0]
                                             if res != '':
                                                 hostnames.append(res)
 
                                     if len(hostnames) > 0:
                                         # remove any duplicates from our list of domains...
                                         hostnames = list(set(hostnames))
-                                        self.output.put("  [+] Bing>DNS\t: found %s DNS names for %s" % (len(hostnames), target['ipv4']))
+                                        self.output.put("  [+] Bing>DNS\t: found %s DNS names for %s" %
+                                                        (len(hostnames), target['ipv4']))
 
                                         # distribute the load
                                         for hostname in hostnames:
@@ -149,11 +150,13 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
                                                 new_target = target.copy()
                                                 new_target['is_bing_result'] = True
                                                 new_target['hostnames'] = [hostname.strip()]
-                                                self.output.put("  [+] Bing>DNS\t: [ %s ] injected into queue." % (new_target['hostnames'][0]))
+                                                self.output.put("  [+] Bing>DNS\t: [ %s ] injected into queue." %
+                                                                (new_target['hostnames'][0]))
                                                 q.put(new_target)
 
                                     else:
-                                        self.output.put("  [x] Bing>DNS\t: found no DNS entries for %s" % (target['ipv4']))
+                                        self.output.put("  [x] Bing>DNS\t: found no DNS entries for %s" %
+                                                        (target['ipv4']))
 
                                     binged[target['ipv4']] = [hostnames, [target['port']]]
 
@@ -181,8 +184,8 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
                             self.output.put("  [>] Pulling\t: " + hostname + port)
 
                             try:
-                                target['res'] = requests.get(target['url'], headers={"user-agent": useragent}, verify=False,
-                                                             timeout=timeout, allow_redirects=False,
+                                target['res'] = requests.get(target['url'], headers={"user-agent": useragent},
+                                                             verify=False, timeout=timeout, allow_redirects=False,
                                                              proxies=self.opts.proxy_dict)
 
                                 msg = ["  [+] Finished", ""]
@@ -196,6 +199,9 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
                             except socket.timeout:
                                 msg = ["  [x] Timed out", ""]
 
+                            except requests.Timeout:
+                                msg = ["  [x] Timed out", ""]
+
                             except Exception:
                                 error = traceback.format_exc().splitlines()
                                 error_msg("\n".join(error))
@@ -203,8 +209,8 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
 
                             if self.opts.getoptions and 'res' in target.keys():
                                 try:
-                                    res = (requests.options(target['url'], headers={"user-agent": useragent}, verify=False,
-                                                            timeout=timeout, allow_redirects=False,
+                                    res = (requests.options(target['url'], headers={"user-agent": useragent},
+                                                            verify=False, timeout=timeout, allow_redirects=False,
                                                             proxies=self.opts.proxy_dict))
 
                                     if 'allow' in res.headers:
@@ -218,11 +224,14 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
                                 except socket.timeout:
                                     self.output.put("      [x] Timed out pulling OPTIONS: [ %s ]" % target['url'])
 
+                                except requests.Timeout:
+                                    msg = ["  [x] Timed out", ""]
+
                                 except Exception:
                                     error = traceback.format_exc().splitlines()
                                     error_msg("\n".join(error))
-                                    self.output.put("      [x] Failed pulling OPTIONS: [ %s ]\n\t%s\n" % (target['url'],
-                                                                                                          "\n\t".join(error)))
+                                    self.output.put("      [x] Failed pulling OPTIONS: [ %s ]\n\t%s\n" %
+                                                    (target['url'], "\n\t".join(error)))
                             target['hist'] = 256
                             if not self.opts.noss and 'res' in target.keys():
                                 target['hist'] = screenshot(target, self.logdir, self.timestamp, self.scriptpath,
@@ -231,7 +240,8 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
                             if self.opts.getcrossdomain and 'res' in target.keys():
                                 try:
                                     res = requests.get("%s/crossdomain.xml" % target['url'], verify=False,
-                                                       timeout=timeout, allow_redirects=False, proxies=self.opts.proxy_dict)
+                                                       timeout=timeout, allow_redirects=False,
+                                                       proxies=self.opts.proxy_dict)
                                     if res.status_code == 200:
                                         if not self.opts.json_min:
                                             if not os.path.exists("cross_domain"):
@@ -261,6 +271,9 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
                                     self.output.put("      [x] Timed out pulling crossdomain.xml: [ %s%s ]" %
                                                     (hostname, port))
 
+                                except requests.Timeout:
+                                    msg = ["  [x] Timed out", ""]
+
                                 except Exception:
                                     error = traceback.format_exc().splitlines()
                                     error_msg("\n".join(error))
@@ -270,7 +283,8 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
                             if self.opts.getrobots and 'res' in target.keys():
                                 try:
                                     res = requests.get("%s/robots.txt" % target['url'], verify=False,
-                                                       timeout=timeout, allow_redirects=False, proxies=self.opts.proxy_dict)
+                                                       timeout=timeout, allow_redirects=False,
+                                                       proxies=self.opts.proxy_dict)
                                     if res.status_code == 200 and "llow:" in res.text:
                                         if not self.opts.json_min:
                                             if not os.path.exists("robots"):
@@ -287,7 +301,7 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
                                                 v = unicode(res.text).encode('unicode_escape')
 
                                             open("./robots/%s_%s_robots.txt" % (hostname, target['port']), 'w').write(v)
-                                            self.output.put("      [r] Pulled robots.txt:  ./robots/%s_%s_robots.txt  " %
+                                            self.output.put("      [r] Pulled robots.txt:  ./robots/%s_%s_robots.txt " %
                                                             (hostname, target['port']))
                                         target['robots'] = "y"
 
@@ -295,7 +309,11 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
                                     msg = ["  [x] Not found", ""]
 
                                 except socket.timeout:
-                                    self.output.put("      [x] Timed out pulling robots.txt: [ %s%s ]" % (hostname, port))
+                                    self.output.put("      [x] Timed out pulling robots.txt: [ %s%s ]" %
+                                                    (hostname, port))
+
+                                except requests.Timeout:
+                                    msg = ["  [x] Timed out", ""]
 
                                 except Exception:
                                     error = traceback.format_exc().splitlines()
@@ -312,13 +330,13 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
 
                                 crawl(target, self.logdir, self.timestamp, self.opts)
 
-                            parsedata(target, self.logdir, self.timestamp, self.scriptpath, self.opts)
+                            parsedata(target, self.timestamp, self.scriptpath, self.opts)
                             self.output.put("%s  [ %s%s ]%s" % (msg[0], hostname, port, msg[1]))
 
                     except Exception:
                         error = traceback.format_exc().splitlines()
                         error_msg("\n".join(error))
-                        self.output.put("  [x] Failed : [ %s%s ]\n\t%s\n" % (hostname, port, "\n\t".join(error) ))
+                        self.output.put("  [x] Failed : [ %s%s ]\n\t%s\n" % (hostname, port, "\n\t".join(error)))
 
                     self.busy = False
 
@@ -327,8 +345,8 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
                         if t.busy:
                             busy_count += 1
 
-                    self.output.put("  [i] Main queue size [ %s ] - Threads Busy/Total [ %s/%s ]" % (str(q.qsize()),
-                                                                                                     busy_count, nthreads))
+                    self.output.put("  [i] Main queue size [ %s ] - Threads Busy/Total [ %s/%s ]" %
+                                    (str(q.qsize()), busy_count, nthreads))
 
                     q.task_done()
 
@@ -347,7 +365,7 @@ def screenshot(target, logdir, timestamp, scriptpath, proxy, pjs_path, o):
             cmd = [pjs_path]
 
             if proxy:
-                cmd.append("--proxy=%s" % proxy['http'])  # Here, the same ip:port is used for both http and https.
+                cmd.append("--proxy=%s" % proxy['http'])  # Same ip:port is used for both http and https.
 
             cmd += "--web-security=no", "--ignore-ssl-errors=yes", "--ssl-protocol=any",\
                    (scriptpath + "/data/screenshot.js"), target['url'], filename, useragent, str(ss_delay)
@@ -406,7 +424,7 @@ def screenshot(target, logdir, timestamp, scriptpath, proxy, pjs_path, o):
     except:
         error = traceback.format_exc().splitlines()
         error_msg("\n".join(error))
-        o.put("      [!] Screenshot :     [ %s ] Failed\n\t%s\n" % (target['url'], "\n\t".join(error) ))
+        o.put("      [!] Screenshot :     [ %s ] Failed\n\t%s\n" % (target['url'], "\n\t".join(error)))
 
 
 def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
@@ -415,23 +433,25 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
 
     def recurse(url_t1, urls_t2, tabs, depth=0):
         if opts.verbose:
-            output.put("      [i] depth %s - time %d - urls %s" % (depth, (datetime.now() - time_start).total_seconds(),
-                                                                   len(list(set(urls_visited))) ))
-        
+            output.put("      [i] depth %s - time %d - urls %s" %
+                       (depth, (datetime.now() - time_start).total_seconds(), len(list(set(urls_visited)))))
+
         url_t1 = url_t1.replace(":", "-")  # supplement regx
 
         for url_t2 in urls_t2:
-            if depth > spider_depth:
+            if depth > opts.spider_depth:
                 break
 
             elif len(list(set(urls_visited))) > spider_url_limit:
                 if opts.verbose:
                     output.put("      [!] Spidering stopped :   [ %s ] - URL limit reached" % target['url'])
+
                 break
 
-            elif (datetime.now() - time_start).total_seconds() > spider_timeout:
+            elif (datetime.now() - time_start).total_seconds() > opts.spider_timeout:
                 if opts.verbose:
                     output.put("      [!] Spidering stopped :   [ %s ] - Timed out" % target['url'])
+
                 break
 
             if not url_t2 in ("https://ssl", "http://www", "http://", "http://-", "http:", "https:"):  # ga junk
@@ -444,21 +464,20 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                     urls_visited.append(url_t2)
                     p = urlparse(url_t2)
 
-                    if p.path.split(".")[-1].lower() in FILE_TYPES and url_t2 not in target['docs']:
-                        output.put("          [+] File found  - %s" % url_t2)
+                    if p.path.split(".")[-1].lower() in DOC_TYPES and url_t2 not in target['docs']:
                         target['docs'].append(str(url_t2))
 
                         open('%s/maps/docs_%s_%s__%s.txt' %
                              (logdir, hname, target['port'], timestamp), 'a').write(url_t2 + "\n")
 
-                    elif len(url_t2.split("/")) > 2:
+                    else:
                         if spider_follow_subdomains:
-                            url_t2_hn = ".".join((url_t2.split("/")[2]).split(".")[-2:])
+                            url_t2_hn = ".".join(p.netloc.split(".")[-2:])
 
                         else:
-                            url_t2_hn = url_t2.split("/")[2]
+                            url_t2_hn = p.netloc
 
-                        if url_t2_hn in url_t1:
+                        if url_t2_hn in url_t1 or url_t2_hn in opts.alt_domains:
                             try:
                                 d = requests.get(url_t2, headers={"user-agent": useragent, "referer": url_t1},
                                                  verify=False, timeout=timeout, allow_redirects=False,
@@ -485,8 +504,8 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                                             target['email_addresses'] = [v.split(":")[1]]
 
                                                     else:
-                                                        if not "//" in v:  # a relative link
-                                                            v = v.replace("../",'')
+                                                        if not v.split("//")[0] in ("http:", "https:"):
+                                                            v = v.replace("../", '')
                                                             if not v.startswith("/"):
                                                                 v = "/" + v
 
@@ -495,20 +514,26 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                                         urls_t3.append(v)
 
                                 except:
-                                    pass
+                                    error = traceback.format_exc().splitlines()
+                                    error_msg("\n".join(error))
+
+                                d = None
 
                                 urls_t3 = list(set(urls_t3))
+
                                 if len(urls_t3) > 0:
-                                    if not (len(list(set(urls_visited))) > spider_url_limit or depth > spider_depth or
-                                       (datetime.now() - time_start).total_seconds() > spider_timeout):
+                                    if not (len(list(set(urls_visited))) > opts.spider_url_limit
+                                            or depth > opts.spider_depth
+                                            or (datetime.now() - time_start).total_seconds() > opts.spider_timeout):
                                         recurse(url_t2, urls_t3, tabs + "\t", depth + 1)
 
                             except Exception:
-                                pass
+                                error = traceback.format_exc().splitlines()
+                                error_msg("\n".join(error))
 
     coll = []
     urls_visited = []
-    hname = target['url'].split("/")[2]
+    hname = urlparse(target['url']).netloc
     time_start = datetime.now()
     recurse(target['url'], [target['url']], "\t")
     target['doc_count'] = len(target['docs'])
@@ -547,21 +572,20 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
             # Draw as PNG
             gr.layout(prog='dot')
             # will get a warning if the graph is too large - not fatal
-            gr.draw('%s/maps/diagram_%s_%s__%s.png' % (logdir, urlparse(target['url']).netloc, target['port'], timestamp) )
-            target['diagram'] = "X"
+            f = '%s/maps/diagram_%s_%s__%s.png' % (logdir, urlparse(target['url']).netloc, target['port'], timestamp)
+            gr.draw(f)
+            target['diagram'] = f
 
         except Exception:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            output.put("\n    [!] Unable to create site chart: [ %s ]\n\t%s\n" % (target['url'], "\n\t".join(error) ))
+            output.put("\n    [!] Unable to create site chart: [ %s ]\n\t%s\n" % (target['url'], "\n\t".join(error)))
 
 
-def parsedata(target, logdir, timestamp, scriptpath, opts):  # Takes raw site response and parses it.
-    global modules
+def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response and parses it.
+    x = [" "] * len(flist.split(","))
 
-    x=[" "] * len(flist.split(","))
-
-    for i,v in target.items():
+    for i, v in target.items():
         target[i] = target[str(i)]
 
     # identify country if possible
@@ -631,6 +655,9 @@ def parsedata(target, logdir, timestamp, scriptpath, opts):  # Takes raw site re
                         if not field in target.keys():
                             target[field] = []
 
+                        if field == "comments":
+                            i = i.replace('<', '&lt;')
+
                         target[field].append(str(i))
 
                 # MODTYPE_TRUEFALSE - returns 'True' or 'False' based on regxp
@@ -651,12 +678,12 @@ def parsedata(target, logdir, timestamp, scriptpath, opts):  # Takes raw site re
                         parsermods.append((field, regxp, modtype))
 
                 else:
-                    output.put("  [!] skipping %s - invalid modtype" % (field))
+                    output.put("  [!] skipping %s - invalid modtype" % field)
 
             except Exception:
                 error = traceback.format_exc().splitlines()
                 error_msg("\n".join(error))
-                output.put("  [!] skipping module '%s' :\n\t%s\n" % (field, "\n\t".join(error)) )
+                output.put("  [!] skipping module '%s' :\n\t%s\n" % (field, "\n\t".join(error)))
 
         # parse the html for different element types
         try:
@@ -708,7 +735,7 @@ def parsedata(target, logdir, timestamp, scriptpath, opts):  # Takes raw site re
 
                 # some default checks
                 if tag == "meta":
-                    for i,v in items:
+                    for i, v in items:
                         if i == "name":
                             target[v] = el.text
 
@@ -916,7 +943,7 @@ def write_to_sqlitedb(timestamp, targets, opts):
         for target in targets:
             x = [" "] * len(flist.split(","))
 
-            for i,v in target.items(): 
+            for i, v in target.items():
                 if i.lower() in flist.lower().split(', '):
                     if isinstance(v, (list,)):
                         v = ";".join(v)
@@ -956,7 +983,7 @@ def write_to_csv(timestamp, target):
             except UnicodeEncodeError:
                 v = unicode(v).encode('unicode_escape')
                 
-            x[flist.lower().split(", ").index(i.lower())] = re.sub('[\n\r,]', '', str(v).replace('"','""'))
+            x[flist.lower().split(", ").index(i.lower())] = re.sub('[\n\r,]', '', str(v).replace('"', '""'))
 
     try:
         open("rawr_%s_serverinfo.csv" % timestamp, 'a').write('\n"%s"' % (str('","'.join(x))))
@@ -1102,8 +1129,11 @@ def parse_openvas_xml(r):     # need a scan of a server using SSL!
             target['hostnames'] = [target['ipv4']]
 
             target['service_version'] = ""
-            for result in r.xpath("//report/report/results/result[host/text()='%s' and port/text()='%s' and nvt/family/text()='Product detection']" % (target['ipv4'], port.text)):
-                target['service_version'] += result.xpath("description/text()")[0].split("\n")[0].replace("Detected ", '').replace("version: ",'').split(" under")[0] + ","
+            for result in r.xpath("//report/report/results/result[host/text()=" +
+                                  "'%s'and port/text()='%s' and nvt/family/text()='Product detection']" %
+                                  (target['ipv4'], port.text)):
+                target['service_version'] += result.xpath("description/text()")[0].split("\n")[0].replace(
+                    "Detected ", '').replace("version: ", '').split(" under")[0] + ","
 
             targets.append(target)
 
@@ -1241,16 +1271,16 @@ def parse_qualys_scan_report_xml(r):
                                 target['SSL_Common-Name'] = line.split("\t")[1].replace(" ", '')
 
                             elif "organizationName" in line and not 'SSL_Organization' in target.keys():
-                                target['SSL_Organization'] = "%s" % line.split("\t")[1].replace('\n','')
+                                target['SSL_Organization'] = "%s" % line.split("\t")[1].replace('\n', '')
 
                             elif "Public Key Algorithm" in line and not 'SSL_Cert-KeyAlg' in target.keys():
-                                target['SSL_Cert-KeyAlg'] = "%s" % line.split("\t")[1].replace('\n','')
+                                target['SSL_Cert-KeyAlg'] = "%s" % line.split("\t")[1].replace('\n', '')
 
                             elif "Signature Algorithm" in line and not 'SSL_Cert-SigAlg' in target.keys():
-                                target['SSL_Cert-SigAlg'] = "%s" % line.split("\t")[1].replace('\n','')
+                                target['SSL_Cert-SigAlg'] = "%s" % line.split("\t")[1].replace('\n', '')
 
                             elif "RSA Public Key" in line and not 'SSL_KeyLength' in target.keys():
-                                target['SSL_KeyLength'] = "%s" % line.split("\t")[1].replace('\n','')
+                                target['SSL_KeyLength'] = "%s" % line.split("\t")[1].replace('\n', '')
 
                             elif "Valid From" in line:
                                 notbefore = line.split("\t")[1].strip()
@@ -1552,11 +1582,15 @@ def update(force, ckinstall, pjs_path, scriptpath):
         except:
             pJS_curr = ""
 
-        if force or (pjs_ver > pJS_curr) or not (inpath("phantomjs") or inpath("phantomjs.exe") or os.path.exists("data/phantomjs/bin/phantomjs") or os.path.exists("data/phantomjs/phantomjs.exe")):
+        if force or (pjs_ver > pJS_curr) or not (inpath("phantomjs")
+                                                 or inpath("phantomjs.exe")
+                                                 or os.path.exists("data/phantomjs/bin/phantomjs")
+                                                 or os.path.exists("data/phantomjs/phantomjs.exe")):
             choice = ''
-            if not force:        
+            if not force:
                 if pJS_curr != "" and (pjs_ver > pJS_curr):
-                    txt = '\n  [i] phantomJS %s found (current is %s) - do you want to update? [Y/n]: ' % (pJS_curr, pjs_ver)
+                    txt = '\n  [i] phantomJS %s found (current is %s) - do you want to update? [Y/n]: ' %\
+                          (pJS_curr, pjs_ver)
                     choice = raw_input(txt)
                 else:
                     if platform.machine() == "armv7":
@@ -1569,7 +1603,7 @@ def update(force, ckinstall, pjs_path, scriptpath):
                         if not (choice.lower() in ("y", "yes", '')):
                             print("\n  [!] Exiting...\n\n")
                             sys.exit(0)
-            
+
             if force or (choice.lower() in ("y", "yes", '')):
                 # phantomJS
                 pre = "phantomjs-%s" % pjs_ver

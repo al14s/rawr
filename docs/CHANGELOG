@@ -4,6 +4,23 @@ ToDo
             better platform identification
             ease of use
 
+        throw some stats together & include as first line in HTML
+            alt view in HTML for stats
+            server version
+            SSL?
+            ports
+            service (PHP, ASP.NET)
+            for each server ver - pie chart for versions
+            for each service - pie chart for versions
+            bar chart - #/% running java, #/% w/ forms
+
+        change color of external link in diagrams
+
+        consider switch to ghost.py
+            cookie jar
+            SSL cert download
+            update procedure
+
 		'targets' changeup (nosqlite - https://code.google.com/p/nosqlite/)
 		    ** html result to thumbnail matchup issues when scanning external websites w/ multiple handles (IP, hn, port)
 		    queue only holds a small ID for the task in memory
@@ -14,6 +31,14 @@ ToDo
 
 
 Done (* = major changes):
+    2/27/2014
+        diagram value changed to filename
+        added --alt-domains ""  ->  string or list to specify more domains to be followed during crawl
+        added --spider-opts d:<depth>,f:<follow_subdomains>,t:<timeout>,u:<url_limit>
+        pulled 'found doc' notification to avoid scope creep
+            breaking doc parsing & file meta off into seperate tool for specifically for spidering/mirroring
+            will be able to feed the 'links_' file into the tool if desired.
+
     2/26/2014
         fixed inconsistency with email_addresses, also now removing duplicates
         ctrl+c is now much more effective in stopping the process.

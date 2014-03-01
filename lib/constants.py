@@ -1,5 +1,5 @@
 
-VERSION = "0.1.6"
+VERSION = "0.1.7"
 
 # Update information
 REPO_DL_PATH = "https://bitbucket.org/al14s/rawr/downloads/"
@@ -8,10 +8,10 @@ DEFPASS_FILE = "data/defpass.csv"
 VER_FILE = "ver.csv"
 
 # doc extensions for detection during crawl
-FILE_TYPES = ("DS_Store", "pdf", "log", "dot", "doc", "docx", "xls", "xlsx", "txt", "ods", "odf", "ppt", "pptx",
-              "rtf", "odg", "odp", "potx", "potm", "pot", "otp", "xlt", "stc", "stw", "dotm", "odb", "ott",
-              "pxl", "wks", "wk1", "xlsb", "sylk", "xlc", "dif", "oth", "xml", "odt", "pptm", "xlm", "xltm",
-              "xltx", "docm", "xlsm", "123", "dbf", "ppsx", "ps1", "pl", "bat", "vbs", "py", "rb")
+DOC_TYPES = ("DS_Store", "pdf", "log", "dot", "doc", "docx", "xls", "xlsx", "txt", "ods", "odf", "ppt", "pptx", "tar",
+             "rtf", "odg", "odp", "potx", "potm", "pot", "otp", "xlt", "stc", "stw", "dotm", "odb", "ott", "zip",
+             "pxl", "wks", "wk1", "xlsb", "sylk", "xlc", "dif", "oth", "xml", "odt", "pptm", "xlm", "xltm", "gz",
+             "cab", "xltx", "docm", "xlsm", "123", "dbf", "ppsx", "ps1", "pl", "bat", "vbs", "py", "rb", "sh")
 
 # PhantomJS - http://phantomjs.org/
 PJS_REPO = "http://phantomjs.googlecode.com/files/"

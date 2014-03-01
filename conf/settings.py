@@ -2,7 +2,7 @@
 report_title = "Web Interface Enumeration Results"  # default title if '--title' is not specified
 
 # Scan settings
-timeout = 10          # timeout in seconds for each web call (screenshots and geturl)
+timeout = 15          # timeout in seconds for each web call (screenshots and geturl)
 ss_delay = 1          # delay in seconds or page to render before screenshot
 nmapspeed = 4         # nmap
 nthreads = 25         # number of threads for the info run

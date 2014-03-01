@@ -8,7 +8,6 @@
 		<meta http-equiv="X-UA-Compatible" content="IE=Edge">
 		<title>Web Interface Report</title>
 		<script type="text/javascript" src="./html_res/jquery.js"></script>
-		<script type="text/javascript" src="./html_res/jquery.js"></script>
 		<link href="./html_res/style.css" rel="stylesheet" type="text/css"/>	
 		<script type="text/javascript">	
 		
@@ -91,7 +90,7 @@
 								hostname = item.url.split('/')[2];
 								if (hostname == "") { hostname = "n/a"; }
 
-								diagram_url="maps/" + hostname + "_" + timestamp + "_" + item['port'] + "_diagram.png";
+								diagram_url="maps/diagram_" + hostname + "_" + item['port'] + "__" + timestamp + ".png";
 
 								// find pic if present
 								picurl = "images/" + hostname + "_" + timestamp + "_" + item.port + ".png";
@@ -109,7 +108,7 @@
 									pic = "<div class='img_div' onclick='showpic($(this).children(\"img\"),\"" + picurl + "\",\"" + item['url'] + "\");' style='height:" + (picsize-20) + "px;' ><img class='thumb' style='display:none;' src='" + picurl + "' width=100% /></div>"; }
 
 								// no map, no clickie
-								if ( item.diagram == "X" ) {
+								if ( item.diagram != "" ) {
 									map = "<li><a target='_blank' onclick='showpic(\"None\",\"" + diagram_url + "\",\"" + item.url + "\");' >m</a></li>"; }
 								else { map = ""; }
 

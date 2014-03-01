@@ -35,6 +35,7 @@ from lib.banner import *
 from conf.settings import *
 from lib.functions import *
 
+
 # pull&parse our commandline args
 parser = optparse.OptionParser(usage=usage, version=VERSION)
 parser.add_option('-a',
@@ -80,6 +81,13 @@ group.add_option('--spider', help="Enumerate all urls in target's HTML, create s
                  "Will record but not follow links outside of the target's domain." +
                  "  Creates a map (.png) for that site in the <logfolder>/maps folder.",
                  dest='crawl', action='store_true', default=False)
+group.add_option('--spider-opts', help="Provide custom settings for crawl.               " +
+                                       "s='follow subdomains',d=depth, l='url limit', t=timeout" +
+                                       "        Example: --spider-opts s:false,d:2,l:500",
+                 dest='crawl_opts', default=False)
+group.add_option('--alt-domains', metavar="<domains>",
+                 help="Enable cross-domain spidering on specific domains. (comma-seperated)",
+                 dest='alt_domains')
 parser.add_option_group(group)
 
 group = optparse.OptionGroup(parser, "Output Options")
@@ -137,6 +145,9 @@ if len(sys.argv) == 99:
     print(usage)
     sys.exit(2)
 
+if not opts.alt_domains:
+    opts.alt_domains = []
+
 # Look for PhantomJS if needed
 if inpath("phantomjs"):
     pjs_path = "phantomjs"
@@ -189,7 +200,7 @@ if opts.xmlfile:
 
     elif os.path.isdir(opts.xmlfile):  # it's a directory
         for f in glob("%s/*" % opts.xmlfile):
-            if os.path.isfile(f):
+            if os.path.isfile(f) and f.split('.')[-1] in ('xml', 'csv', 'nessus'):
                 ftemp.append(f)
 
     elif "," in opts.xmlfile:  # CSV list of files
@@ -272,6 +283,35 @@ else:
 
     os.chdir(logdir)
 
+try:
+    if opts.crawl_opts:
+        for o in opts.crawl_opts.split(','):
+            a, v = o.split(':')
+            if a == "f" and v.lower() in ("false", "f"):
+                    opts.spider_follow_subdomains = False
+                    writelog("\n  [i] spider_follow_subdomains set to 'False'", logfile, opts)
+
+            elif a == "d" and int(v) in range(0, 9999):
+                    opts.spider_depth = v
+                    writelog("\n  [i] spider_depth set to '%s'" % v, logfile, opts)
+
+            elif a == "t" and int(v) in range(0, 9999):
+                    opts.spider_timeout = v
+                    writelog("\n  [i] spider_timeout set to '%s'" % v, logfile, opts)
+
+            elif a == "l" and int(v) in range(0, 9999):
+                    opts.spider_url_limit = v
+                    writelog("\n  [i] spider_url_limit set to '%s'" % v, logfile, opts)
+
+    else:
+        opts.spider_follow_subdomains = spider_follow_subdomains
+        opts.spider_depth = spider_depth
+        opts.spider_timeout = spider_timeout
+        opts.spider_url_limit = spider_url_limit
+
+except Exception, ex:
+    print("      [!] Error with --spider_opts:  '%s'\n\n\t\t%s" % (opts.crawl_opts, ex))
+    exit()
 
 if opts.logo:
     if os.path.exists(os.path.abspath(opts.logo)):
@@ -290,6 +330,9 @@ if opts.logo:
     else:
         print("\t  [x]  Unable to locate logo file \n\t\t[%s] \n" % opts.logo)
         sys.exit(1)
+
+
+
 
 if opts.title:
     if len(opts.title) > 60:
@@ -756,18 +799,18 @@ if q.qsize() > 0:
     # Sort the csv on the specified column
     try: 
         i = flist.lower().split(", ").index(csv_sort_col)
-        data_list = [line.strip() for line in open("rawr_%s_serverinfo.csv" % timestamp)]
+        data_list = [l.strip() for l in open("rawr_%s_serverinfo.csv" % timestamp)]
         headers = data_list[0]
         data_list = data_list[1:]
         # Format IP adresses so we can sort them effectively
         if re.match("^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}" +
-                    "([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$", line.split(",")[i]):
-            key = "%3s%3s%3s%3s" % tuple(line.split(",")[i].split('.'))
+                    "([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$", l.split(",")[i]):
+            key = "%3s%3s%3s%3s" % tuple(l.split(",")[i].split('.'))
 
         else: 
-            key = line.split(",")[i]
+            key = l.split(",")[i]
 
-        data_list.sort(key=lambda line: key, reverse=False)
+        data_list.sort(key=lambda d: key)
         open("rawr_%s_serverinfo.csv" % timestamp, 'w').write(headers+"\n"+"\n".join(data_list))
 
     except:
