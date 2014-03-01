@@ -20,11 +20,10 @@ from Queue import Queue
 # Not in stdlib, but included in lib folder
 sys.path.append('./lib/')
 import requests
-from lxml import html, etree
+from lxml import html
 from constants import *
 from conf.modules import *
-from conf.settings import useragent, flist, timeout, ss_delay, spider_depth,\
-    spider_follow_subdomains, spider_url_limit, spider_timeout, nthreads
+from conf.settings import useragent, flist, timeout, ss_delay, nthreads
 
 
 binged = {}
@@ -35,7 +34,7 @@ q = Queue()  # The main queue.  Holds initial host data.
 output = Queue()  # The output queue - prevents output overlap
 
 
-class out_thread(threading.Thread):  # Worker class that displays msgs in the 'output' queue in order and one at a time.
+class OutThread(threading.Thread):  # Worker class that displays msgs in the 'output' queue in order and one at a time.
     def __init__(self, queue, logfile, opts):
         threading.Thread.__init__(self)
         self.queue = queue
@@ -48,7 +47,7 @@ class out_thread(threading.Thread):  # Worker class that displays msgs in the 'o
             self.queue.task_done()
 
 
-class sithread(threading.Thread):  # Threading class that enumerates hosts contained in the 'q' queue.
+class SiThread(threading.Thread):  # Threading class that enumerates hosts contained in the 'q' queue.
     def __init__(self, timestamp, scriptpath, pjs_path, logdir, o, opts):
         threading.Thread.__init__(self)        
         self.timestamp = timestamp
@@ -71,8 +70,8 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
                 time.sleep(0.5)
 
                 if not q.empty():
-                    self.busy = True
                     target = q.get()
+                    self.busy = True
                     hostname = ''
                     port = ''
 
@@ -94,6 +93,7 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
                                     while not a <= int(nrip.split(".")[1].split("-")[1]):
                                         if target['ipv4'].startswith('.'.join([nrip.split('.')[0], str(a)])):
                                             routable = False
+
                                         a += 1
 
                                 elif target['ipv4'].startswith(nrip):
@@ -181,7 +181,7 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
                             hostname = target['hostnames'][0]
 
                             target['url'] = prefix + hostname + port
-                            self.output.put("  [>] Pulling\t: " + hostname + port)
+                            self.output.put("  [>] Pulling\t: " + hostname + ":" + target['port'])
 
                             try:
                                 target['res'] = requests.get(target['url'], headers={"user-agent": useragent},
@@ -345,6 +345,8 @@ class sithread(threading.Thread):  # Threading class that enumerates hosts conta
                         if t.busy:
                             busy_count += 1
 
+                    t = None
+
                     self.output.put("  [i] Main queue size [ %s ] - Threads Busy/Total [ %s/%s ]" %
                                     (str(q.qsize()), busy_count, nthreads))
 
@@ -442,7 +444,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
             if depth > opts.spider_depth:
                 break
 
-            elif len(list(set(urls_visited))) > spider_url_limit:
+            elif len(list(set(urls_visited))) > opts.spider_url_limit:
                 if opts.verbose:
                     output.put("      [!] Spidering stopped :   [ %s ] - URL limit reached" % target['url'])
 
@@ -471,7 +473,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                              (logdir, hname, target['port'], timestamp), 'a').write(url_t2 + "\n")
 
                     else:
-                        if spider_follow_subdomains:
+                        if opts.spider_follow_subdomains:
                             url_t2_hn = ".".join(p.netloc.split(".")[-2:])
 
                         else:
@@ -514,8 +516,8 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                                         urls_t3.append(v)
 
                                 except:
-                                    error = traceback.format_exc().splitlines()
-                                    error_msg("\n".join(error))
+                                    e = traceback.format_exc().splitlines()
+                                    error_msg("\n".join(e))
 
                                 d = None
 
@@ -528,8 +530,8 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                         recurse(url_t2, urls_t3, tabs + "\t", depth + 1)
 
                             except Exception:
-                                error = traceback.format_exc().splitlines()
-                                error_msg("\n".join(error))
+                                e = traceback.format_exc().splitlines()
+                                error_msg("\n".join(e))
 
     coll = []
     urls_visited = []
@@ -549,14 +551,18 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
             gr.node_attr['shape'] = 'rect'
 
             c = []
+            domain = urlparse(target['url']).netloc
             # Add nodes and edges
             for item in coll:
                 c.append(item[0].strip('"/\; ()'))  # Stripping these actually fixes the previous errors
                 c.append(item[1].strip('"/\; ()'))  # Not a permanent fix, but will do for now!
 
             for node in list(set(c)):
-                if node == target['url']:
-                    gr.add_node(node, root=True)
+                if node == target['url'].replace('://', '-//'):
+                    gr.add_node(node, root=True, shape=ROOT_NODE_SHAPE, color=ROOT_NODE_COLOR)
+
+                elif not domain in node:
+                    gr.add_node(node, shape=EXTERNAL_NODE_SHAPE, color=EXTERNAL_NODE_COLOR)
 
                 else:
                     gr.add_node(node)
@@ -583,8 +589,6 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
 
 
 def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response and parses it.
-    x = [" "] * len(flist.split(","))
-
     for i, v in target.items():
         target[i] = target[str(i)]
 
@@ -1577,20 +1581,20 @@ def update(force, ckinstall, pjs_path, scriptpath):
 
         try:
             proc = subprocess.Popen([pjs_path, '-v'], stdout=subprocess.PIPE)
-            pJS_curr = re.sub('[\n\r]', '', proc.stdout.read())
+            pjs_curr = re.sub('[\n\r]', '', proc.stdout.read())
 
         except:
-            pJS_curr = ""
+            pjs_curr = ""
 
-        if force or (pjs_ver > pJS_curr) or not (inpath("phantomjs")
+        if force or (pjs_ver > pjs_curr) or not (inpath("phantomjs")
                                                  or inpath("phantomjs.exe")
                                                  or os.path.exists("data/phantomjs/bin/phantomjs")
                                                  or os.path.exists("data/phantomjs/phantomjs.exe")):
             choice = ''
             if not force:
-                if pJS_curr != "" and (pjs_ver > pJS_curr):
+                if pjs_curr != "" and (pjs_ver > pjs_curr):
                     txt = '\n  [i] phantomJS %s found (current is %s) - do you want to update? [Y/n]: ' %\
-                          (pJS_curr, pjs_ver)
+                          (pjs_curr, pjs_ver)
                     choice = raw_input(txt)
                 else:
                     if platform.machine() == "armv7":
@@ -1665,7 +1669,7 @@ def update(force, ckinstall, pjs_path, scriptpath):
                     print("  [!] Download Failed:\n\t%s\n" % "\n\t".join(error))
 
         else:
-            print("  [i] phantomJS %s found (current supported version) ++\n" % pJS_curr)
+            print("  [i] phantomJS %s found (current supported version) ++\n" % pjs_curr)
 
     defpass_curr = 0
     if os.path.exists(DEFPASS_FILE):

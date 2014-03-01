@@ -13,27 +13,20 @@
 #
 ####
 
-import os
-import re
-import sys
-import shutil
-import tarfile
 import optparse
-import traceback
 from time import sleep
 from glob import glob
 from platform import system
-from datetime import datetime
+from lxml import etree
+
+from lib.banner import *
+from conf.settings import *
+from lib.functions import *
 
 # Set a few static variables
 timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 scriptpath = os.path.dirname(os.path.realpath(__file__))
 logdir = os.path.realpath("log_%s_rawr" % timestamp)
-
-from lib.constants import *
-from lib.banner import *
-from conf.settings import *
-from lib.functions import *
 
 
 # pull&parse our commandline args
@@ -284,6 +277,12 @@ else:
     os.chdir(logdir)
 
 try:
+    opts.spider_follow_subdomains = spider_follow_subdomains
+    opts.spider_depth = spider_depth
+    opts.spider_timeout = spider_timeout
+    opts.spider_url_limit = spider_url_limit
+    # opts.spider_url_max_hits = spider_url_max_hits
+
     if opts.crawl_opts:
         for o in opts.crawl_opts.split(','):
             a, v = o.split(':')
@@ -303,11 +302,9 @@ try:
                     opts.spider_url_limit = v
                     writelog("\n  [i] spider_url_limit set to '%s'" % v, logfile, opts)
 
-    else:
-        opts.spider_follow_subdomains = spider_follow_subdomains
-        opts.spider_depth = spider_depth
-        opts.spider_timeout = spider_timeout
-        opts.spider_url_limit = spider_url_limit
+            # elif a == "h" and int(v) in range(0, 999):
+            #        opts.spider_url_max_hits = v
+            #        writelog("\n  [i] spider_url_max_hits set to '%s'" % v, logfile, opts)
 
 except Exception, ex:
     print("      [!] Error with --spider_opts:  '%s'\n\n\t\t%s" % (opts.crawl_opts, ex))
@@ -330,8 +327,6 @@ if opts.logo:
     else:
         print("\t  [x]  Unable to locate logo file \n\t\t[%s] \n" % opts.logo)
         sys.exit(1)
-
-
 
 
 if opts.title:
@@ -378,13 +373,7 @@ if opts.nmap_il or opts.nmaprng:
     # Run NMap to provide discovery [xml] data
     if opts.nmap_il != "" \
         or (re.match('^[a-z0-9]+([\-\.][a-z0-9]+)*\.[a-z]{2,6}(:[0-9]{1,5})?(/.*)?$', opts.nmaprng)
-            or (re.match('^((25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{1}[0-9]{1}|[1-9]{1}){1}([-,](25[0-4]' +
-                         '{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{1}[0-9]{1}|[1-9]{1}){1}){0,}|\*)\.(((25[0-4]{1}' +
-                         '|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{0,1}[0-9]{1}){1}([-,](25[0-4]{1}|2[0-4]{1}[0-9]{1}' +
-                         '|1[0-9]{2}|[1-9]{0,1}[0-9]{1}){1}){0,}|\*)\.){2}((25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]' +
-                         '{2}|[1-9]{0,1}[0-9]{1}){1}([-,](25[0-4]{1}|2[0-4]{1}[0-9]{1}|1[0-9]{2}|[1-9]{0,1}[0-9]' +
-                         '{1}){1}){0,}|\*|([0]{1}\/(8|9|[1-2]{1}[0-9]{1}|30|31|32){1})){1}$', opts.nmaprng)
-            and not re.match('([-][0-9]{1,3}[-])|(([,-].*[/]|[/].*[,-])|([*].*[/]|[/].*[*]))', opts.nmaprng)
+            or (re.match(NMAP_INPUT_REGEX, opts.nmaprng)
             and not re.match('([-][0-9]{1,3}[-])|(([,-].*[/]|[/].*[,-])|([*].*[/]|[/].*[*]))', opts.nmaprng))):
         # ^^ check for valid nmap input (can use hostnames, subnets (ex. 192.168.0.0/24), stars (ex. 192.168.*.*),
         # and split ranges (ex. 192.168.1.1-10,14))
@@ -404,6 +393,7 @@ if opts.nmap_il or opts.nmaprng:
 
         if opts.json_min:
             outputs = "-oX"
+
         else:
             outputs = "-oA"
 
@@ -418,6 +408,7 @@ if opts.nmap_il or opts.nmaprng:
 
         if opts.nmap_il:
             cmd += "-iL", opts.nmap_il
+
         else:
             cmd.append(opts.nmaprng)
 
@@ -498,7 +489,7 @@ for filename in files:
             if 'Asset Group:' in head:
                 for target in parse_qualys_port_service_csv(filename):
                     if "http" in target['service_name']:
-                        c+=1
+                        c += 1
 
                     targets.append(target)
 
@@ -760,13 +751,13 @@ if q.qsize() > 0:
         writelog("\n  [>] Beginning enumeration of [ %s ] host(s)\n" % q.qsize(), logfile, opts)
 
     # Create the output queue - prevents output overlap
-    o = out_thread(output, logfile, opts)
+    o = OutThread(output, logfile, opts)
     o.daemon = True
     o.start()
 
     # Create the main worker pool and get them started
     for i in range(nthreads):
-        t = sithread(timestamp, scriptpath, pjs_path, logdir, output, opts)
+        t = SiThread(timestamp, scriptpath, pjs_path, logdir, output, opts)
         threads.append(t)
         t.daemon = True
         t.start()

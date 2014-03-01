@@ -20,6 +20,7 @@ Requirements:
 
     nmap               - at least 6.00 - required for SSL strength assessment
     phantomJS          - tested with 1.9.1 - if not installed, can be downloaded into data/ folder during --check-install
+                           test w/:   ./data/phantomjs/bin/phantomjs --web-security=no --ignore-ssl-errors=yes --ssl-protocol=any ../../../data/screenshot.js http://www.google.com test.png "Mozilla/5.0 (Windows NT 5.1; rv:8.0) Gecko/20100101 Firefox/7.0" 1
     python-lxml        - for quick file parsing
     graphviz           - (optional) for creating site diagrams
     python-pygraphviz  - (optional) for creating site diagrams

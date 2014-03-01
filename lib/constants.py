@@ -1,5 +1,4 @@
-
-VERSION = "0.1.7"
+VERSION = "0.1.71"
 
 # Update information
 REPO_DL_PATH = "https://bitbucket.org/al14s/rawr/downloads/"
@@ -23,3 +22,15 @@ OSX_PLIST = """<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist SYSTEM "fil
 
 # Regex for pulling URLs out of a string - http://daringfireball.net/2009/11/liberal_regex_for_matching_urls
 URL_REGEX = """http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"""
+
+# Regex for checking NMap input
+NMAP_INPUT_REGEX = '^((25[0-4]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[1-9])([-,](25[0-4]|2[0-4][0-9]|1[0-9]{2}|' +\
+                   '[1-9][0-9]|[1-9]))*|\*)\.(((25[0-4]|2[0-4][0-9]|1[0-9]{2}|[1-9]*[0-9])([-,](25[0-4]|' +\
+                   '2[0-4][0-9]|1[0-9]{2}|[1-9]*[0-9]))*|\*)\.){2}((25[0-4]|2[0-4][0-9]|1[0-9]{2}|[1-9]*' +\
+                   '[0-9])([-,](25[0-4]|2[0-4][0-9]|1[0-9]{2}|[1-9]*[0-9]))*|\*|([0]/(8|9|[1-2][0-9]|30|31|32)))$'
+
+# Diagram prefs
+ROOT_NODE_SHAPE = 'circle'  # http://www.graphviz.org/doc/info/shapes.html
+ROOT_NODE_COLOR = 'blue'  # http://www.graphviz.org/doc/info/colors.html
+EXTERNAL_NODE_SHAPE = 'box'  # http://www.graphviz.org/doc/info/shapes.html
+EXTERNAL_NODE_COLOR = 'orangered'  # http://www.graphviz.org/doc/info/colors.html
