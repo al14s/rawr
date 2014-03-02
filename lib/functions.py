@@ -13,6 +13,7 @@ import traceback
 import Image
 import colorsys
 import socket
+from warnings import simplefilter
 from urlparse import urlparse
 from datetime import datetime
 from Queue import Queue
@@ -25,7 +26,7 @@ from constants import *
 from conf.modules import *
 from conf.settings import useragent, flist, timeout, ss_delay, nthreads
 
-
+simplefilter("ignore")
 binged = {}
 binging = False
 
@@ -232,53 +233,56 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                     error_msg("\n".join(error))
                                     self.output.put("      [x] Failed pulling OPTIONS: [ %s ]\n\t%s\n" %
                                                     (target['url'], "\n\t".join(error)))
-                            target['hist'] = 256
-                            if not self.opts.noss and 'res' in target.keys():
-                                target['hist'] = screenshot(target, self.logdir, self.timestamp, self.scriptpath,
-                                                            self.opts.proxy_dict, self.pjs_path, self.output)
 
-                            if self.opts.getcrossdomain and 'res' in target.keys():
-                                try:
-                                    res = requests.get("%s/crossdomain.xml" % target['url'], verify=False,
-                                                       timeout=timeout, allow_redirects=False,
-                                                       proxies=self.opts.proxy_dict)
-                                    if res.status_code == 200:
-                                        if not self.opts.json_min:
-                                            if not os.path.exists("cross_domain"):
+                            if not self.opts.json_min:
+                                target['hist'] = 256
+                                if not self.opts.noss and 'res' in target.keys():
+                                    target['hist'] = screenshot(target, self.logdir, self.timestamp, self.scriptpath,
+                                                                self.opts.proxy_dict, self.pjs_path,
+                                                                self.output, (self.opts.json or self.opts.json_min))
+
+                                if self.opts.getcrossdomain and 'res' in target.keys():
+                                    try:
+                                        res = requests.get("%s/crossdomain.xml" % target['url'], verify=False,
+                                                           timeout=timeout, allow_redirects=False,
+                                                           proxies=self.opts.proxy_dict)
+                                        if res.status_code == 200:
+                                            if not self.opts.json_min:
+                                                if not os.path.exists("cross_domain"):
+                                                    try:
+                                                        os.makedirs("cross_domain")
+
+                                                    except:
+                                                        pass
+
                                                 try:
-                                                    os.makedirs("cross_domain")
+                                                    v = str(res.text)
 
-                                                except:
-                                                    pass
+                                                except UnicodeEncodeError:
+                                                    v = unicode(res.text).encode('unicode_escape')
 
-                                            try:
-                                                v = str(res.text)
+                                                open("./cross_domain/%s_%s_crossdomain.xml" %
+                                                     (hostname, target['port']), 'w').write(v)
+                                                self.output.put("      [c] Pulled crossdomain.xml:" +
+                                                                "./cross_domain/%s_%s_crossdomain.xml  " %
+                                                                (hostname, target['port']))
+                                            target['crossdomain'] = "y"
 
-                                            except UnicodeEncodeError:
-                                                v = unicode(res.text).encode('unicode_escape')
+                                    except requests.ConnectionError:
+                                        msg = ["  [x] Not found", ""]
 
-                                            open("./cross_domain/%s_%s_crossdomain.xml" %
-                                                 (hostname, target['port']), 'w').write(v)
-                                            self.output.put("      [c] Pulled crossdomain.xml:" +
-                                                            "./cross_domain/%s_%s_crossdomain.xml  " %
-                                                            (hostname, target['port']))
-                                        target['crossdomain'] = "y"
+                                    except socket.timeout:
+                                        self.output.put("      [x] Timed out pulling crossdomain.xml: [ %s%s ]" %
+                                                        (hostname, port))
 
-                                except requests.ConnectionError:
-                                    msg = ["  [x] Not found", ""]
+                                    except requests.Timeout:
+                                        msg = ["  [x] Timed out", ""]
 
-                                except socket.timeout:
-                                    self.output.put("      [x] Timed out pulling crossdomain.xml: [ %s%s ]" %
-                                                    (hostname, port))
-
-                                except requests.Timeout:
-                                    msg = ["  [x] Timed out", ""]
-
-                                except Exception:
-                                    error = traceback.format_exc().splitlines()
-                                    error_msg("\n".join(error))
-                                    self.output.put("      [x] Failed pulling crossdomain.xml:\n\t%s\n" %
-                                                    "\n\t".join(error))
+                                    except Exception:
+                                        error = traceback.format_exc().splitlines()
+                                        error_msg("\n".join(error))
+                                        self.output.put("      [x] Failed pulling crossdomain.xml:\n\t%s\n" %
+                                                        "\n\t".join(error))
 
                             if self.opts.getrobots and 'res' in target.keys():
                                 try:
@@ -356,13 +360,17 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
             pass
 
 
-def screenshot(target, logdir, timestamp, scriptpath, proxy, pjs_path, o):
+def screenshot(target, logdir, timestamp, scriptpath, proxy, pjs_path, o, silent):
     filename = "%s/%s_%s_%s.png" % ("%s/images" % logdir, target['url'].split("/")[2].split(":")[0],
                                     timestamp, target['port'])
     err = '.'
 
     try:
-        with open("%s/rawr_%s.log" % (logdir, timestamp), 'ab') as log_pipe:
+        lp = "%s/rawr_%s.log" % (logdir, timestamp)
+        if silent:
+            lp = "/dev/null"
+
+        with open(lp, 'ab') as log_pipe:
             start = datetime.now()
             cmd = [pjs_path]
 
@@ -547,7 +555,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
             output.put("      [+] Finished spider: [ %s ] - building graph..." % target['url'])
 
             # Graph creation
-            gr = pgv.AGraph(splines='ortho', rankdir='LR')    # need to catch any exceptions this thing throws!!
+            gr = pgv.AGraph(splines='ortho', rankdir='LR')
             gr.node_attr['shape'] = 'rect'
 
             c = []
@@ -903,22 +911,22 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
                 output.put("\n  [!] Error parsing cert:\n\t%s\n" % "\n\t".join(error))
 
         # Parse cert and write to file
-        if 'ssl-cert' in target.keys():
-            if not (os.path.exists("ssl_certs") or opts.json_min):
+        if not opts.json_min and 'ssl-cert' in target.keys():
+            try:
                 os.mkdir("ssl_certs")
+
+            except:
+                pass
 
             open("./ssl_certs/%s_%s.cert" %
                  (target['url'].split("/")[2].split(":")[0], target['port']), 'w').write(target['ssl-cert'])
 
-    if opts.json_min:
+    if opts.json or opts.json_min:
         output.put(target)
 
-    else:
+    if not opts.json_min:
         if opts.sqlite:
             write_to_sqlitedb(timestamp, [target], opts)
-
-        if opts.json:
-            output.put(target)
 
         write_to_html(timestamp, target)
         write_to_csv(timestamp, target)
@@ -1551,7 +1559,7 @@ def update(force, ckinstall, pjs_path, scriptpath):
     os.chdir(scriptpath)
 
     url = REPO_DL_PATH + VER_FILE
-    print("  [>] Checking current versions...  \n   %s\n" % url)
+    print("  [>] Checking current versions...  \n\t%s\n" % url)
     try:
         ver_data = requests.get(url).text
         defpass_ver = ver_data.split(",")[1].replace('\n', '')
@@ -1624,7 +1632,7 @@ def update(force, ckinstall, pjs_path, scriptpath):
                     fname = pre+"-linux-i686.tar.bz2"  # default is 32bit *nix
 
                 url = "%s%s" % (PJS_REPO, fname)
-                print("      [>] Pulling/installing phantomJS >\n   %s" % url)
+                print("  [>] Pulling/installing phantomJS >\n\t%s" % url)
 
                 try:
                     fname = "data/" + fname
@@ -1661,7 +1669,7 @@ def update(force, ckinstall, pjs_path, scriptpath):
                         f.write(OSX_PLIST)
                         f.close()
 
-                    print("        [+] Success\n")
+                    print("      [+] Success\n")
 
                 except Exception:
                     error = traceback.format_exc().splitlines()
@@ -1681,7 +1689,7 @@ def update(force, ckinstall, pjs_path, scriptpath):
     if not os.path.exists(DEFPASS_FILE) or force or (defpass_ver > defpass_curr):
         # defpass
         url = REPO_DL_PATH + DEFPASS_FILE.split("/")[1]
-        print("  [>] Updating %s rev.%s >> rev.%s\n   %s" % (DEFPASS_FILE, defpass_curr, defpass_ver, url))
+        print("  [>] Updating %s rev.%s >> rev.%s\n\t%s" % (DEFPASS_FILE, defpass_curr, defpass_ver, url))
         try:
             data = requests.get(url).content
             open("data/defpass_tmp.csv", 'w').write(data)
@@ -1693,15 +1701,15 @@ def update(force, ckinstall, pjs_path, scriptpath):
 
             os.rename("data/defpass_tmp.csv", DEFPASS_FILE)
             c = len(open(DEFPASS_FILE).read().split('\n'))
-            print("  [+] Success - (Contains %s entries) " % c)
+            print("      [+] Success - (Contains %s entries) " % c)
 
         except Exception:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            print("        [x] Failed to parse defpass file:\n\t%s\n" % "\n\t".join(error))
+            print("  [x] Failed to parse defpass file:\n\t%s\n" % "\n\t".join(error))
 
     else:
-        print("        [i] %s - already at rev.%s" % (DEFPASS_FILE, defpass_ver))
+        print("  [i] %s - already at rev.%s" % (DEFPASS_FILE, defpass_ver))
 
     ip2c_curr = 0
     if os.path.exists(IP_TO_COUNTRY):
@@ -1714,13 +1722,13 @@ def update(force, ckinstall, pjs_path, scriptpath):
     if not os.path.exists(IP_TO_COUNTRY) or force or (ip2c_ver > ip2c_curr):
         # IpToCountry
         url = REPO_DL_PATH + IP_TO_COUNTRY.split("/")[1] + ".tar.gz"
-        print("\n  [>] Updating %s ver.%s >> ver.%s\n   %s" % (IP_TO_COUNTRY, ip2c_curr, ip2c_ver, url))
+        print("\n  [>] Updating %s ver.%s >> ver.%s\n\t%s" % (IP_TO_COUNTRY, ip2c_curr, ip2c_ver, url))
         try:
             data = requests.get(url).content
             open(IP_TO_COUNTRY + ".tar.gz", 'w+b').write(data)
             tarfile.open(IP_TO_COUNTRY + ".tar.gz").extractall('./data')
             os.remove(IP_TO_COUNTRY + ".tar.gz")
-            print("  [+] Success\n")
+            print("      [+] Success\n")
 
         except Exception:
             error = traceback.format_exc().splitlines()
@@ -1731,7 +1739,7 @@ def update(force, ckinstall, pjs_path, scriptpath):
     else:
         print("\n  [i] %s - already at ver.%s\n" % (IP_TO_COUNTRY, ip2c_ver))
 
-    print("  [i] Update Complete  ++\n\n")
+    print("  [+] Update Complete  ++\n\n")
     sys.exit(2)
 
 
@@ -1747,8 +1755,8 @@ def error_msg(msg):
 
 
 def writelog(msg, logfile, opts):
-    if type(msg) == {}:
+    if not (opts.json or opts.json_min) or type(msg) == dict:
         print(msg)
-    elif not (opts.json_min or opts.json):
-        print(msg)
+
+    if not opts.json_min:
         open(logfile, 'a').write("%s\n" % msg)

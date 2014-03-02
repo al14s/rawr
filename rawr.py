@@ -393,9 +393,11 @@ if opts.nmap_il or opts.nmaprng:
 
         if opts.json_min:
             outputs = "-oX"
+            fname = "rawr_" + timestamp + ".xml"
 
         else:
             outputs = "-oA"
+            fname = "rawr_" + timestamp
 
         proc = subprocess.Popen(['nmap', '-V'], stdout=subprocess.PIPE)
         ver = proc.stdout.read().split(' ')[2]
@@ -404,7 +406,7 @@ if opts.nmap_il or opts.nmaprng:
         if float(ver) > 6.3:
             cmd += "--max-retries", "0"
 
-        cmd += "-p", ports, "-T%s" % nmapspeed, "-vv", "-sV", sslscripts, outputs, "rawr_" + timestamp, "--open"
+        cmd += "-p", ports, "-T%s" % nmapspeed, "-vv", "-sV", sslscripts, outputs, fname, "--open"
 
         if opts.nmap_il:
             cmd += "-iL", opts.nmap_il
@@ -422,7 +424,7 @@ if opts.nmap_il or opts.nmaprng:
 
             else:
                 with open('/dev/null', 'w') as log_pipe:
-                    ret = subprocess.Popen(cmd, stdout=log_pipe).wait()
+                    ret = subprocess.Popen(cmd, stdout=log_pipe, stderr=subprocess.PIPE).wait()
 
         except KeyboardInterrupt: 
             writelog("\n\n  [!]  Scanning Halted (ctrl+C).  Exiting!   \n\n", logfile, opts)
@@ -438,12 +440,7 @@ if opts.nmap_il or opts.nmaprng:
             writelog("\n\n", logfile, opts)
             sys.exit(1)
 
-        if opts.json_min:
-            files = ["rawr_%s" % timestamp]
-            delthis = True
- 
-        else:
-            files = ["rawr_%s.xml" % timestamp]
+        files = ["rawr_%s.xml" % timestamp]
 
     else:
         writelog("\n  [!] Specified address range is invalid. !!\n", logfile, opts)
@@ -460,22 +457,22 @@ elif newdir:
 
     files = files.strip(",").split(",")
 
+if not opts.json_min:
+    # Look for and copy any images from previous scans
+    if not newdir and not (glob("*.png") or glob("images/*.png")):
+        writelog("\n  [!] No thumbnails found in [%s/]\n      or in [.%s/images/]. **\n" %
+                 (os.getcwd(), os.getcwd()), logfile, opts)
+        if not opts.noss:
+            writelog("      Will take website screenshots during the enumeration. ", logfile, opts)
 
-# Look for and copy any images from previous scans
-if not newdir and not (glob("*.png") or glob("images/*.png")): 
-    writelog("\n  [!] No thumbnails found in [%s/]\n      or in [.%s/images/]. **\n" %
-             (os.getcwd(), os.getcwd()), logfile, opts)
-    if not opts.noss:
-        writelog("      Will take website screenshots during the enumeration. ", logfile, opts)
+    else:
+        png_files = glob("*.png")
+        if not os.path.exists("images") and (not opts.noss or len(png_files) > 0):
+            os.mkdir("images")
 
-else: 
-    png_files = glob("*.png")
-    if not os.path.exists("images") and (not opts.noss or len(png_files) > 0):
-        os.mkdir("images")
-
-    for filename in glob("*.png"):
-        newname = filename.replace(":", "_")
-        os.rename(filename, "./images/%s" % newname)
+        for filename in glob("*.png"):
+            newname = filename.replace(":", "_")
+            os.rename(filename, "./images/%s" % newname)
 
 targets = []
 for filename in files:
@@ -569,7 +566,7 @@ for filename in files:
     writelog("      [+] Found [ %s ] web interface(s)\n" % c, logfile, opts)
 
 # cleaning up for the --json-min run
-if delthis:
+if opts.json_min:
     os.remove(files[0])
 
 sqltargets = []
@@ -615,71 +612,72 @@ if opts.sqlite and opts.allinfo and len(sqltargets) > 0:
     write_to_sqlitedb(timestamp, targets, opts)
 
 if q.qsize() > 0:
-    writelog("\n  [>] Building Attack surface matrix", logfile, opts)
+    if not opts.json_min:
+        writelog("\n  [>] Building Attack surface matrix", logfile, opts)
 
-    # create our attack surface matrix
-    asm_f = "%s/rawr_%s_attack_surface.csv" % (logdir, timestamp)
-    cols = []
-    hosts = {}
-    try:
-        for target in targets: 
-            if 'http' in target['service_name'] or opts.allinfo:
-                if isinstance(target['port'], list):
-                    for port in target['port']:
-                        cols.append(port)  # populate a list of ports from our targets
-                else:
-                    cols.append(target['port'])  # populate a list of ports from our targets
+        # create our attack surface matrix
+        asm_f = "%s/rawr_%s_attack_surface.csv" % (logdir, timestamp)
+        cols = []
+        hosts = {}
+        try:
+            for target in targets:
+                if 'http' in target['service_name'] or opts.allinfo:
+                    if isinstance(target['port'], list):
+                        for port in target['port']:
+                            cols.append(port)  # populate a list of ports from our targets
+                    else:
+                        cols.append(target['port'])  # populate a list of ports from our targets
 
-                try:  # much quicker this way
-                    hosts[target['ipv4']][0].append(target['port'])
+                    try:  # much quicker this way
+                        hosts[target['ipv4']][0].append(target['port'])
 
-                except:
-                    hosts[target['ipv4']] = [[target['port']], target['hostnames'][0]]
+                    except:
+                        hosts[target['ipv4']] = [[target['port']], target['hostnames'][0]]
 
-        #    sort by ipv4 address
-        # sorted_x = sorted(x.iteritems(), key=operator.itemgetter(1))
-        # import operator
-        # hosts.sort(key=lambda hosts: ("%3s%3s%3s%3s" % tuple(operator.itemgetter(1).split('.'))), reverse=False)
+            #    sort by ipv4 address
+            # sorted_x = sorted(x.iteritems(), key=operator.itemgetter(1))
+            # import operator
+            # hosts.sort(key=lambda hosts: ("%3s%3s%3s%3s" % tuple(operator.itemgetter(1).split('.'))), reverse=False)
 
-        t = {}
-        for i in set(cols):
-            t[i] = cols.count(i)  # populate a dict with port/count keypairs
+            t = {}
+            for i in set(cols):
+                t[i] = cols.count(i)  # populate a dict with port/count keypairs
 
-        cols = list(set(cols))
-        cols.sort(key=int)  # sort cols numerically
-        cols.insert(0, "IP")
-        cols.insert(1, "HOSTNAME")
-        cols.append(" ")
-        cols.append("TOTAL")
+            cols = list(set(cols))
+            cols.sort(key=int)  # sort cols numerically
+            cols.insert(0, "IP")
+            cols.insert(1, "HOSTNAME")
+            cols.append(" ")
+            cols.append("TOTAL")
 
-        with open(asm_f, 'a') as f:
-            f.write('"%s"\n' % '","'.join(cols))  # write the column headers
+            with open(asm_f, 'a') as f:
+                f.write('"%s"\n' % '","'.join(cols))  # write the column headers
 
-            for host in hosts:    # fill out each line with data from the target
+                for host in hosts:    # fill out each line with data from the target
+                    line = [" "] * len(cols)
+                    line[0] = host
+                    line[1] = hosts[host][1]
+                    for port in hosts[host][0]:
+                        line[cols.index(port)] = "x"
+
+                    line[-1] = (str(line.count("x")))
+                    f.write('"%s"\n' % '","'.join(line))
+
                 line = [" "] * len(cols)
-                line[0] = host
-                line[1] = hosts[host][1]
-                for port in hosts[host][0]:
-                    line[cols.index(port)] = "x"
+                for p in t:
+                    line[cols.index(p)] = str(t[p])  # fill out the last line w/ count totals
 
-                line[-1] = (str(line.count("x")))
-                f.write('"%s"\n' % '","'.join(line))
+                line[0] = "TOTAL"
 
-            line = [" "] * len(cols)
-            for p in t:
-                line[cols.index(p)] = str(t[p])  # fill out the last line w/ count totals
+                f.write('\n"%s"\n' % '","'.join(line))
 
-            line[0] = "TOTAL"
+        except Exception:
+            error = traceback.format_exc().splitlines()
+            error_msg("\n".join(error))
+            writelog("\n  [!] Error creating attack surface matrix :\n\t%s\n" % "\n".join(error), logfile, opts)
 
-            f.write('\n"%s"\n' % '","'.join(line))
-
-    except Exception:
-        error = traceback.format_exc().splitlines()
-        error_msg("\n".join(error))
-        writelog("\n  [!] Error creating attack surface matrix :\n\t%s\n" % "\n".join(error), logfile, opts)
-
-    if opts.asm:  # quit after creating the asm
-        exit(0)
+        if opts.asm:  # quit after creating the asm
+            exit(0)
 
     target = None
     targets = None   # it's all in the queue, so we can free up that memory...  :)
@@ -695,41 +693,44 @@ if q.qsize() > 0:
         shutil.copy("%s/data/report_template.html" % scriptpath, 'index_%s.html' % timestamp)
 
         # Make the link to NMap XML in our HTML report
-        if len(files) == 1:
-            if opts.xmlfile:
-                fname = os.path.basename(files[0])
-            else:
-                fname = "rawr_%s.xml" % timestamp
+        if opts.xmlfile:
+            fname = os.path.basename(files[0])
 
-            filedat = open('index_%s.html' % timestamp).read()
-            filedat = filedat.replace('<!-- REPLACEWITHLINK -->', fname)
-            filedat = filedat.replace('<!-- REPLACEWITHDATE -->', datetime.now().strftime("%b %d, %Y"))
-            filedat = filedat.replace('<!-- REPLACEWITHTITLE -->', report_title)
+        else:
+            fname = "rawr_%s.xml" % timestamp
 
-            report_range = ""
-            if opts.nmap_il:
-                report_range = str(opts.nmap_il)
-            
-            elif opts.nmaprng != "":
-                report_range = str(opts.nmaprng)
-            
-            else:
-                if len(files) > 1:
-                    report_range = "%s files" % len(files)
+        report_range = ""
+        if opts.nmap_il:
+            report_range = os.path.basename(str(opts.nmap_il))
+
+        elif opts.nmaprng:
+            report_range = str(opts.nmaprng)
+
+        else:
+            if type(files) == list:
+                if len(files) == 1:
+                    report_range = os.path.basename(files[0])
 
                 else:
-                    report_range = str(", ".join(files)[:40])
+                    report_range = "%s files" % len(files)
 
-            filedat = filedat.replace('<!-- REPLACEWITHRANGE -->', report_range)
-            filedat = filedat.replace('<!-- REPLACEWITHTIMESTAMP -->', timestamp)
-            filedat = filedat.replace('<!-- REPLACEWITHFLIST -->', ("hist, " + flist.replace('hist, ', '')))
+            else:
+                report_range = os.path.basename(files)
 
-            if opts.logo:
-                shutil.copy(logo_file, "./html_res/")
-                l = ('\n<img id="logo" height="80px" src="./html_res/%s" />\n' % os.path.basename(logo_file))
-                filedat = filedat.replace('<!-- REPLACEWITHLOGO -->', l)
+        filedat = open('index_%s.html' % timestamp).read()
+        filedat = filedat.replace('<!-- REPLACEWITHLINK -->', fname)
+        filedat = filedat.replace('<!-- REPLACEWITHDATE -->', datetime.now().strftime("%b %d, %Y"))
+        filedat = filedat.replace('<!-- REPLACEWITHTITLE -->', report_title)
+        filedat = filedat.replace('<!-- REPLACEWITHRANGE -->', report_range)
+        filedat = filedat.replace('<!-- REPLACEWITHTIMESTAMP -->', timestamp)
+        filedat = filedat.replace('<!-- REPLACEWITHFLIST -->', ("hist, " + flist.replace('hist, ', '')))
 
-            open('index_%s.html' % timestamp, 'w').write(filedat)
+        if opts.logo:
+            shutil.copy(logo_file, "./html_res/")
+            l = ('\n<img id="logo" height="80px" src="./html_res/%s" />\n' % os.path.basename(logo_file))
+            filedat = filedat.replace('<!-- REPLACEWITHLOGO -->', l)
+
+        open('index_%s.html' % timestamp, 'w').write(filedat)
 
         if os.path.exists("%s/data/nmap.xsl" % scriptpath):
             if not os.path.exists("./html_res/nmap.xsl"): 
@@ -749,6 +750,8 @@ if q.qsize() > 0:
             open("rawr_%s_serverinfo.csv" % timestamp, 'w').write('"' + flist.replace(', ', '","') + '"')
 
         writelog("\n  [>] Beginning enumeration of [ %s ] host(s)\n" % q.qsize(), logfile, opts)
+
+    exit()
 
     # Create the output queue - prevents output overlap
     o = OutThread(output, logfile, opts)
@@ -787,51 +790,51 @@ if q.qsize() > 0:
     if not opts.json_min:
         open('index_%s.html' % timestamp, 'a').write("</div></body></html>")
 
-    # Sort the csv on the specified column
-    try: 
-        i = flist.lower().split(", ").index(csv_sort_col)
-        data_list = [l.strip() for l in open("rawr_%s_serverinfo.csv" % timestamp)]
-        headers = data_list[0]
-        data_list = data_list[1:]
-        # Format IP adresses so we can sort them effectively
-        if re.match("^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}" +
-                    "([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$", l.split(",")[i]):
-            key = "%3s%3s%3s%3s" % tuple(l.split(",")[i].split('.'))
-
-        else: 
-            key = l.split(",")[i]
-
-        data_list.sort(key=lambda d: key)
-        open("rawr_%s_serverinfo.csv" % timestamp, 'w').write(headers+"\n"+"\n".join(data_list))
-
-    except:
-        writelog("\n  [!] '%s' was not found in the column list.  Skipping the CSV sort function." %
-                 csv_sort_col, logfile, opts)
-    
-    writelog("\n  [+] Report created in [%s/]\n" % os.getcwd(), logfile, opts)
-
-    if opts.compress_logs:
-        writelog("  [>] Compressing logfile...\n", logfile, opts)
-        logdir = os.path.basename(os.getcwd())
-        os.chdir("../")
+        # Sort the csv on the specified column
         try:
-            if system() in "CYGWIN|Windows":
-                shutil.make_archive(logdir, "zip", logdir)
-                logdir_c = logdir + ".zip"
+            i = flist.lower().split(", ").index(csv_sort_col)
+            data_list = [l.strip() for l in open("rawr_%s_serverinfo.csv" % timestamp)]
+            headers = data_list[0]
+            data_list = data_list[1:]
+            # Format IP adresses so we can sort them effectively
+            if re.match("^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}" +
+                        "([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$", l.split(",")[i]):
+                key = "%3s%3s%3s%3s" % tuple(l.split(",")[i].split('.'))
+
             else:
-                tfile = tarfile.open(logdir+".tar", "w:gz")
-                tfile.add(logdir)
-                tfile.close()
-                logdir_c = logdir + ".tar"
+                key = l.split(",")[i]
 
-            writelog("  [+] Created  %s ++\n" % logdir_c, logfile, opts)
-            if os.path.exists(logdir) and os.path.exists(logdir_c):
-                shutil.rmtree(logdir)
+            data_list.sort(key=lambda d: key)
+            open("rawr_%s_serverinfo.csv" % timestamp, 'w').write(headers+"\n"+"\n".join(data_list))
 
-        except Exception:
-            error = traceback.format_exc().splitlines()
-            error_msg("\n".join(error))
-            writelog("  [!] Failed\n\t%s\n" % "\n\t".join(error), logfile, opts)
+        except:
+            writelog("\n  [!] '%s' was not found in the column list.  Skipping the CSV sort function." %
+                     csv_sort_col, logfile, opts)
+
+        writelog("\n  [+] Report created in [%s/]\n" % os.getcwd(), logfile, opts)
+
+        if opts.compress_logs:
+            writelog("  [>] Compressing logfile...\n", logfile, opts)
+            logdir = os.path.basename(os.getcwd())
+            os.chdir("../")
+            try:
+                if system() in "CYGWIN|Windows":
+                    shutil.make_archive(logdir, "zip", logdir)
+                    logdir_c = logdir + ".zip"
+                else:
+                    tfile = tarfile.open(logdir+".tar", "w:gz")
+                    tfile.add(logdir)
+                    tfile.close()
+                    logdir_c = logdir + ".tar"
+
+                writelog("  [+] Created  %s ++\n" % logdir_c, logfile, opts)
+                if os.path.exists(logdir) and os.path.exists(logdir_c):
+                    shutil.rmtree(logdir)
+
+            except Exception:
+                error = traceback.format_exc().splitlines()
+                error_msg("\n".join(error))
+                writelog("  [!] Failed\n\t%s\n" % "\n\t".join(error), logfile, opts)
 
 else:
     writelog("\n  [!] No data returned. \n\n", logfile, opts)

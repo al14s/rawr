@@ -1,0 +1,15 @@
+ToDo
+
+    PwnPad - better platform identification, ease of use
+
+    stats page in HTML report
+        first line in HTML data
+        stats ideas: server version, SSL, ports, service (PHP, ASP.NET)
+
+    'targets' changeup (nosqlite - https://code.google.com/p/nosqlite/)
+        ** html result to thumbnail matchup issues when scanning external websites w/ multiple handles (IP, hn, port)
+        queue only holds a small ID for the task in memory
+        spider_url_hit_limit - needs nosqlite to be done efficiently
+        drop identical targets
+        make target fields cumulative
+        change flist to apply only to CSV

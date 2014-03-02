@@ -1,3 +1,11 @@
+3/1/2014
+    dynamic fields now show properly in HTML report (printable view)
+    now piping NMap warnings and errors to error.log when using json & json-min
+    python warnings now 'ignored'
+    fixed bug - no stdout from --json or --json-min
+    silenced screenshot warnings/errors during --json-min and --json
+    ran all tests in docs/TESTS file
+
 2/28/2014
     cleaned up imports
     relocated thread 'busy' flag - was causing odd active thread count

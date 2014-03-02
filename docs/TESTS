@@ -29,6 +29,12 @@
 	make sure the fuzzdb list was used
 	check <log folder>/maps/  for .png maps and .txt lists of docs & links for each site
 
-./rawr.py -n <site or IP> --spider --spider-opts d:2,l:100,t:10,f:f --alt-domains canhazcode.com
+./rawr.py -n <site or IP> --spider --spider-opts d:2,l:100,t:10,f:f --alt-domains <domain>
 	watch for custom spider option settings
 	watch for spidering of specified external domains
+
+./rawr.py -n <site or IP> --json
+    stdout - only JSON, files created in background
+
+./rawr.py -n <site or IP> --json-min
+    nothing but JSON strings

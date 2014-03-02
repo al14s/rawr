@@ -1,5 +1,8 @@
-
 from lib.constants import VERSION
+
+m = m2 = (29 - len(VERSION))/2
+if len(VERSION) % 2 == 0:
+    m += 1
 
 banner = """             
                                                     , `.
@@ -14,7 +17,7 @@ banner = """
                                       -M:  .'-/+:symdyysy+oN+  .N+:-
    Rapid Assessment of Web Resources   dd  .h/hyhddMms+:-/./m   dy-
                                        /M-  -NmmNhms`     ``m`  sd.;.
-            [Version %s]            `Ms   mNmNN+       s/y   oNoyM:
+%s[Version %s]%s`Ms   mNmNN+       s/y   oNoyM:
                                    ,os+-mh   /mymm :./+:/+s+/ :hs``mM-
                                    +y.:omN`  -o:dso/o:+::.   `oh-  +My
                                     /h:`oM-                  ``   :Nd
@@ -27,7 +30,7 @@ banner = """
                                       .N`N/   ./.`.----:sd                 -/o
                                      oo/.d-  `./-o+++-:mh/.```:-````-:+sys+:.
 
-""" % VERSION
+""" % (" " * m, VERSION, " " * m2)
 
 usage = """
  ./rawr.py
