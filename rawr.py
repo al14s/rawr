@@ -715,7 +715,7 @@ if q.qsize() > 0:
                     report_range = "%s files" % len(files)
 
             else:
-                report_range = os.path.basename(files)
+                report_range = os.path.basename(str(files))
 
         filedat = open('index_%s.html' % timestamp).read()
         filedat = filedat.replace('<!-- REPLACEWITHLINK -->', fname)
@@ -750,8 +750,6 @@ if q.qsize() > 0:
             open("rawr_%s_serverinfo.csv" % timestamp, 'w').write('"' + flist.replace(', ', '","') + '"')
 
         writelog("\n  [>] Beginning enumeration of [ %s ] host(s)\n" % q.qsize(), logfile, opts)
-
-    exit()
 
     # Create the output queue - prevents output overlap
     o = OutThread(output, logfile, opts)
