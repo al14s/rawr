@@ -1,3 +1,6 @@
+3/3/2014
+    code optimization
+
 3/1/2014
     dynamic fields now show properly in HTML report (printable view)
     now piping NMap warnings and errors to error.log when using json & json-min
@@ -18,7 +21,7 @@
 2/27/2014
     diagram value changed to filename
     added --alt-domains ""  ->  string or list to specify more domains to be followed during crawl
-    added --spider-opts d:<depth>,f:<follow_subdomains>,t:<timeout>,u:<url_limit>
+    added --spider-opts d:<depth>,s:<follow_subdomains>,t:<timeout>,u:<url_limit>
     pulled 'found doc' notification to avoid scope creep
         breaking doc parsing & file meta off into seperate tool for specifically for spidering/mirroring
         will be able to feed the 'links_' file into the tool if desired.

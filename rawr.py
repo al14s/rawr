@@ -35,7 +35,7 @@ parser.add_option('-a',
                   help='Include all open ports in .csv, not just web interfaces. Creates a threat matrix as well.',
                   dest='allinfo', action='store_true', default=False)
 parser.add_option('-f', metavar="<file>",
-                  help='NMap|Nessus|Nexpose|Qualys|OpenVAS file or dir from which to pull files. '
+                  help='NMap|Metasploit|Nessus|Nexpose|Qualys|OpenVAS file or directory from which to pull files. '
                   'See README for valid formats. Use quotes when using wildcards. '
                   'ex:  -f "*.nessus" will parse all .nessus files in directory.', dest='xmlfile')
 parser.add_option('-i', metavar="<file>",
@@ -74,9 +74,9 @@ group.add_option('--spider', help="Enumerate all urls in target's HTML, create s
                  "Will record but not follow links outside of the target's domain." +
                  "  Creates a map (.png) for that site in the <logfolder>/maps folder.",
                  dest='crawl', action='store_true', default=False)
-group.add_option('--spider-opts', help="Provide custom settings for crawl.               " +
-                                       "s='follow subdomains',d=depth, l='url limit', t=timeout" +
-                                       "        Example: --spider-opts s:false,d:2,l:500",
+group.add_option('--spider-opts', metavar="<options>", help="Provide custom settings for crawl.               " +
+                 "s='follow subdomains',d=depth, l='url limit', t=timeout" +
+                 "        Example: --spider-opts s:false,d:2,l:500",
                  dest='crawl_opts', default=False)
 group.add_option('--alt-domains', metavar="<domains>",
                  help="Enable cross-domain spidering on specific domains. (comma-seperated)",
@@ -257,8 +257,8 @@ if opts.logdir:
     # redefine logdir based on user request
     logdir = os.path.realpath(opts.logdir) + "/log_%s_rawr" % timestamp
 
-elif platform.machine() == "armv7":
-    logdir = "/c0ncealed/needs/to/provide/the/path/to/the/pwnpad/documents/dir/"
+#elif platform.machine() == "armv7":
+#    logdir = "?"
 
 
 logfile = "%s/rawr_%s.log" % (logdir, timestamp)
@@ -286,21 +286,26 @@ try:
     if opts.crawl_opts:
         for o in opts.crawl_opts.split(','):
             a, v = o.split(':')
-            if a == "f" and v.lower() in ("false", "f"):
+            if a == "s":
+                if v.lower() in ("false", "f"):
                     opts.spider_follow_subdomains = False
                     writelog("\n  [i] spider_follow_subdomains set to 'False'", logfile, opts)
 
-            elif a == "d" and int(v) in range(0, 9999):
-                    opts.spider_depth = v
-                    writelog("\n  [i] spider_depth set to '%s'" % v, logfile, opts)
+                elif v.lower() in ("true", "t"):
+                    opts.spider_follow_subdomains = True
+                    writelog("\n  [i] spider_follow_subdomains set to 'True'", logfile, opts)
 
-            elif a == "t" and int(v) in range(0, 9999):
-                    opts.spider_timeout = v
-                    writelog("\n  [i] spider_timeout set to '%s'" % v, logfile, opts)
+            elif a == "d" and int(v) in range(0, 999):
+                opts.spider_depth = v
+                writelog("\n  [i] spider_depth set to '%s'" % v, logfile, opts)
+
+            elif a == "t" and int(v) in range(0, 999):
+                opts.spider_timeout = v
+                writelog("\n  [i] spider_timeout set to '%s'" % v, logfile, opts)
 
             elif a == "l" and int(v) in range(0, 9999):
-                    opts.spider_url_limit = v
-                    writelog("\n  [i] spider_url_limit set to '%s'" % v, logfile, opts)
+                opts.spider_url_limit = v
+                writelog("\n  [i] spider_url_limit set to '%s'" % v, logfile, opts)
 
             # elif a == "h" and int(v) in range(0, 999):
             #        opts.spider_url_max_hits = v
@@ -314,13 +319,13 @@ if opts.logo:
     if os.path.exists(os.path.abspath(opts.logo)):
         try:
             from PIL import Image
-            i = Image.open(os.path.abspath(opts.logo)).size
-            if i[0] > 400 or i[1] > 80:
+            l, h = Image.open(os.path.abspath(opts.logo)).size
+            if l > 400 or h > 80:
                 writelog("  [!]  The specified logo may not show up correctly.\n\tA size no larger than 400x80 is "
                          "recommended.\n", logfile, opts)
 
         except:
-            pass  # if PIL isn't installed, we won't for it just for a banner warning msg.
+            pass  # being able to check the l,h not worth *requiring* that PIL be installed
 
         logo_file = os.path.realpath(opts.logo)
 
@@ -346,19 +351,30 @@ if opts.defpass:
         choice = raw_input("\tContinue without default password info? [Y|n] ").lower()
         defpass = False
         if (not choice in "yes") and choice != "": 
-            print("  [x] Exiting... \n\n")
+            print("\n  [x] Exiting... \n\n")
             sys.exit(2)
 
+# Check for the IpToCountry list
+if os.path.exists("%s/%s" % (scriptpath, IP_TO_COUNTRY)):
+    writelog("\n  [i] Located IpToCountry.csv\n", logfile, opts)
+
+else:
+    writelog("  [!] Unable to locate %s. =-\n" % IP_TO_COUNTRY, logfile, opts)
+    choice = raw_input("\tContinue without Ip to Country info? [Y|n] ").lower()
+    defpass = False
+    if (not choice in "yes") and choice != "":
+        print("\n  [x] Exiting... \n\n")
+        sys.exit(2)
 
 if not opts.json_min:
     msg = "\nStarted RAWR : %s\n     cmdline : %s\n\n" % (timestamp, " ".join(sys.argv))
-    open("%s/rawr_%s.log" % (logdir, timestamp), 'a').write(msg)
-    writelog("\n  [+] Log Folder created :\n      %s \n" % logdir, logfile, opts)
+    open("%s/rawr_%s.log" % (logdir, timestamp), 'a').write(msg)  # Log created
+    writelog("\n  [+] Log Folder created :\n      %s \n" % logdir, logfile, opts)  # Second log entry
 
 
 if opts.ver_dg:
     writelog("  [i] Downgrading all requests to HTTP/1.0...\n", logfile, opts)
-    import httplib
+    import httplib  # requests uses urllib3, which uses httplib...
     httplib.HTTPConnection._http_vsn = 10
     httplib.HTTPConnection._http_vsn_str = 'HTTP/1.0'
 

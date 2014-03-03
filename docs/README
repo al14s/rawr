@@ -4,23 +4,23 @@ Written by: Adam Byers (al14s)
 Romans 5:6-8
 
 
-DISCLAIMER: This is only for testing purposes and can only be used where strict consent has been given. Do not use 
+DISCLAIMER:
+    This is only for testing purposes and can only be used where strict consent has been given. Do not use
 this for illegal purposes period.                                                   
                                                                             
 Any modifications, changes, or alterations to this application is acceptable, however, any public releases utilizing 
 this code must be approved by its creator. Check the LICENSE file for more information.
 
 RAWR is designed to make the process of web enumeration easy and efficient by providing pertinent information in usable formats.
-It uses NMap(live or from file), Qualys, Nexpose, or Nessus scan data to target web services for enumeration, then visits
+It uses NMap(live or from file), Metasploit, Qualys, Nexpose, or Nessus scan data to target web services for enumeration, then visits
 each host on each port with an identified web service and gathers as much data as possible.  
 
 
 
-Requirements:
+REQUIREMENTS:
 
     nmap               - at least 6.00 - required for SSL strength assessment
     phantomJS          - tested with 1.9.1 - if not installed, can be downloaded into data/ folder during --check-install
-                           test w/:   ./data/phantomjs/bin/phantomjs --web-security=no --ignore-ssl-errors=yes --ssl-protocol=any ../../../data/screenshot.js http://www.google.com test.png "Mozilla/5.0 (Windows NT 5.1; rv:8.0) Gecko/20100101 Firefox/7.0" 1
     python-lxml        - for quick file parsing
     graphviz           - (optional) for creating site diagrams
     python-pygraphviz  - (optional) for creating site diagrams
@@ -28,190 +28,34 @@ Requirements:
     'requests' has been ported to the lib/ folder
 
 
-Installation:
+INSTALLATION:
 
-    Run ' ./rawr.py --check-install '
+    ' ./rawr.py --check-install '
 
 
-OS Compatibility (tested with):
+OS COMPATIBILITY:
 
     Backtrack 6 / NMap 6.01
     Ubuntu 12.04LTS / NMap 5.21 (nmap caused errors due to absence of ssl-enum-ciphers.nse)
 
 
-Browser Compatibility (HTML report):
+BROWSER COMPATIBILITY:
 
     Supported - Firefox (tested w/ 23)
     Tested/working on - Safari (tested w/ 5), Chrome (tested w/ 22), IE (tested w/ 7-9) 
 
 
-RAWR can parse the following formats:
+FILE INPUT FORMATS:
 
     NMap       - XML
     Nessus     - XML v2   (requires "Service Detection" plugin)
     Metasploit - CSV
     Qualys     - Port Services Report CSV
     Qualys     - Asset Search XML (requires QIDs 86000,86001,86002)
-    NNexpose   - Simple XML, XML+v2  *parse v1 and v2 w/ the same setup*
+    Nexpose   - Simple XML, XML+v2  *parse v1 and v2 w/ the same setup*
     OpenVAS    - XML
 
     + any CSV with at least the following fields: 
 			host,port,name,info  with values (ip, port, http|https|ssl|tls|www, service info)
 			headers must be on first row of doc
 			use --parsertest to output the first 3 targets and exit (to aide in parser dev)
-
- ./rawr.py
-        [-n <range> (-p <ports> -s <src port> -t <timing>)|-f <csv>|-i <list>]
-          [-d <dir>] [--sslv] [-aboqrvxz] [--downgrade] [--json] [--json-min]
-              [-e] [--title <title>] [--logo <file>] [--sqlite] [--spider]
-                [--noss] [--proxy <ip:port>] [-m] [--parsertest] [-u|-U]
-                           [--check-install|--force-install]
-
-Options:
-  --version            show program's version number and exit
-  -h, --help           show this help message and exit
-  -a                   Include all open ports in .csv, not just web
-                       interfaces. Creates a threat matrix as well.
-  -f <file>            NMap|Nessus|Nexpose|Qualys|OpenVAS file or dir from
-                       which to pull files. See README for valid formats. Use
-                       quotes when using wildcards. ex:  -f "*.nessus" will
-                       parse all .nessus files in directory.
-  -i <file>            Target an input list.  [NMap format] [can't be used
-                       with -n]
-  -n <range>           Target the specified range or host.  [NMap format]
-  -m                   Take any inputs, create an Attack Surface Matrix, and
-                       exit.
-  -p <port(s)>         Specify port(s) to scan.   [default is
-                       '80,443,8080,8088']
-  -s <port>            Specify a source port for the NMap scan.
-  -t (1-5)             Set a custom NMap scan timing.   [default is 4]
-  -v                   Verbose - Shows messages like spider status updates.
-  -y
-  --sslv               Assess the SSL security of each target.  [considered
-                       intrusive]
-
-  Enumeration Options:
-    -b                 Use Bing to gather external hostnames. (good for shared
-                       hosting)
-    -o                 Make an 'OPTIONS' call to grab the site's available
-                       methods.
-    -r                 Make an additional web call to get "robots.txt"
-    -x                 Make an additional web call to get "crossdomain.xml"
-    --noss             Disable screenshots.
-    --proxy=<ip:port>  <ip:port> Use Burp/Zap/W3aF to feed credentials to all
-                       sites.  ** Recommended only for internal sites **
-    --spider           Enumerate all urls in target's HTML, create site layout
-                       graph.  Will record but not follow links outside of the
-                       target's domain.  Creates a map (.png) for that site in
-                       the <logfolder>/maps folder.
-
-  Output Options:
-    -d <folder>        Directory in which to create log folder [default is
-                       "./"]
-    -q, --quiet        Won't show splash screen.
-    -z                 Compress log folder when finished.
-    --sqlite           Put output into an additional sqlite3 db file.
-    --json             stdout will include only JSON strings. Log folders and
-                       files are created normally.
-    --json-min         The only output of this script will be JSON strings to
-                       stdout.
-    --parsertest       Will parse inputs, display the first 3, and exit.
-
-  Report Options:
-    -e                 Exclude default username/password data from output.
-    --logo=<file>      Specify a logo file for the HTML report.
-    --title="Title"    Specify a custom title for the HTML report.
-
-  Update Options:
-    -u                 Check for newer version of IpToCountry.csv and
-                       defpass.csv.
-    -U                 Force update of IpToCountry.csv and defpass.csv.
-    --check-install    Update IpToCountry.csv and defpass.csv. Check for
-                       presence of NMap and its version. Check for presence of
-                       phantomJS, prompts if installing.
-    --force-install    Force update - IpToCountry.csv, defpass,csv, phantomJS.
-                       Also check for presence of NMap and its version.
-
-
-
-  SUMMARY:
-
-         Uses NMap, Qualys, Nexpose, or Nessus scan data to target web
-             services for enumeration. Visits each host on each port with an
-             identified web service and gathers as much data as possible.  
-
-
-         Output:  
-              All NMap output formats (xml uses local copy of nmap.xsl)
-              CSV worksheet containing all collected info.
-              HTML report  (searchable, jQuery-driven, standalone)
-              Images folder  (contains screenshots of the web interfaces)
-              Cookies folder
-              SSL Certificates folder
-
-         Usage diagram:
-
-         .--LOG          --.   .--SCAN                           --.
-         | ./log_[dt]_rawr/ |  | -a include all results in csv     |
-         | -z .tar file      > | -f nmap or nessus xml (or dir)    |
-         | -d log directory |  | -i use an input list for NMap     |
-         `--              --'  | -n nmap <range>                    >[xml data]
-                               |     (-p <ports>,-t <timing>)      |      .
-                               |      (-s <source port>)           |      |
-                               | --sslv [intrusive] SSL assessment |      |
-                               `--                               --'      |
-                                    .-------------------------------------'
-                                    |
-         .--SUPPLEMENT         --.  |   .--ENUMERATE                     --.
-         | IpToCountry.csv &     |  `-> | --spider  enum links from pages  |
-         |   defpass.csv         |      | --downgrade  use HTTP 1.0         --.
-         | -u|-U to update from   ----> | -o Pull available methods        |  |
-         |    the SF page or     |      | -r make call for robots.txt      |  |
-         | -e to exclude defpass |      `--                              --'  |
-         | -b use Bing for DNS   |                                            |
-         | --title report title  |          .---------------------------------`
-         | --logo  report logo   |          |
-         `--                   --'          |   .--OUTPUT      --.
-                                            |   | CSV worksheet  |
-                                            |   | HTML report    |
-                                            `-> | NMap output     >    :)
-                                                | Cookies        |
-                                                | Screenshots    |
-                                                | SSL certs      |
-                                                | Site crawl PNG |
-                                                | Robots.txt     |
-                                                | JSON           |
-                                                | SQLite3 .db    |
-                                                `--            --'
-
-
-  EXAMPLES:
-
-     ./rawr.py -n scanme.nmap.org --spider
-          Create log folders in current directory [./log_<date>_<time>_rawr/]
-          Follow and enumerate links in the target's HTML as long as
-            they're in the target's domain.  
-          Will create a map of the site in the maps folder.
-
-     ./rawr.py -n www.google.com -p all
-          Pull data from web services found on any of the 65535 ports.
-
-     ./rawr.py -f previous_nmap_scan.xml --sslv
-          Use targets from a previous nmap scan, assessing the server's
-            SSL security state.
-
-     ./rawr.py -d scanfolder -n scanme.nmap.org -p 80,8080 -e
-          Pull additional data about the server/site and its SSL cert from
-            ports 80 and 8080, excluding default password data.  
-            Stores results in ./scanfolder/log_<date>_<time>_rawr/ .
-
-     ./rawr.py -i nmap_inputlist.iL -p fuzzdb -b -z
-          Use an input list, checking the fuzzdb 'common web ports'.  
-            Compress results into a .tar file.
-            Use Bing to resolve DNS names of hosts.
-
-     ./rawr.py -u
-          Update 'Ip to Country' and 'default password' lists from the
-            BitBucket repo.
-
-

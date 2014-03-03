@@ -124,7 +124,7 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                         bing_res = requests.get("http://www.bing.com/search?q=ip%3a" + target['ipv4'],
                                                                 cookies=cookies).text.split("sb_meta")
 
-                                    except Exception:
+                                    except:
                                         error = traceback.format_exc().splitlines()
                                         error_msg("\n".join(error))
                                         self.output.put("  [x] Bing>DNS:\n\t%s\n" % "\n\t".join(error))
@@ -203,45 +203,47 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                             except requests.Timeout:
                                 msg = ["  [x] Timed out", ""]
 
-                            except Exception:
+                            except:
                                 error = traceback.format_exc().splitlines()
                                 error_msg("\n".join(error))
                                 msg = ["  [x] Error ", ":\n\t%s\n" % "\n\t".join(error)]
 
-                            if self.opts.getoptions and 'res' in target.keys():
-                                try:
-                                    res = (requests.options(target['url'], headers={"user-agent": useragent},
-                                                            verify=False, timeout=timeout, allow_redirects=False,
-                                                            proxies=self.opts.proxy_dict))
+                            if 'res' in target.keys():
+                                if self.opts.getoptions:
+                                    try:
+                                        res = (requests.options(target['url'], headers={"user-agent": useragent},
+                                                                verify=False, timeout=timeout, allow_redirects=False,
+                                                                proxies=self.opts.proxy_dict))
 
-                                    if 'allow' in res.headers:
-                                        target['options'] = res.headers['allow'].replace(",", " | ")
+                                        if 'allow' in res.headers:
+                                            target['options'] = res.headers['allow'].replace(",", " | ")
 
-                                    self.output.put("      [o] Pulled OPTIONS : [ %s ]" % target['url'])
+                                        self.output.put("      [o] Pulled OPTIONS : [ %s ]" % target['url'])
 
-                                except requests.ConnectionError:
-                                    msg = ["  [x] Not found", ""]
+                                    except requests.ConnectionError:
+                                        msg = ["  [x] Not found", ""]
 
-                                except socket.timeout:
-                                    self.output.put("      [x] Timed out pulling OPTIONS: [ %s ]" % target['url'])
+                                    except socket.timeout:
+                                        self.output.put("      [x] Timed out pulling OPTIONS: [ %s ]" % target['url'])
 
-                                except requests.Timeout:
-                                    msg = ["  [x] Timed out", ""]
+                                    except requests.Timeout:
+                                        msg = ["  [x] Timed out", ""]
 
-                                except Exception:
-                                    error = traceback.format_exc().splitlines()
-                                    error_msg("\n".join(error))
-                                    self.output.put("      [x] Failed pulling OPTIONS: [ %s ]\n\t%s\n" %
-                                                    (target['url'], "\n\t".join(error)))
+                                    except:
+                                        error = traceback.format_exc().splitlines()
+                                        error_msg("\n".join(error))
+                                        self.output.put("      [x] Failed pulling OPTIONS: [ %s ]\n\t%s\n" %
+                                                        (target['url'], "\n\t".join(error)))
 
-                            if not self.opts.json_min:
-                                target['hist'] = 256
-                                if not self.opts.noss and 'res' in target.keys():
-                                    target['hist'] = screenshot(target, self.logdir, self.timestamp, self.scriptpath,
-                                                                self.opts.proxy_dict, self.pjs_path,
-                                                                self.output, (self.opts.json or self.opts.json_min))
+                                if not self.opts.json_min:
+                                    target['hist'] = 256
+                                    if not self.opts.noss and 'res' in target.keys():
+                                        target['hist'] = screenshot(target, self.logdir,
+                                                                    self.timestamp, self.scriptpath,
+                                                                    self.opts.proxy_dict, self.pjs_path,
+                                                                    self.output, (self.opts.json or self.opts.json_min))
 
-                                if self.opts.getcrossdomain and 'res' in target.keys():
+                                if self.opts.getcrossdomain:
                                     try:
                                         res = requests.get("%s/crossdomain.xml" % target['url'], verify=False,
                                                            timeout=timeout, allow_redirects=False,
@@ -278,66 +280,68 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                     except requests.Timeout:
                                         msg = ["  [x] Timed out", ""]
 
-                                    except Exception:
+                                    except:
                                         error = traceback.format_exc().splitlines()
                                         error_msg("\n".join(error))
                                         self.output.put("      [x] Failed pulling crossdomain.xml:\n\t%s\n" %
                                                         "\n\t".join(error))
 
-                            if self.opts.getrobots and 'res' in target.keys():
-                                try:
-                                    res = requests.get("%s/robots.txt" % target['url'], verify=False,
-                                                       timeout=timeout, allow_redirects=False,
-                                                       proxies=self.opts.proxy_dict)
-                                    if res.status_code == 200 and "llow:" in res.text:
-                                        if not self.opts.json_min:
-                                            if not os.path.exists("robots"):
-                                                try:
-                                                    os.makedirs("robots")
-
-                                                except:
-                                                    pass
-
-                                            try:
-                                                v = str(res.text)
-
-                                            except UnicodeEncodeError:
-                                                v = unicode(res.text).encode('unicode_escape')
-
-                                            open("./robots/%s_%s_robots.txt" % (hostname, target['port']), 'w').write(v)
-                                            self.output.put("      [r] Pulled robots.txt:  ./robots/%s_%s_robots.txt " %
-                                                            (hostname, target['port']))
-                                        target['robots'] = "y"
-
-                                except requests.ConnectionError:
-                                    msg = ["  [x] Not found", ""]
-
-                                except socket.timeout:
-                                    self.output.put("      [x] Timed out pulling robots.txt: [ %s%s ]" %
-                                                    (hostname, port))
-
-                                except requests.Timeout:
-                                    msg = ["  [x] Timed out", ""]
-
-                                except Exception:
-                                    error = traceback.format_exc().splitlines()
-                                    error_msg("\n".join(error))
-                                    self.output.put("      [x] Failed pulling robots.txt:\n\t%s\n" % "\n\t".join(error))
-
-                            if self.opts.crawl and not self.opts.json_min and 'res' in target.keys():
-                                if not os.path.exists("maps"):
+                                if self.opts.getrobots:
                                     try:
-                                        os.makedirs("maps")
+                                        res = requests.get("%s/robots.txt" % target['url'], verify=False,
+                                                           timeout=timeout, allow_redirects=False,
+                                                           proxies=self.opts.proxy_dict)
+                                        if res.status_code == 200 and "llow:" in res.text:
+                                            if not self.opts.json_min:
+                                                if not os.path.exists("robots"):
+                                                    try:
+                                                        os.makedirs("robots")
+
+                                                    except:
+                                                        pass
+
+                                                try:
+                                                    v = str(res.text)
+
+                                                except UnicodeEncodeError:
+                                                    v = unicode(res.text).encode('unicode_escape')
+
+                                                open("./robots/%s_%s_robots.txt" %
+                                                     (hostname, target['port']), 'w').write(v)
+                                                self.output.put("      [r] Pulled robots.txt:  ./" +
+                                                                "robots/%s_%s_robots.txt " % (hostname, target['port']))
+                                            target['robots'] = "y"
+
+                                    except requests.ConnectionError:
+                                        msg = ["  [x] Not found", ""]
+
+                                    except socket.timeout:
+                                        self.output.put("      [x] Timed out pulling robots.txt: [ %s%s ]" %
+                                                        (hostname, port))
+
+                                    except requests.Timeout:
+                                        msg = ["  [x] Timed out", ""]
 
                                     except:
-                                        pass
+                                        error = traceback.format_exc().splitlines()
+                                        error_msg("\n".join(error))
+                                        self.output.put("      [x] Failed pulling robots.txt:\n\t%s\n" %
+                                                        "\n\t".join(error))
 
-                                crawl(target, self.logdir, self.timestamp, self.opts)
+                                if self.opts.crawl and not self.opts.json_min:
+                                    if not os.path.exists("maps"):
+                                        try:
+                                            os.makedirs("maps")
 
-                            parsedata(target, self.timestamp, self.scriptpath, self.opts)
-                            self.output.put("%s  [ %s%s ]%s" % (msg[0], hostname, port, msg[1]))
+                                        except:
+                                            pass
 
-                    except Exception:
+                                    crawl(target, self.logdir, self.timestamp, self.opts)
+
+                                parsedata(target, self.timestamp, self.scriptpath, self.opts)
+                                self.output.put("%s  [ %s%s ]%s" % (msg[0], hostname, port, msg[1]))
+
+                    except:
                         error = traceback.format_exc().splitlines()
                         error_msg("\n".join(error))
                         self.output.put("  [x] Failed : [ %s%s ]\n\t%s\n" % (hostname, port, "\n\t".join(error)))
@@ -349,8 +353,6 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                         if t.busy:
                             busy_count += 1
 
-                    t = None
-
                     self.output.put("  [i] Main queue size [ %s ] - Threads Busy/Total [ %s/%s ]" %
                                     (str(q.qsize()), busy_count, nthreads))
 
@@ -361,7 +363,7 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
 
 
 def screenshot(target, logdir, timestamp, scriptpath, proxy, pjs_path, o, silent):
-    filename = "%s/%s_%s_%s.png" % ("%s/images" % logdir, target['url'].split("/")[2].split(":")[0],
+    filename = "%s/%s_%s_%s.png" % ("%s/images" % logdir, urlparse(target['url']).netloc,
                                     timestamp, target['port'])
     err = '.'
 
@@ -402,8 +404,7 @@ def screenshot(target, logdir, timestamp, scriptpath, proxy, pjs_path, o, silent
                 o.put('      [+] Screenshot :     [ %s ]' % target['url'])
 
                 try:  # histogram time!
-                    r, g, b = 0, 0, 0
-                    c = 0
+                    r, g, b, c = 0, 0, 0, 0
                     img = Image.open(filename).resize((150, 150))
                     for x in xrange(img.size[0]):
                         for y in xrange(img.size[1]):
@@ -527,8 +528,6 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                     e = traceback.format_exc().splitlines()
                                     error_msg("\n".join(e))
 
-                                d = None
-
                                 urls_t3 = list(set(urls_t3))
 
                                 if len(urls_t3) > 0:
@@ -537,7 +536,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                             or (datetime.now() - time_start).total_seconds() > opts.spider_timeout):
                                         recurse(url_t2, urls_t3, tabs + "\t", depth + 1)
 
-                            except Exception:
+                            except:
                                 e = traceback.format_exc().splitlines()
                                 error_msg("\n".join(e))
 
@@ -561,9 +560,9 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
             c = []
             domain = urlparse(target['url']).netloc
             # Add nodes and edges
-            for item in coll:
-                c.append(item[0].strip('"/\; ()'))  # Stripping these actually fixes the previous errors
-                c.append(item[1].strip('"/\; ()'))  # Not a permanent fix, but will do for now!
+            for x, y in coll:
+                c.append(x.strip('"/\; ()'))  # Stripping these actually fixes the previous errors
+                c.append(y.strip('"/\; ()'))  # Not a permanent fix, but will do for now!
 
             for node in list(set(c)):
                 if node == target['url'].replace('://', '-//'):
@@ -575,12 +574,12 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                 else:
                     gr.add_node(node)
 
-            for item in coll:
-                if not item[0] == item[1]:
+            for x, y in coll:
+                if not x == y:
                     try:
-                        gr.add_edge((item[0].strip('"/\; ()'), item[1].strip('"/\; ()')))
+                        gr.add_edge((x.strip('"/\; ()'), y.strip('"/\; ()')))
 
-                    except Exception:
+                    except:
                         pass
 
             # Draw as PNG
@@ -590,7 +589,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
             gr.draw(f)
             target['diagram'] = f
 
-        except Exception:
+        except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
             output.put("\n    [!] Unable to create site chart: [ %s ]\n\t%s\n" % (target['url'], "\n\t".join(error)))
@@ -601,19 +600,21 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
         target[i] = target[str(i)]
 
     # identify country if possible
-    if os.path.exists("%s/%s" % (scriptpath, IP_TO_COUNTRY)):
-        ip = target['ipv4'].split('.')
-        ipnum = (int(ip[0])*16777216) + (int(ip[1])*65536) + (int(ip[2])*256) + int(ip[3])
-        for l in re.sub('[\"\r]', '', open("%s/%s" % (scriptpath, IP_TO_COUNTRY)).read()).split('\n'):
-            try:
-                if l != "" and (not "#" in l) and (int(l.split(',')[1]) > ipnum > int(l.split(',')[0])):
-                    target['country'] = "[%s]-%s" % (l.split(',')[4], l.split(',')[6])
-                    break
+    try:
+        o1, o2, o3, o4 = target['ipv4'].split('.')
+        ipnum = (int(o1)*16777216) + (int(o2)*65536) + (int(o3)*256) + int(o4)
+        with open("%s/%s" % (scriptpath, IP_TO_COUNTRY)) as f:
+            for c, l in enumerate(f):
+                if l != "" and not "#" in l:
+                    l = l.replace('"', '').split(',')
+                    if int(l[1]) > ipnum > int(l[0]):
+                        target['country'] = "[%s]-%s" % (l[4], l[6].strip('\n'))
+                        break
 
-            except Exception:
-                error = traceback.format_exc().splitlines()
-                error_msg("\n".join(error))
-                output.put("  [!] IPtoCountry parse error:\n\t%s\n" % "\n\t".join(error))
+    except:
+        error = traceback.format_exc().splitlines()
+        error_msg("\n".join(error))
+        output.put("  [!] IPtoCountry parse error:\n\t%s\n" % "\n\t".join(error))
 
     if 'res' in target.keys():
         # eat cookie now....omnomnom
@@ -625,7 +626,7 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
                 pass
 
             open("./cookies/%s_%s.txt" %
-                 (target['url'].split("/")[2].split(":")[0], target['port']), 'w').write(str(target['res'].cookies))
+                 (urlparse(target['url']).netloc, target['port']), 'w').write(str(target['res'].cookies))
             target['cookies'] = len(target['res'].cookies)
 
             d = target['res'].cookies
@@ -649,12 +650,6 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
             target['history'] = hist
 
         target['returncode'] = str(target['res'].status_code)
-
-        target['urls'] = []
-
-        # quicker and not bound to specific elements/attributes
-        for url in re.findall(URL_REGEX, target['res'].text, re.I):
-            target['urls'].append(url.split("'")[0].rstrip(')/.'))
 
         # Run through any user-defined regex filters.
         #  *** If a field isn't present in 'flist' (in the settings section), it won't be added at this time.
@@ -692,10 +687,15 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
                 else:
                     output.put("  [!] skipping %s - invalid modtype" % field)
 
-            except Exception:
+            except:
                 error = traceback.format_exc().splitlines()
                 error_msg("\n".join(error))
                 output.put("  [!] skipping module '%s' :\n\t%s\n" % (field, "\n\t".join(error)))
+
+        # not bound to specific elements/attributes
+        target['urls'] = []
+        for url in re.findall(URL_REGEX, target['res'].text, re.I):
+            target['urls'].append(url.split("'")[0].rstrip(')/.'))
 
         # parse the html for different element types
         try:
@@ -705,45 +705,41 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
                 tag = el.tag
 
                 # user-defined modules
-                for mod in [m for m in parsermods if str(m[1][0]).lower() == str(tag).lower()]:
-                    # mods that reference the current element tag
+                for n, s, t in [m for m in parsermods if str(m[1][0]).lower() == str(tag).lower()]:
+                    # ^ only mods that reference the current element tag
                     val = ""
                     try:
-                        if "text" in mod[1][1] and el.text is None:
+                        if "text" in s[1] and el.text is None:
                             val = el.text
 
-                        val += " %s" % (" ".join([v for i, v in items if i in mod[1][1]]))
-                        #  [!] skipping module 'jquery_tf':
-                        #      File "/home/axbyers/Desktop/rawr/lib/functions.py", line 521, in parsedata
-                        #        val += " %s" % (" ".join([v for i, v in items if i in mod[1][1]]))
-                        #    TypeError: unsupported operand type(s) for +=: 'NoneType' and 'str'
+                        val += " %s" % (" ".join([v for i, v in items if i in s[1]]))
 
                         if val != "":
-                            r = (re.findall(mod[1][2], val, re.I))
+                            r = (re.findall(s[2], val, re.I))
 
-                            if mod[2] == 3:
+                            if t == 3:
                                 for i in r:
-                                    if not mod[0] in target.keys():
-                                        target[mod[0]] = []
+                                    if not n in target.keys():
+                                        target[n] = []
 
-                                    target[mod[0]].append(i)
+                                    target[n].append(i)
 
-                            elif mod[2] == 4:
+                            elif t == 4:
                                 if len(r) > 0:
-                                    target[mod[0]] = ["True"]
+                                    target[n] = ["True"]
                                 else:
-                                    target[mod[0]] = ["False"]
+                                    target[n] = ["False"]
 
-                            elif mod[2] == 5:
-                                target[mod[0]] = [len(r)]
+                            elif t == 5:
+                                target[n] = [len(r)]
 
                             else:
-                                raise("invalid modtype - %s" % mod[2])
+                                raise("invalid modtype - %s" % t)
 
-                    except Exception:
+                    except:
                         error = traceback.format_exc().splitlines()
                         error_msg("\n".join(error))
-                        output.put("  [!] skipping module '%s':\n\t%s\n" % (mod[0], "\n\t".join(error)))
+                        output.put("  [!] skipping module '%s':\n\t%s\n" % (n, "\n\t".join(error)))
 
                 # some default checks
                 if tag == "meta":
@@ -789,7 +785,8 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
                 elif tag in ['iframe', 'applet', 'object', 'embed', 'form']:
                     target[tag] = len(items)
 
-        except Exception:
+        except Exception, ex:
+            print(ex)
             error = traceback.format_exc().splitlines()[-1]
             error_msg(" parsing HTML from [ %s ]:\n\t%s" % (target['url'], error))
             if opts.verbose:
@@ -825,15 +822,16 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
                             if use:
                                 target['Defpass'].append(':'.join(line.replace("\n", '').split(',')[0:5]))
 
-                    except Exception:
+                    except:
                         error = traceback.format_exc().splitlines()
                         error_msg("\n".join(error))
                         output.put("  [!] Error parsing defpass.csv:\n\t%s\n" % "\n\t".join(error))
 
     if "https" in target['service_name']:
         if not 'ssl-cert' in target.keys() and 'returncode' in target.keys():
-            # hosts were loaded by a file that didn't contain SSL info
+            # ^ hosts were loaded by a file that didn't contain SSL info
             output.put("  [>] Pulling SSL cert for  %s:%s" % (target['hostnames'][0], target['port']))
+
             import ssl
             cert = None
             try:
@@ -854,6 +852,8 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
 
             try:
                 if ['ssl-cert'] in target.keys():
+                    notbefore = ""
+                    notafter = ""
                     for line in target['ssl-cert'].split('\n'):
                         if "issuer" in line.lower():
                             target['SSL_Cert-Issuer'] = line.split(": ")[1]
@@ -878,7 +878,7 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
 
                         elif "algorithm" in line.lower() and not 'SSL_Cert-KeyAlg' in target.keys():
                             target['SSL_Cert-KeyAlg'] = "%s" % line.split(": ")[1]
-                            # need to take another look at this one.  no seeing it atm
+                            # need to take another look at this one.  not seeing it atm
 
                         elif "not valid before" in line.lower():
                             notbefore = line.split(": ")[1].strip()
@@ -905,7 +905,7 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
                     target['SSL_Cert-ValidityPeriod'] = vdays
                     target['SSL_Cert-DaysLeft'] = daysleft
 
-            except Exception:
+            except:
                 error = traceback.format_exc().splitlines()
                 error_msg("\n".join(error))
                 output.put("\n  [!] Error parsing cert:\n\t%s\n" % "\n\t".join(error))
@@ -919,7 +919,7 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
                 pass
 
             open("./ssl_certs/%s_%s.cert" %
-                 (target['url'].split("/")[2].split(":")[0], target['port']), 'w').write(target['ssl-cert'])
+                 (urlparse(target['url']).netloc, target['port']), 'w').write(target['ssl-cert'])
 
     if opts.json or opts.json_min:
         output.put(target)
@@ -941,8 +941,8 @@ def write_to_sqlitedb(timestamp, targets, opts):
             conn.commit()
             conn.close()
 
-        except Exception:
-            conn = ''
+        except:
+            conn = None
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
             output.put("\n  [!] Error creating SQLite db:\n\t%s\n" % "\n\t".join(error))
@@ -974,8 +974,8 @@ def write_to_sqlitedb(timestamp, targets, opts):
         conn.commit()
         conn.close()
 
-    except Exception:
-        conn = ''
+    except:
+        conn = None
         error = traceback.format_exc().splitlines()
         error_msg("\n".join(error))
         output.put("\n  [!] Error writing to SQLite db:\n\t%s\n" % "\n\t".join(error))
@@ -1000,7 +1000,7 @@ def write_to_csv(timestamp, target):
     try:
         open("rawr_%s_serverinfo.csv" % timestamp, 'a').write('\n"%s"' % (str('","'.join(x))))
 
-    except Exception:
+    except:
         error = traceback.format_exc().splitlines()
         error_msg("\n".join(error))
         output.put("\n  [!] Unable to write .csv:\n\t%s\n" % "\n\t".join(error))
@@ -1020,13 +1020,13 @@ def write_to_html(timestamp, target):
             try:
                 x[flist.lower().split(", ").index(i.lower())] = re.sub('[\n\r,]', '', str(v))
 
-            except Exception:
+            except:
                 error_msg("\n".join(traceback.format_exc().splitlines()[-3:]))
 
     try:
         open('index_%s.html' % timestamp, 'a').write("\n" + str(target['hist']) + ", " + str(','.join(x)))
 
-    except Exception:
+    except:
         error = traceback.format_exc().splitlines()
         error_msg("\n".join(error))
         output.put("\n  [!] Unable to write .html:\n\t%s\n" % "\n\t".join(error))
@@ -1039,7 +1039,7 @@ def parse_csv(filename):
     with open(filename) as r:
         for line in r:
             try:
-                if not body:  # first line has to be headers...
+                if not body:  # first line has to define column headers
                     headers = line.strip("\n").split(",")
                     body = True
                     continue
@@ -1068,6 +1068,7 @@ def parse_csv(filename):
                         else:
                             target[header] = line[headers.index(header)]
 
+                    # Check for missing fields
                     field = [s for s in ('ipv4', 'port', 'hostnames', 'service_name', 'service_version')
                              if not s in target.keys()]
                     if len(field) == 0:
@@ -1087,7 +1088,7 @@ def parse_csv(filename):
                         print("\t[!] Parse Error: missing required field(s): %s" % field)
                         break
 
-            except Exception:
+            except:
                 error = traceback.format_exc().splitlines()
                 error_msg("\n".join(error))
                 print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
@@ -1107,13 +1108,10 @@ def parse_qualys_port_service_csv(filename):
 
                 if body and line.strip() != "":
                     target = {}
-                    line = line.replace('"', '').split(',')
-                    target['ipv4'] = line[0]
-                    target['hostnames'] = [line[1], line[0]]
-                    target['service_version'] = "%s %s" % (line[2], line[5])
-                    target['protocol'] = line[3]
-                    target['port'] = line[4]
-                    if any(s in line[5].lower() for s in ["ssl", "https", "tls"]):
+                    target['ipv4'], hn, sv, target['protocol'], target['port'], sn = line.replace('"', '').split(',')
+                    target['hostnames'] = [hn, target['ipv4']]
+                    target['service_version'] = "%s %s" % (sv, sn)
+                    if any(s in sn.lower() for s in ["ssl", "https", "tls"]):
                         target['service_name'] = 'https'
 
                     else:
@@ -1121,7 +1119,7 @@ def parse_qualys_port_service_csv(filename):
 
                     targets.append(target)
 
-            except Exception:
+            except:
                 error = traceback.format_exc().splitlines()
                 error_msg("\n".join(error))
                 print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
@@ -1149,7 +1147,7 @@ def parse_openvas_xml(r):     # need a scan of a server using SSL!
 
             targets.append(target)
 
-        except Exception:
+        except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
             print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
@@ -1187,7 +1185,7 @@ def parse_nexpose_xml(r):     # need a scan of a server using SSL!
 
                 targets.append(target)
 
-        except Exception:
+        except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
             print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
@@ -1222,7 +1220,7 @@ def parse_nexpose_simple_xml(r):     # need a scan of a server using SSL!
 
                 targets.append(target)
 
-        except Exception:
+        except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
             print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
@@ -1265,6 +1263,8 @@ def parse_qualys_scan_report_xml(r):
                     target['service_version'] = vuln.xpath("RESULT/text()")[0]
 
                     if qid == "86001":  # SSL
+                        notbefore = ""
+                        notafter = ""
                         target['service_name'] = 'https'
                         target['ssl-cert'] = host.xpath("VULN_INFO_LIST/VULN_INFO[PORT/text()='" + str(target['port']) +
                                                         "' and QID/text()='86002']/RESULT/text()")[0]
@@ -1323,7 +1323,7 @@ def parse_qualys_scan_report_xml(r):
 
                     targets.append(target)
 
-        except Exception:
+        except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
             print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
@@ -1336,6 +1336,8 @@ def parse_nessus_xml(r):
     for node in r.xpath("//ReportHost"):
         try:  # one line can fail, and the rest of the doc completes
             for item in node.xpath('ReportItem'):
+                notbefore = ""
+                notafter = ""
                 if item.attrib['pluginName'] == "Service Detection":
                     target = {}
                     target['os_info'] = ""
@@ -1434,7 +1436,7 @@ def parse_nessus_xml(r):
 
                     targets.append(target)
 
-        except Exception:
+        except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
             print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
@@ -1547,7 +1549,7 @@ def parse_nmap_xml(r):
 
                 targets.append(target)
 
-        except Exception:
+        except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
             print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
@@ -1561,12 +1563,9 @@ def update(force, ckinstall, pjs_path, scriptpath):
     url = REPO_DL_PATH + VER_FILE
     print("  [>] Checking current versions...  \n\t%s\n" % url)
     try:
-        ver_data = requests.get(url).text
-        defpass_ver = ver_data.split(",")[1].replace('\n', '')
-        ip2c_ver = ver_data.split(",")[2].replace('\n', '')
-        pjs_ver = ver_data.split(",")[3].replace('\n', '')
+        rawr_ver, defpass_ver, ip2c_ver, pjs_ver = requests.get(url).text.replace('\n', '').split(",")
 
-    except Exception:
+    except:
         error = traceback.format_exc().splitlines()
         error_msg("\n".join(error))
         print("      [x] Update Failed:\n\t%s\n" % "\n\t".join(error))
@@ -1580,8 +1579,7 @@ def update(force, ckinstall, pjs_path, scriptpath):
         else:
             proc = subprocess.Popen(['nmap', '-V'], stdout=subprocess.PIPE)
             ver = proc.stdout.read().split(' ')[2]
-            main_ver = ver.split('.')[0]
-            if int(main_ver) < 6: 
+            if int(ver.split('.')[0]) < 6:  # 6.00 is when ssl_num_ciphers.nse was added.
                 print("  [i]  ** NMap %s found, but versions prior to 6.00 won't return all SSL data. **\n" % ver)
 
             else:
@@ -1592,52 +1590,61 @@ def update(force, ckinstall, pjs_path, scriptpath):
             pjs_curr = re.sub('[\n\r]', '', proc.stdout.read())
 
         except:
-            pjs_curr = ""
+            pjs_curr = 0
 
-        if force or (pjs_ver > pjs_curr) or not (inpath("phantomjs")
-                                                 or inpath("phantomjs.exe")
-                                                 or os.path.exists("data/phantomjs/bin/phantomjs")
-                                                 or os.path.exists("data/phantomjs/phantomjs.exe")):
-            choice = ''
+        if force or (pjs_ver > pjs_curr):
             if not force:
-                if pjs_curr != "" and (pjs_ver > pjs_curr):
-                    txt = '\n  [i] phantomJS %s found (current is %s) - do you want to update? [Y/n]: ' %\
-                          (pjs_curr, pjs_ver)
-                    choice = raw_input(txt)
+                if pjs_curr != 0 and (pjs_ver > pjs_curr):
+                    choice = raw_input('\n  [i] phantomJS %s found (current is %s) - do you want to update? [Y/n]: ' %
+                                       (pjs_curr, pjs_ver))
+                    if choice.lower() in ("y", "yes", ''):
+                        force = True
+
                 else:
                     if platform.machine() == "armv7":
+                        # Not a binary compiled for arm out there for DL just yet.
+                        # I'll put it as a download in the RAWR repo if someone can provide it.
                         print("      [i] Please install phantomJS via apt-get.")
                         print("\n  [!] Exiting...\n\n")
                         sys.exit(0)
 
                     else:
-                        choice = raw_input('\n  !! phantomJS was not found - do you want to install it? [Y/n]: ')
+                        choice = raw_input('\n  [!] phantomJS was not found - do you want to install it? [Y/n]: ')
                         if not (choice.lower() in ("y", "yes", '')):
                             print("\n  [!] Exiting...\n\n")
                             sys.exit(0)
 
-            if force or (choice.lower() in ("y", "yes", '')):
+                        else:
+                            force = True
+
+            if force:
                 # phantomJS
                 pre = "phantomjs-%s" % pjs_ver
                 if platform.system() in "CYGWIN|Windows":
-                    fname = pre+"-windows.zip"
+                    fname = pre + "-windows.zip"
+                    url = PJS_REPO + fname
 
                 elif platform.system().lower() in "darwin":
-                    fname = pre+"-macosx.zip"
+                    fname = pre + "-macosx.zip"
+                    url = PJS_REPO + fname
+
+                #elif platform.machine() == "armv7":
+                #   fname = "-arm7.tar.gz"
+                #   url = REPO_DL_PATH + fname
 
                 elif sys.maxsize > 2**32:
-                    fname = pre+"-linux-x86_64.tar.bz2"
+                    fname = pre + "-linux-x86_64.tar.bz2"
+                    url = PJS_REPO + fname
 
                 else:
-                    fname = pre+"-linux-i686.tar.bz2"  # default is 32bit *nix
+                    fname = pre + "-linux-i686.tar.bz2"  # default is 32bit *nix
+                    url = PJS_REPO + fname
 
-                url = "%s%s" % (PJS_REPO, fname)
                 print("  [>] Pulling/installing phantomJS >\n\t%s" % url)
 
                 try:
-                    fname = "data/" + fname
                     data = requests.get(url).content
-                    open(fname, 'w+b').write(data)
+                    open("data/" + fname, 'w+b').write(data)
 
                     if os.path.exists("data/phantomjs"):
                         if not os.access("data/phantomjs", os.W_OK):
@@ -1647,19 +1654,19 @@ def update(force, ckinstall, pjs_path, scriptpath):
                         try:
                             shutil.rmtree("data/phantomjs")
 
-                        except Exception:
+                        except:
                             error = traceback.format_exc().splitlines()
                             error_msg("\n".join(error))
                             print("        [!] Failed to remove data/phantomjs:\n\t%s\n" % "\n\t".join(error))
 
                     if fname.endswith(".zip"):
                         import zipfile
-                        zipfile.ZipFile(fname).extractall('./data')
+                        zipfile.ZipFile("data/" + fname).extractall('./data')
                     else:
-                        tarfile.open(fname).extractall('./data')
+                        tarfile.open("data/" + fname).extractall('./data')
 
-                    os.rename(str(os.path.splitext(fname)[0].replace(".tar", '')), "data/phantomjs")
-                    os.remove(fname)
+                    os.rename("data/" + str(os.path.splitext(fname)[0].replace(".tar", '')), "data/phantomjs")
+                    os.remove("data/" + fname)
 
                     if platform.system().lower() in "darwin":
                         os.chmod("data/phantomjs/bin/phantomjs", 755)
@@ -1671,7 +1678,7 @@ def update(force, ckinstall, pjs_path, scriptpath):
 
                     print("      [+] Success\n")
 
-                except Exception:
+                except:
                     error = traceback.format_exc().splitlines()
                     error_msg("\n".join(error))
                     print("  [!] Download Failed:\n\t%s\n" % "\n\t".join(error))
@@ -1679,62 +1686,83 @@ def update(force, ckinstall, pjs_path, scriptpath):
         else:
             print("  [i] phantomJS %s found (current supported version) ++\n" % pjs_curr)
 
-    defpass_curr = 0
-    if os.path.exists(DEFPASS_FILE):
-        ofile = open(DEFPASS_FILE).readlines()
-        for line in ofile:
-            if line.startswith("#"):
-                defpass_curr = line.split(' ')[1].replace('\n', '')
+    try:
+        defpass_curr = open(DEFPASS_FILE).readline().split(' ')[1].replace('\n', '')
 
-    if not os.path.exists(DEFPASS_FILE) or force or (defpass_ver > defpass_curr):
+    except:
+        defpass_curr = 0
+
+    if force or (defpass_ver > defpass_curr):
         # defpass
-        url = REPO_DL_PATH + DEFPASS_FILE.split("/")[1]
-        print("  [>] Updating %s rev.%s >> rev.%s\n\t%s" % (DEFPASS_FILE, defpass_curr, defpass_ver, url))
-        try:
-            data = requests.get(url).content
-            open("data/defpass_tmp.csv", 'w').write(data)
-            try: 
-                os.remove(DEFPASS_FILE)
+        if not force:
+            choice = raw_input('\n  [!] Update defpass.csv from rev.%s to rev.%s? [Y/n]: ' %
+                               (defpass_curr, defpass_ver))
+            if choice.lower() in ("y", "yes", ''):
+                force = True
 
-            except: 
-                pass
+        if force:
+            url = REPO_DL_PATH + DEFPASS_FILE.split("/")[1]
+            print("  [>] Updating %s rev.%s >> rev.%s\n\t%s" % (DEFPASS_FILE, defpass_curr, defpass_ver, url))
+            try:
+                data = requests.get(url).content
+                open("data/defpass_tmp.csv", 'w').write(data)
+                try:
+                    os.remove(DEFPASS_FILE)
 
-            os.rename("data/defpass_tmp.csv", DEFPASS_FILE)
-            c = len(open(DEFPASS_FILE).read().split('\n'))
-            print("      [+] Success - (Contains %s entries) " % c)
+                except:
+                    pass
 
-        except Exception:
-            error = traceback.format_exc().splitlines()
-            error_msg("\n".join(error))
-            print("  [x] Failed to parse defpass file:\n\t%s\n" % "\n\t".join(error))
+                os.rename("data/defpass_tmp.csv", DEFPASS_FILE)
+
+                c = 0
+                with open(DEFPASS_FILE) as f:
+                    for c, l in enumerate(f):
+                        pass
+
+                print("      [+] Success - (Contains %s entries) " % c)
+
+            except:
+                error = traceback.format_exc().splitlines()
+                error_msg("\n".join(error))
+                print("  [x] Failed to parse defpass file:\n\t%s\n" % "\n\t".join(error))
 
     else:
         print("  [i] %s - already at rev.%s" % (DEFPASS_FILE, defpass_ver))
 
     ip2c_curr = 0
-    if os.path.exists(IP_TO_COUNTRY):
-        ofile = open(IP_TO_COUNTRY).readlines()
-        for line in ofile:
-            if "# Software Version" in line:
-                ip2c_curr = line.split(" ")[5].replace('\n', '')
-                break
+    try:
+        with open(IP_TO_COUNTRY) as f:
+            for c, l in enumerate(f):
+                if "# Software Version" in l:
+                    ip2c_curr = l.split(" ")[5].replace('\n', '')
+                    break
 
-    if not os.path.exists(IP_TO_COUNTRY) or force or (ip2c_ver > ip2c_curr):
+    except:
+        pass
+
+    if force or (ip2c_ver > ip2c_curr):
         # IpToCountry
-        url = REPO_DL_PATH + IP_TO_COUNTRY.split("/")[1] + ".tar.gz"
-        print("\n  [>] Updating %s ver.%s >> ver.%s\n\t%s" % (IP_TO_COUNTRY, ip2c_curr, ip2c_ver, url))
-        try:
-            data = requests.get(url).content
-            open(IP_TO_COUNTRY + ".tar.gz", 'w+b').write(data)
-            tarfile.open(IP_TO_COUNTRY + ".tar.gz").extractall('./data')
-            os.remove(IP_TO_COUNTRY + ".tar.gz")
-            print("      [+] Success\n")
+        if not force:
+            choice = raw_input('\n  [!] Update IpToCountry.csv from rev.%s to rev.%s? [Y/n]: ' %
+                               (ip2c_curr, ip2c_ver))
+            if choice.lower() in ("y", "yes", ''):
+                force = True
 
-        except Exception:
-            error = traceback.format_exc().splitlines()
-            error_msg("\n".join(error))
-            print("  [x] Update Failed:\n\t%s\n" % "\n\t".join(error))
-            sys.exit(1)
+        if force:
+            url = REPO_DL_PATH + IP_TO_COUNTRY.split("/")[1] + ".tar.gz"
+            print("\n  [>] Updating %s ver.%s >> ver.%s\n\t%s" % (IP_TO_COUNTRY, ip2c_curr, ip2c_ver, url))
+            try:
+                data = requests.get(url).content
+                open(IP_TO_COUNTRY + ".tar.gz", 'w+b').write(data)
+                tarfile.open(IP_TO_COUNTRY + ".tar.gz").extractall('./data')
+                os.remove(IP_TO_COUNTRY + ".tar.gz")
+                print("      [+] Success\n")
+
+            except:
+                error = traceback.format_exc().splitlines()
+                error_msg("\n".join(error))
+                print("  [x] Update Failed:\n\t%s\n" % "\n\t".join(error))
+                sys.exit(1)
 
     else:
         print("\n  [i] %s - already at ver.%s\n" % (IP_TO_COUNTRY, ip2c_ver))
