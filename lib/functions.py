@@ -24,11 +24,13 @@ import requests
 from lxml import html
 from constants import *
 from conf.modules import *
-from conf.settings import useragent, flist, timeout, ss_delay, nthreads
+from conf.settings import useragent, flist, timeout, ss_delay, nthreads,\
+    allow_redir, spider_thread_limit, spider_breadth_first
 
 simplefilter("ignore")
 binged = {}
 binging = False
+crawling = 0
 
 threads = []
 q = Queue()  # The main queue.  Holds initial host data.
@@ -64,6 +66,7 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
 
         global binged
         global binging
+        global crawling
         global q
 
         try:
@@ -186,15 +189,19 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
 
                             try:
                                 target['res'] = requests.get(target['url'], headers={"user-agent": useragent},
-                                                             verify=False, timeout=timeout, allow_redirects=False,
+                                                             verify=False, timeout=timeout, allow_redirects=allow_redir,
                                                              proxies=self.opts.proxy_dict)
 
                                 msg = ["  [+] Finished", ""]
 
                             except requests.ConnectionError:
-                                if target['res'].status_code == 401:
-                                    open("./auth_fail.log", 'w').write(target['url'])
+                                try:
+                                    if target['res'].status_code == 401:
+                                        open("./auth_fail.log", 'w').write(target['url'])
 
+                                except:
+                                    pass
+                                
                                 msg = ["  [x] Not found", ""]
 
                             except socket.timeout:
@@ -212,7 +219,8 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                 if self.opts.getoptions:
                                     try:
                                         res = (requests.options(target['url'], headers={"user-agent": useragent},
-                                                                verify=False, timeout=timeout, allow_redirects=False,
+                                                                verify=False, timeout=timeout,
+                                                                allow_redirects=allow_redir,
                                                                 proxies=self.opts.proxy_dict))
 
                                         if 'allow' in res.headers:
@@ -246,7 +254,7 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                 if self.opts.getcrossdomain:
                                     try:
                                         res = requests.get("%s/crossdomain.xml" % target['url'], verify=False,
-                                                           timeout=timeout, allow_redirects=False,
+                                                           timeout=timeout, allow_redirects=allow_redir,
                                                            proxies=self.opts.proxy_dict)
                                         if res.status_code == 200:
                                             if not self.opts.json_min:
@@ -265,7 +273,7 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
 
                                                 open("./cross_domain/%s_%s_crossdomain.xml" %
                                                      (hostname, target['port']), 'w').write(v)
-                                                self.output.put("      [c] Pulled crossdomain.xml:" +
+                                                self.output.put("      [c] Pulled crossdomain.xml: " +
                                                                 "./cross_domain/%s_%s_crossdomain.xml  " %
                                                                 (hostname, target['port']))
                                             target['crossdomain'] = "y"
@@ -289,7 +297,7 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                 if self.opts.getrobots:
                                     try:
                                         res = requests.get("%s/robots.txt" % target['url'], verify=False,
-                                                           timeout=timeout, allow_redirects=False,
+                                                           timeout=timeout, allow_redirects=allow_redir,
                                                            proxies=self.opts.proxy_dict)
                                         if res.status_code == 200 and "llow:" in res.text:
                                             if not self.opts.json_min:
@@ -336,7 +344,12 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                         except:
                                             pass
 
+                                    while crawling >= spider_thread_limit:
+                                        time.sleep(0.1)
+
+                                    crawling += 1
                                     crawl(target, self.logdir, self.timestamp, self.opts)
+                                    crawling -= 1
 
                                 parsedata(target, self.timestamp, self.scriptpath, self.opts)
                                 self.output.put("%s  [ %s%s ]%s" % (msg[0], hostname, port, msg[1]))
@@ -440,20 +453,18 @@ def screenshot(target, logdir, timestamp, scriptpath, proxy, pjs_path, o, silent
 
 def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
     output.put("      [>] Spidering  :     [ %s ]" % target['url'])
-    target['docs'] = []
 
-    def recurse(url_t1, urls_t2, tabs, depth=0):
-        if opts.verbose:
-            output.put("      [i] depth %s - time %d - urls %s" %
-                       (depth, (datetime.now() - time_start).total_seconds(), len(list(set(urls_visited)))))
-
+    def recurse(url_t1, urls_t2, tabs, depth):
         url_t1 = url_t1.replace(":", "-")  # supplement regx
 
         for url_t2 in urls_t2:
-            if depth > opts.spider_depth:
-                break
+            if opts.verbose:
+                output.put("      [i] [%s] threads %s/%s - depth %s/%s - sec %d/%s - urls %s/%s" %
+                           (target['url'], crawling, opts.spider_thread_limit, depth, opts.spider_depth,
+                            (datetime.now() - time_start).total_seconds(),
+                            opts.spider_timeout, len(list(set(urls_visited))), opts.spider_url_limit))
 
-            elif len(list(set(urls_visited))) > opts.spider_url_limit:
+            if len(list(set(urls_visited))) > opts.spider_url_limit:
                 if opts.verbose:
                     output.put("      [!] Spidering stopped :   [ %s ] - URL limit reached" % target['url'])
 
@@ -468,18 +479,23 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
             if not url_t2 in ("https://ssl", "http://www", "http://", "http://-", "http:", "https:"):  # ga junk
                 coll.append((url_t1, url_t2.replace(":", "-")))
 
+                url_t2_f = url_t2.encode('utf-8','ignore')
                 open('%s/maps/links_%s_%s__%s.txt' %
-                     (logdir, hname, target['port'], timestamp), 'a').write(tabs + url_t2 + "\n")
+                     (logdir, hname, target['port'], timestamp), 'a').write(tabs + url_t2_f + "\n")
 
-                if not url_t2 in urls_visited:
+                if not url_t2 in urls_visited and not (opts.spider_url_blacklist and (url_t2 in url_blacklist)):
                     urls_visited.append(url_t2)
                     p = urlparse(url_t2)
 
                     if p.path.split(".")[-1].lower() in DOC_TYPES and url_t2 not in target['docs']:
                         target['docs'].append(str(url_t2))
 
-                        open('%s/maps/docs_%s_%s__%s.txt' %
-                             (logdir, hname, target['port'], timestamp), 'a').write(url_t2 + "\n")
+                        try:
+                            open('%s/maps/docs_%s_%s__%s.txt' %
+                                 (logdir, hname, target['port'], timestamp), 'a').write(url_t2 + "\n")
+
+                        except:
+                            pass
 
                     else:
                         if opts.spider_follow_subdomains:
@@ -490,61 +506,93 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
 
                         if url_t2_hn in url_t1 or url_t2_hn in opts.alt_domains:
                             try:
-                                d = requests.get(url_t2, headers={"user-agent": useragent, "referer": url_t1},
-                                                 verify=False, timeout=timeout, allow_redirects=False,
-                                                 proxies=opts.proxy_dict).text.replace("\n", "")
+                                dat = requests.get(url_t2, headers={"user-agent": useragent, "referer": url_t1},
+                                                   verify=False, timeout=opts.spider_url_timeout,
+                                                   allow_redirects=allow_redir,
+                                                   proxies=opts.proxy_dict).text.replace("\n", "")
 
-                                urls_t3 = []
-                                for u in list(set(re.findall(URL_REGEX, d, re.I))):
-                                    urls_t3.append(u.split('"')[0].split("'")[0].split(
-                                                   "<")[0].split("--")[0].rstrip('%)/.'))  # supplement the regex
+                                if dat != "":
+                                    urls_t3 = []
+                                    for u in list(set(re.findall(URL_REGEX, dat, re.I))):
+                                        urls_t3.append(u.split('"')[0].split("'")[0].split(
+                                                       "<")[0].split("--")[0].rstrip('%)/.'))  # supplement the regex
 
-                                try:  # parse the html for tags w/ href or source
-                                    cxt = html.fromstring(d)
-                                    for el in cxt.iter():
-                                        if el.tag in ['link', 'a', 'script', 'iframe',
-                                                      'applet', 'object', 'embed', 'form']:
-                                            for i, v in el.items():
-                                                if i in ("src", "href"):
-                                                    if "mailto" in v:
-                                                        try:
-                                                            if not v.split(":")[1] in target['email_addresses']:
-                                                                target['email_addresses'].append(v.split(":")[1])
+                                    try:  # parse the html for tags w/ href or source
+                                        cxt = html.fromstring(dat)
+                                        for el in cxt.iter():
+                                            try:
+                                                if el.tag in ['link', 'a', 'script', 'iframe',
+                                                              'applet', 'object', 'embed', 'form']:
+                                                    for i, v in el.items():
+                                                        if i in ("src", "href"):
+                                                            if "mailto" in v:
+                                                                try:
+                                                                    if not v.split(":")[1] in target['email_addresses']:
+                                                                        target['email_addresses'].append(v.split(":")[1])
 
-                                                        except:
-                                                            target['email_addresses'] = [v.split(":")[1]]
+                                                                except:
+                                                                    target['email_addresses'] = [v.split(":")[1]]
 
-                                                    else:
-                                                        if not v.split("//")[0] in ("http:", "https:"):
-                                                            v = v.replace("../", '')
-                                                            if not v.startswith("/"):
-                                                                v = "/" + v
+                                                            else:
+                                                                if not v.split("//")[0] in ("http:", "https:"):
+                                                                    v = v.replace("../", '')
+                                                                    if not v.startswith("/"):
+                                                                        v = "/" + v
 
-                                                            v = p.scheme + "://" + p.netloc + v
+                                                                    v = p.scheme + "://" + p.netloc + v
 
-                                                        urls_t3.append(v)
+                                                                    urls_t3.append(v)
 
-                                except:
-                                    e = traceback.format_exc().splitlines()
-                                    error_msg("\n".join(e))
+                                            except Exception:
+                                                error = traceback.format_exc().splitlines()[-1]
+                                                error_msg(" [spider] parsing HTML element [ %s ]:\n\t%s" %
+                                                          (target['url'], error))
 
-                                urls_t3 = list(set(urls_t3))
+                                    except:
+                                        e = traceback.format_exc().splitlines()[-1]
+                                        error_msg(" [spider] parsing HTML from [ %s ]:\n\t%s" % (target['url'], e))
 
-                                if len(urls_t3) > 0:
-                                    if not (len(list(set(urls_visited))) > opts.spider_url_limit
-                                            or depth > opts.spider_depth
-                                            or (datetime.now() - time_start).total_seconds() > opts.spider_timeout):
-                                        recurse(url_t2, urls_t3, tabs + "\t", depth + 1)
+                                    urls_t3 = list(set(urls_t3))
+
+                                    if len(urls_t3) > 0:
+                                        if not (len(list(set(urls_visited))) > opts.spider_url_limit
+                                                or depth >= opts.spider_depth
+                                                or (datetime.now() - time_start).total_seconds() > opts.spider_timeout):
+                                            if spider_breadth_first:
+                                                urls_to_crawl.put([url_t2, urls_t3, tabs + "\t", depth + 1])
+
+                                            else:
+                                                recurse(url_t2, urls_t3, tabs + "\t", depth + 1)
 
                             except:
                                 e = traceback.format_exc().splitlines()
-                                error_msg("\n".join(e))
+                                error_msg(" [spider] pulling [ %s ]:\n\t%s" % (target['url'], e))
 
-    coll = []
-    urls_visited = []
+    global crawling
+    if opts.spider_url_blacklist:
+        if os.path.isfile(opts.spider_url_blacklist):
+            url_blacklist = open(opts.spider_url_blacklist).read().split('\n')
+            output.put("        [i] Spidering - blacklisting %s urls." % (len(url_blacklist)-1))
+
+        else:
+            output.put("        [i] Spidering - unable to find blacklist file - " % opts.spider_url_blacklist)
+
+    coll, urls_visited, target['docs'] = [], [], []
     hname = urlparse(target['url']).netloc
     time_start = datetime.now()
-    recurse(target['url'], [target['url']], "\t")
+
+    if spider_breadth_first:
+        urls_to_crawl = Queue()
+        urls_to_crawl.put([target['url'], [target['url']], "\t", 0])
+        while not urls_to_crawl.empty():
+                x, y, t, d = urls_to_crawl.get()
+                recurse(x, y, t, d)
+
+        urls_to_crawl = None
+
+    else:  # length first...
+        recurse(target['url'], [target['url']], "\t", 0)
+
     target['doc_count'] = len(target['docs'])
 
     if len(coll) > 1:
@@ -698,102 +746,109 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
             target['urls'].append(url.split("'")[0].rstrip(')/.'))
 
         # parse the html for different element types
-        try:
-            cxt = html.fromstring(target['res'].content)
-            for el in cxt.iter():
-                items = el.items()
-                tag = el.tag
-
-                # user-defined modules
-                for n, s, t in [m for m in parsermods if str(m[1][0]).lower() == str(tag).lower()]:
-                    # ^ only mods that reference the current element tag
-                    val = ""
+        if target['res'].content != "":
+            try:
+                cxt = html.fromstring(target['res'].content)
+                for el in cxt.iter():
                     try:
-                        if "text" in s[1] and el.text is None:
-                            val = el.text
+                        items = el.items()
+                        tag = el.tag
 
-                        val += " %s" % (" ".join([v for i, v in items if i in s[1]]))
+                        # user-defined modules
+                        for n, s, t in [m for m in parsermods if str(m[1][0]).lower() == str(tag).lower()]:
+                            # ^ only mods that reference the current element tag
+                            val = ""
+                            try:
+                                if "text" in s[1] and el.text is None:
+                                    val = el.text
 
-                        if val != "":
-                            r = (re.findall(s[2], val, re.I))
+                                val += " %s" % (" ".join([v for i, v in items if i in s[1]]))
 
-                            if t == 3:
-                                for i in r:
-                                    if not n in target.keys():
-                                        target[n] = []
+                                if val != "":
+                                    r = (re.findall(s[2], val, re.I))
 
-                                    target[n].append(i)
+                                    if t == 3:
+                                        for i in r:
+                                            if not n in target.keys():
+                                                target[n] = []
 
-                            elif t == 4:
-                                if len(r) > 0:
-                                    target[n] = ["True"]
-                                else:
-                                    target[n] = ["False"]
+                                            target[n].append(i)
 
-                            elif t == 5:
-                                target[n] = [len(r)]
+                                    elif t == 4:
+                                        if len(r) > 0:
+                                            target[n] = ["True"]
+                                        else:
+                                            target[n] = ["False"]
 
-                            else:
-                                raise("invalid modtype - %s" % t)
+                                    elif t == 5:
+                                        target[n] = [len(r)]
 
-                    except:
-                        error = traceback.format_exc().splitlines()
-                        error_msg("\n".join(error))
-                        output.put("  [!] skipping module '%s':\n\t%s\n" % (n, "\n\t".join(error)))
+                                    else:
+                                        raise("invalid modtype - %s" % t)
 
-                # some default checks
-                if tag == "meta":
-                    for i, v in items:
-                        if i == "name":
-                            target[v] = el.text
+                            except:
+                                error = traceback.format_exc().splitlines()
+                                error_msg("\n".join(error))
+                                output.put("  [!] skipping module '%s':\n\t%s\n" % (n, "\n\t".join(error)))
 
-                elif tag == "title":
-                    target['title'] = el.text
+                        # some default checks
+                        if tag == "meta":
+                            for i, v in items:
+                                if i == "name":
+                                    target[v] = el.text
 
-                elif tag == "script":
-                    for i, v in items:
-                        if i == "src":
-                            if not 'file_includes' in target.keys():
-                                target['file_includes'] = []
+                        elif tag == "title":
+                            target['title'] = el.text
 
-                            target['file_includes'].append(v)
+                        elif tag == "script":
+                            for i, v in items:
+                                if i == "src":
+                                    if not 'file_includes' in target.keys():
+                                        target['file_includes'] = []
 
-                    target['script'] = len(items)
+                                    target['file_includes'].append(v)
 
-                elif tag in ['link', 'a']:
-                    for i, v in items:
-                        if i == "href":
-                            if "mailto:" in v:
-                                if not 'email_addresses' in target.keys():
-                                    target['email_addresses'] = []
+                            target['script'] = len(items)
 
-                                target['email_addresses'].append(str(v.split(":")[1]))
+                        elif tag in ['link', 'a']:
+                            for i, v in items:
+                                if i == "href":
+                                    if "mailto:" in v:
+                                        if not 'email_addresses' in target.keys():
+                                            target['email_addresses'] = []
 
-                            else:
-                                target['urls'].append(v)
+                                        target['email_addresses'].append(str(v.split(":")[1]))
 
-                elif tag == "input":
-                    for i, v in items:
-                        if v.lower == "password":
-                            if not 'passwordFields' in target.keys():
-                                target['passwordFields'] = []
+                                    else:
+                                        target['urls'].append(v)
 
-                            target['passwordFields'].append(html.tostring(el))
+                        elif tag == "input":
+                            for i, v in items:
+                                if v.lower == "password":
+                                    if not 'passwordFields' in target.keys():
+                                        target['passwordFields'] = []
 
-                    target['input'] = len(items)
+                                    target['passwordFields'].append(html.tostring(el))
 
-                elif tag in ['iframe', 'applet', 'object', 'embed', 'form']:
-                    target[tag] = len(items)
+                            target['input'] = len(items)
 
-        except Exception, ex:
-            print(ex)
-            error = traceback.format_exc().splitlines()[-1]
-            error_msg(" parsing HTML from [ %s ]:\n\t%s" % (target['url'], error))
-            if opts.verbose:
-                output.put("  [!] Error parsing HTML from:\n\t%s\n" % error)
+                        elif tag in ['iframe', 'applet', 'object', 'embed', 'form']:
+                            target[tag] = len(items)
 
-        finally:
-            cxt = None
+                    except Exception:
+                        error = traceback.format_exc().splitlines()[-1]
+                        error_msg(" parsing HTML element [ %s ]:\n\t%s" % (target['url'], error))
+                        if opts.verbose:
+                            output.put("  [!] Error parsing HTML element:\n\t%s\n" % error)
+
+            except Exception:
+                error = traceback.format_exc().splitlines()[-1]
+                error_msg(" parsing HTML from [ %s ]:\n\t%s" % (target['url'], error))
+                if opts.verbose:
+                    output.put("  [!] Error parsing HTML from:\n\t%s\n" % error)
+
+            finally:
+                cxt = None
 
         if "email_addresses" in target.keys():
             target['email_addresses'] = list(set(target['email_addresses']))

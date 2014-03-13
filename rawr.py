@@ -34,6 +34,10 @@ parser = optparse.OptionParser(usage=usage, version=VERSION)
 parser.add_option('-a',
                   help='Include all open ports in .csv, not just web interfaces. Creates a threat matrix as well.',
                   dest='allinfo', action='store_true', default=False)
+#parser.add_option('-c', metavar="<file>",
+#                  help='Specify RAWR .db file from previous enumeration.' +
+#                       ' Will run same scan as before, producing same output + a comparison HTML report.',
+#                  dest='compfile')
 parser.add_option('-f', metavar="<file>",
                   help='NMap|Metasploit|Nessus|Nexpose|Qualys|OpenVAS file or directory from which to pull files. '
                   'See README for valid formats. Use quotes when using wildcards. '
@@ -75,12 +79,15 @@ group.add_option('--spider', help="Enumerate all urls in target's HTML, create s
                  "  Creates a map (.png) for that site in the <logfolder>/maps folder.",
                  dest='crawl', action='store_true', default=False)
 group.add_option('--spider-opts', metavar="<options>", help="Provide custom settings for crawl.               " +
-                 "s='follow subdomains',d=depth, l='url limit', t=timeout" +
-                 "        Example: --spider-opts s:false,d:2,l:500",
-                 dest='crawl_opts', default=False)
+                 "s='follow subdomains',d=depth, l='url limit', t='crawl timeout', u='url timeout', th='thread limit'" +
+                 "        Example: --spider-opts s:false,d:2,l:500,th:1",
+                 dest='crawl_opts')
 group.add_option('--alt-domains', metavar="<domains>",
                  help="Enable cross-domain spidering on specific domains. (comma-seperated)",
                  dest='alt_domains')
+group.add_option('--blacklist-urls', metavar="<file>",
+                 help="Blacklist specific urls during crawl. Requires a line-seperated input list.",
+                 dest='spider_url_blacklist')
 parser.add_option_group(group)
 
 group = optparse.OptionGroup(parser, "Output Options")
@@ -138,7 +145,10 @@ if len(sys.argv) == 99:
     print(usage)
     sys.exit(2)
 
-if not opts.alt_domains:
+if opts.alt_domains:
+    opts.alt_domains = opts.alt_domains.split(',')
+
+else:
     opts.alt_domains = []
 
 # Look for PhantomJS if needed
@@ -177,15 +187,21 @@ if pjs_path == "" and not opts.noss:
           " run rawr without screenshots (--noss)\n\n  [x] Exiting... !!\n\n")
     sys.exit(1)
 
+opts.compfile = None  # for now
 
 # sanity checks
-if (opts.nmap_il and opts.nmaprng) or (opts.xmlfile and (opts.nmap_il or opts.nmaprng)):
-    parser.error("  [x] Can't use -f, -i, or -n in the same command.")
+if sum(map(bool, [opts.nmap_il, opts.nmaprng, opts.xmlfile, opts.compfile])) > 1:
+    parser.error("  [x] Can't use -c, -f, -i, or -n in the same command.")
     sys.exit(1)
 
-
 # Take a look at our inputs
-if opts.xmlfile:
+if opts.compfile:
+    # check if actual RAWR sqlite3 db output
+    if not True:
+        parser.error("  [x] -c <file> must be a RAWR sqlite3 db file.")
+        sys.exit(1)
+
+elif opts.xmlfile:
     ftemp = []
     if type(opts.xmlfile) == list:   # it's a list
         for f in opts.xmlfile:
@@ -276,13 +292,15 @@ else:
 
     os.chdir(logdir)
 
-try:
-    opts.spider_follow_subdomains = spider_follow_subdomains
-    opts.spider_depth = spider_depth
-    opts.spider_timeout = spider_timeout
-    opts.spider_url_limit = spider_url_limit
-    # opts.spider_url_max_hits = spider_url_max_hits
+opts.spider_follow_subdomains = spider_follow_subdomains
+opts.spider_depth = int(spider_depth)
+opts.spider_timeout = int(spider_timeout)
+opts.spider_url_timeout = int(spider_url_timeout)
+opts.spider_url_limit = int(spider_url_limit)
+opts.spider_thread_limit = int(spider_thread_limit)
+# opts.spider_url_max_hits = spider_url_max_hits
 
+try:
     if opts.crawl_opts:
         for o in opts.crawl_opts.split(','):
             a, v = o.split(':')
@@ -296,19 +314,27 @@ try:
                     writelog("\n  [i] spider_follow_subdomains set to 'True'", logfile, opts)
 
             elif a == "d" and int(v) in range(0, 999):
-                opts.spider_depth = v
+                opts.spider_depth = int(v)
                 writelog("\n  [i] spider_depth set to '%s'" % v, logfile, opts)
 
             elif a == "t" and int(v) in range(0, 999):
-                opts.spider_timeout = v
+                opts.spider_timeout = int(v)
                 writelog("\n  [i] spider_timeout set to '%s'" % v, logfile, opts)
 
+            elif a == "th" and int(v) in range(0, 999):
+                opts.spider_thread_limit = int(v)
+                writelog("\n  [i] spider_thread_limit set to '%s'" % v, logfile, opts)
+
             elif a == "l" and int(v) in range(0, 9999):
-                opts.spider_url_limit = v
+                opts.spider_url_limit = int(v)
                 writelog("\n  [i] spider_url_limit set to '%s'" % v, logfile, opts)
 
+            elif a == "u" and int(v) in range(0, 9999):
+                opts.spider_url_timeout = int(v)
+                writelog("\n  [i] spider_url_timeout set to '%s'" % v, logfile, opts)
+
             # elif a == "h" and int(v) in range(0, 999):
-            #        opts.spider_url_max_hits = v
+            #        opts.spider_url_max_hits = int(v)
             #        writelog("\n  [i] spider_url_max_hits set to '%s'" % v, logfile, opts)
 
 except Exception, ex:

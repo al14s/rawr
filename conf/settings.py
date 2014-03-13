@@ -2,10 +2,11 @@
 report_title = "Web Interface Enumeration Results"  # default title if '--title' is not specified
 
 # Scan settings
-timeout = 15          # timeout in seconds for each web call (screenshots and geturl)
-ss_delay = 1          # delay in seconds or page to render before screenshot
-nmapspeed = 4         # nmap
-nthreads = 25         # number of threads for the info run
+timeout = 15            # timeout in seconds for each web call (screenshots and geturl)
+ss_delay = 1            # delay in seconds or page to render before screenshot
+nmapspeed = 4           # nmap -T<n> setting
+nthreads = 25           # number of threads for the info run
+allow_redir = False     # Allow redirects for all web calls
 useragent = 'Mozilla/5.0 (Windows; U; MSIE 9.0; WIndows NT 9.0; en-US)'  # for the info run and screenshots.
 ports = "80,443,8080,8088,8443"	 # default scan ports
 fuzzdb = "66,80,81,443,445,457,1080,1100,1241,1352,1433,1434,1521,1944,2301,3128,3306,4000,4001" + \
@@ -14,10 +15,13 @@ fuzzdb = "66,80,81,443,445,457,1080,1100,1241,1352,1433,1434,1521,1944,2301,3128
 
 # Spidering options
 spider_follow_subdomains = True     # Allows all subdomains of given url.
-spider_depth = 3                    # Number of layers to crawl.  ex: www.domain.com/1/2/3.html
-spider_timeout = 180                # Time in seconds after which the crawl will cease.
+spider_depth = 3                    # Number of layers to deep crawl.
+spider_timeout = 300                # Time in seconds after which the entire crawl will cease.
+spider_url_timeout = 10             # Timeout in seconds for each web call (screenshots and geturl).
 spider_url_limit = 300              # Maximum number of urls to crawl.
-#spider_url_max_hits = 15            # Maximum number of times to hit a single url - not incl. variables
+spider_thread_limit = 4             # Maximum number of crawls to perform at a time.
+spider_breadth_first = True         # Either length or breadth first.
+#spider_url_max_hits = 15            # Maximum number of times to hit a single url -  not implemented yet
 
 # CSV settings
 csv_sort_col = "ipv4"     # The column name of the field by which the CSV will be ordered.  *Must exist in 'flist'*

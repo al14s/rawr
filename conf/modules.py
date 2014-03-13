@@ -20,6 +20,12 @@ modules = [
         """[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}""",   # In the whole response content - look for email addresses
         WHOLEDOC_CONTENT),
     (
+        "phone_numbers",
+        """^(?:(?:\+?1\s*(?:[.-]\s*)?)?(?:\(\s*([2-9]1[02-9]|[2-9][02-8]1|[2-9][02-8][02-9])\s*\)|([2-9]1[02-9]""" +
+        """|[2-9][02-8]1|[2-9][02-8][02-9]))\s*(?:[.-]\s*)?)?([2-9]1[02-9]|[2-9][02-9]1|[2-9][02-9]{2})\s*(?:[.-]""" +
+        """\s*)?([0-9]{4})(?:\s*(?:#|x\.?|ext\.?|extension)\s*(\d+))?$""",
+        WHOLEDOC_CONTENT),
+    (
         "HTML5",
         """<!DOCTYPE html>""",
         WHOLEDOC_TRUEFALSE),
@@ -31,21 +37,21 @@ modules = [
         "comments",
         """<!--(.*?)-->""",
         WHOLEDOC_CONTENT),
-    #(
-    #    "ga_docwrites",
-    #    """old google analytics doc.writes'""",
-    #    WHOLEDOC_CONTENT),
-    #(
-    #    "Flash_Objects",
-    #    """/new[\s]+FlashObject[\s]*\([\s]*['"]?[^'^"]+/""",
-    #    WHOLEDOC_COUNT),
-    #(
-    #    "Flash_Objects",
-    #    """/new[\s]+SWFObject[\s]*\([\s]*['"]?[^'^"]+/""",
-    #    WHOLEDOC_COUNT),
-    #(
-    #    "Flash_Objects",
-    #    """/\.embedSWF[\s]*\([\s]*["']?[^'^"]+/""",
-    #    WHOLEDOC_COUNT
-    #)
+    (
+        "docwrites",
+        """document.write'""",
+        WHOLEDOC_CONTENT),
+    (
+        "Flash_Objects",
+        """new[\s]+FlashObject[\s]*\([\s]*['"]?[^'^"]+""",
+        WHOLEDOC_COUNT),
+    (
+        "Flash_Objects",
+        """new[\s]+SWFObject[\s]*\([\s]*['"]?[^'^"]+""",
+        WHOLEDOC_COUNT),
+    (
+        "Flash_Objects",
+        """\.embedSWF[\s]*\([\s]*["']?[^'^"]+""",
+        WHOLEDOC_COUNT
+    )
 ]

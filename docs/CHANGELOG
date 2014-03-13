@@ -1,3 +1,17 @@
+3/12/2014
+    removed fields w/ blank values, and 'hist' from html report 'info' popup
+    removed a debug message during spider
+    added try/except within html parsing 'for' loop to allow for element parse failure w/o dropping entire page
+    added 'phone_numbers' module and enabled 'docwrites' and 'Flash_Objects'
+    added checking for blank responses to avoid HTML parsing errors
+    crawl now checking and correctly following whitelisted domains
+    added --blacklist-urls - can feed it an input list of urls to ignore
+    now runs 4 a max of spider jobs at a time by default (changeable via --spider-opts or settings.py)
+    added breadth vs. length option to spidering
+    seperated url call timeout for spidering, also configurable via cli and settings.py
+    started forming code for '-c', or the option to use scan settings from a prior scan (.db?) and rerun
+        would add to the .db, then create a csv and HTML report to show differences between the two scans
+
 3/3/2014
     code optimization
 

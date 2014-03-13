@@ -13,3 +13,11 @@ ToDo
         drop identical targets
         make target fields cumulative
         change flist to apply only to CSV
+
+    compare .db file from previous scan (in progress)
+
+    deal with diagrams dying when there are too many discovered URLs
+        split into multiple?
+        limit the number per depth level?
+
+    give option to pull and parse docs and images for sensitive info

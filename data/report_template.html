@@ -246,7 +246,11 @@
 			function showinfo(id){
 				data = JSON.parse($('#'+String(id)).html());
 				page = '<h3>Server Information</h3>';
-				for (key in data) { if (key != "id") {page += key + ':<br /> &nbsp; ' + data[key] + '<br /><br />';} }
+				for (key in data) {
+				    if (jQuery.inArray(key, ["id", "hist"]) < 0 && jQuery.inArray(data[key], ["", "[]"]) < 0) {
+				        page += key + ':<br /> &nbsp; ' + data[key] + '<br /><br />';
+				    }
+				}
 				$('#infoviewtxt').html(page);
 				closeall();
 				$('#infoview').css({display:"block"});
