@@ -1,9 +1,10 @@
 3/19/2014
+    fixed logic bug in link list printing
     formatting bugs from colorization update
-    
     fixed spidering bugs:
         links file shows incorrect tree when 'breadth first'
-            just made it a 'uniqued' list of links until we're using nosqlite for 'targets' object
+            # just made it a 'uniqued' list of links until we're using nosqlite for 'targets' object
+            # if it's 'depth first', it will still be in a tabbed tree structure
         crawl goes to depth +1
         diagram shows soup sandwich (fixed w/ crawl depth correction)
         deal with diagrams dying when there are too many discovered URLs

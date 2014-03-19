@@ -340,7 +340,7 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                     except socket.timeout:
                                         self.output.put("      " + TCOLORS.RED + "[x]" + TCOLORS.END +
                                                         " Timed out pulling robots.txt :      [ %s:%s ]" %
-                                                                (hostname, target['port']))
+                                                        (hostname, target['port']))
 
                                     except requests.Timeout:
                                         msg = ["  " + TCOLORS.RED + "[x]" + TCOLORS.END + " Timed out", ""]
@@ -398,36 +398,37 @@ def screenshot(target, logdir, timestamp, scriptpath, proxy, pjs_path, o, silent
     err = '.'
 
     try:
-        lp = "%s/rawr_%s.log" % (logdir, timestamp)
-        if silent:
-            lp = "/dev/null"
+        if not os.path.exists(filename):
+            lp = "%s/rawr_%s.log" % (logdir, timestamp)
+            if silent:
+                lp = "/dev/null"
 
-        with open(lp, 'ab') as log_pipe:
-            start = datetime.now()
-            cmd = [pjs_path]
+            with open(lp, 'ab') as log_pipe:
+                start = datetime.now()
+                cmd = [pjs_path]
 
-            if proxy:
-                cmd.append("--proxy=%s" % proxy['http'])  # Same ip:port is used for both http and https.
+                if proxy:
+                    cmd.append("--proxy=%s" % proxy['http'])  # Same ip:port is used for both http and https.
 
-            cmd += "--web-security=no", "--ignore-ssl-errors=yes", "--ssl-protocol=any",\
-                   (scriptpath + "/data/screenshot.js"), target['url'], filename, useragent, str(ss_delay)
+                cmd += "--web-security=no", "--ignore-ssl-errors=yes", "--ssl-protocol=any",\
+                       (scriptpath + "/data/screenshot.js"), target['url'], filename, useragent, str(ss_delay)
 
-            process = subprocess.Popen(cmd, stdout=log_pipe, stderr=log_pipe)
+                process = subprocess.Popen(cmd, stdout=log_pipe, stderr=log_pipe)
 
-            while process.poll() is None:
-                time.sleep(0.1)
-                now = datetime.now()
-                if (now - start).seconds > timeout + 1:
-                    try:
-                        sig = getattr(signal, 'SIGKILL', signal.SIGTERM)
-                        os.kill(process.pid, sig)
-                        os.waitpid(-1, os.WNOHANG)
-                        err = ' Timed Out.'
+                while process.poll() is None:
+                    time.sleep(0.1)
+                    now = datetime.now()
+                    if (now - start).seconds > timeout + 1:
+                        try:
+                            sig = getattr(signal, 'SIGKILL', signal.SIGTERM)
+                            os.kill(process.pid, sig)
+                            os.waitpid(-1, os.WNOHANG)
+                            err = ' Timed Out.'
 
-                    except:
-                        pass
+                        except:
+                            pass
 
-                    break
+                        break
 
         if os.path.exists(filename): 
             if os.stat(filename).st_size > 0:

@@ -14,14 +14,6 @@ ToDo
         make target fields cumulative
         change flist to apply only to CSV
 
-    "-m" to pull and parse docs and images for sensitive info
-        form PIL import Image
-        from PIL.ExifTags import TAGS
-        i = Image.open("image.jpg")
-        for t, v in i._getexif().items(): print v
-        use <logfolder>/meta/<hostname>_filename for downloaded files
-        use <logfolder>/meta/<hostname>_docs.txt for a list of urls for files found (currently created in ./maps folder)
-
     scan comparison functionality
         compare two scans within one db
         compare a db scan with new scan
