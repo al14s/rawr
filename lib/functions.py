@@ -1688,8 +1688,8 @@ def update(force, ckinstall, pjs_path, scriptpath):
         if force or (pjs_ver > pjs_curr):
             if not force:
                 if pjs_curr != 0 and (pjs_ver > pjs_curr):
-                    choice = raw_input('\n  " + TCOLORS.BLUE + "[i]" + TCOLORS.END +'
-                                       ' " phantomJS %s found (current is %s) - do you want to update? [Y/n]: ' %
+                    choice = raw_input("\n  " + TCOLORS.BLUE + "[i]" + TCOLORS.END +
+                                       " phantomJS %s found (current is %s) - do you want to update? [Y/n]: " %
                                        (pjs_curr, pjs_ver))
                     if choice.lower() in ("y", "yes", ''):
                         force = True
@@ -1703,8 +1703,8 @@ def update(force, ckinstall, pjs_path, scriptpath):
                         sys.exit(0)
 
                     else:
-                        choice = raw_input('\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +'
-                                           ' " phantomJS was not found - do you want to install it? [Y/n]: ')
+                        choice = raw_input("\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                                           " phantomJS was not found - do you want to install it? [Y/n]: ")
                         if not (choice.lower() in ("y", "yes", '')):
                             print("\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Exiting...\n\n")
                             sys.exit(0)
