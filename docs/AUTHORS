@@ -1,25 +1,27 @@
                                     AUTHORS
 
 RAWR would not be possible if it weren't for all of your feedback on what it
- needed to be in order to make your job easier. My sincere thanks to everyone
+ needs to be in order to make your job easier. My sincere thanks to everyone
  who tested, for your valuable feedback.
 
 	...except for Tom, who finds new ways to break it after every update.
 
 
-	DEVELOPERS:
-		Adam "al14s" Byers		@al14s
+	DEVELOPERS (RAWR):
+		Adam Byers              @al14s
+		Tom Moore			    @c0ncealed
 
 
-	CONTRIBUTORS:  
-		Tom Moore			Project Direction	@c0ncealed
-		Bryan Tobey			Tester			@_fmm
-		Chris Teodorski		Tester			@can0beans
+	DEVELOPERS (OTHER):
+		fyodor				    Creator of NMap
+		Ariya Hidayat		    Creator of PhantomJS
+		WEBNet77.net		    Source, IPtoCountry.csv
+
+
+	CONTRIBUTORS:
+		Bryan Tobey			Tester              @_fmm
+		Chris Teodorski		Tester              @can0beans
 		Artis Schlossberg	Tester, SSL suggestion
 		human39				Tester
 		justbill			Tester
-		fyodor				Source, scanme.nmap.org
-		WEBNet77.net		Source, IPtoCountry.csv
-		Ariya Hidayat		Creator of PhantomJS
 		Richard Stevens     Tester
-

@@ -1,46 +1,40 @@
-functionality checks, usually done in this order (on Kali, OSX, and Win7):
-
-SCREENSHOTS - 
-	./phantomjs --web-security=no --ignore-ssl-errors=yes --ssl-protocol=any ../../../data/screenshot.js http://www.google.com test.png "Mozilla/5.0 (Windows NT 5.1; rv:8.0) Gecko/20100101 Firefox/7.0" 1
-
-
-
 ./rawr.py --check-install
-./rawr.py -u
-	check file presence and their locations
-	rerun and check file detection
+    checks version of NMap & phantomJS, will update pJS if needed - will prompt
 
 ./rawr.py --force-install
+    checks version of NMap & phantomJS, will update pJS if needed - no prompt
+
+./rawr.py -u
+    updates defpass and iptocountry csv - will prompt if update is available
+
 ./rawr.py -U
-	check file presence and their locations
-	check timestamps to make sure file was overwritten
-	rerun and check file detection
-	change version # in script and rerun, 'updating' the script
-		**SAVE A COPY - your changes will be overwritten!
+    updates defpass and iptocountry csv - no prompt
 
-./rawr.py -n www.google.com
-./rawr.py -n www.google.com -p 80,443 -o -r --downgrade
-	check html page
-	check images, cookies for content
-	check html_res for:  style.css, jquery.js, nmap.xsl
-
-./rawr.py -n <sharedhost> -b -p 80
-	watch for:
-		duplicate bing entries
-		infinite loop
-		errors on bing calls
-
-./rawr.py -n scanme.nmap.org -p fuzzdb -d scans
-./rawr.py -n scanme.nmap.org -p 80 -d scans -z
-	look for proper placement of log folder
-	check for proper placement of compressed folder
-
-./rawr.py -n scanme.nmap.org -p 80 -d scans --spider
-	check <log folder>/maps/  for .png maps of each site
-	
-./rawr.py -n www.google.com -p 443 --title "War and Peace" --sslv -d scans -z
+./rawr.py -n scanme.nmap.org -a -p all -z --title "War and Peace" --logo "image.png" --sslv
+	verify full contents of compressed folder
 	check for presence of extended SSL data in .csv
-	check for "War and Peace" in the HTML report title (printable view)
+	check for logo pic & "War and Peace" in the HTML report title (printable view)
+	check html report for content, functionality
+	check threat matrix for 'all open ports'
 
-./rawr.py -n canhazcode.com --spider -p 80 -d scans
-	check maps/ for .png and .txt for each site
+./rawr.py -n <sharedhost> -b -d scans -p 80 -o -x -r --downgrade
+	watch for duplicate bing entries, infinite loops, errors on bing calls
+	results should be located in 'scans' folder
+	check ./ssl_certs, ./robots, ./crossdomain and ./cookies for content
+	check server info .csv for HTTP_OPTIONS data
+	watch w/ wireshark - check requests for http/1.0
+	ports other than 80
+
+./rawr.py -n <site or IP> --spider -p fuzzdb
+	make sure the fuzzdb list was used
+	check <log folder>/maps/  for .png maps and .txt lists of docs & links for each site
+
+./rawr.py -n <site or IP> --spider --spider-opts d:2,l:100,t:10,s:f --alt-domains <domain>
+	watch for custom spider option settings
+	watch for spidering of specified external domains
+
+./rawr.py -n <site or IP> --json
+    stdout - only JSON, files created in background
+
+./rawr.py -n <site or IP> --json-min -b -d scans -p 80 -o -x -r --downgrade --sslv -z -a
+    nothing but JSON strings

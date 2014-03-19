@@ -12,7 +12,7 @@ a { cursor:default; text-decoration:none;color:#000; }
 #iplistdiv{width:100%;overflow:auto;height:200px;resize:vertical;}
 #copyall #close{float:right;margin:10;}
 #picview{position:fixed;z-index:3999;display:none;background:#ffffff;text-align:right;}
-#srchindex{position:absolute;left:160px;top:38px;}
+#srchindex{position:absolute;left:180px;top:36px;}
 #cbtxt{border:0px;}
 #imgonly{width:90px;}
 #hdinfo{font-size:12px;color:#ffffff;font-weight:bold;text-shadow: #35333A 0.1em 0.1em 0.25em;position:absolute;right:5px;top:50px;margin: 0px;padding: 0px;}
