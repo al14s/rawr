@@ -1,4 +1,6 @@
 3/19/2014
+    formatting bugs from colorization update
+    
     fixed spidering bugs:
         links file shows incorrect tree when 'breadth first'
             just made it a 'uniqued' list of links until we're using nosqlite for 'targets' object

@@ -1793,9 +1793,8 @@ def update(force, ckinstall, pjs_path, scriptpath):
     if force or (defpass_ver > defpass_curr):
         # defpass
         if not force:
-            choice = raw_input('\n  " + TCOLORS.YELLOW +'
-                               ' "[!]" + TCOLORS.END + " Update defpass.csv from rev.%s to rev.%s? [Y/n]: ' %
-                               (defpass_curr, defpass_ver))
+            choice = raw_input("\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                               " Update defpass.csv from rev.%s to rev.%s? [Y/n]: " % (defpass_curr, defpass_ver))
             if choice.lower() in ("y", "yes", ''):
                 force = True
 
@@ -1844,9 +1843,8 @@ def update(force, ckinstall, pjs_path, scriptpath):
     if force or (ip2c_ver > ip2c_curr):
         # IpToCountry
         if not force:
-            choice = raw_input('\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +'
-                               ' " Update IpToCountry.csv from rev.%s to rev.%s? [Y/n]: ' %
-                               (ip2c_curr, ip2c_ver))
+            choice = raw_input("\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                               " Update IpToCountry.csv from rev.%s to rev.%s? [Y/n]: " % (ip2c_curr, ip2c_ver))
             if choice.lower() in ("y", "yes", ''):
                 force = True
 
