@@ -478,7 +478,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
         url_t1 = url_t1.strip('"/\; ()')
 
         for url_t2 in urls_t2:
-            url_t2 = url_t2.strip('"/\; ()')
+            url_t2 = url_t2.strip('"/\; ()').replace("/#", "")
 
             if opts.verbose:
                 output.put("      " + TCOLORS.BLUE + "[i]" + TCOLORS.END +
@@ -612,7 +612,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
 
     if spider_breadth_first:
         urls_to_crawl = Queue()
-        urls_to_crawl.put([target['url'], [target['url']], "\t", 0])
+        urls_to_crawl.put([target['url'], [target['url']], "\t", 1])
         while not urls_to_crawl.empty():
                 x, y, t, d = urls_to_crawl.get()
                 recurse(x, y, t, d)
@@ -620,7 +620,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
         urls_to_crawl = None
 
     else:  # length first
-        recurse(target['url'], [target['url']], "\t", 0)
+        recurse(target['url'], [target['url']], "\t", 1)
 
     target['doc_count'] = len(target['docs'])
 
@@ -636,7 +636,6 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
 
             c = []
             for x, y in coll:  # Add nodes and edges
-                print(x, y)
                 if not x in c:
                     c.append(x)
 

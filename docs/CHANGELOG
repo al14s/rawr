@@ -1,3 +1,13 @@
+3/19/2014
+    fixed spidering bugs:
+        links file shows incorrect tree when 'breadth first'
+            just made it a 'uniqued' list of links until we're using nosqlite for 'targets' object
+        crawl goes to depth +1
+        diagram shows soup sandwich (fixed w/ crawl depth correction)
+        deal with diagrams dying when there are too many discovered URLs
+            will provide documentation and control recommendations + warnings on repo instruction page
+            future plan is to break the diagrams up at a certain point
+
 3/18/2014
     colorize output
 
