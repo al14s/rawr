@@ -130,7 +130,8 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                     except:
                                         error = traceback.format_exc().splitlines()
                                         error_msg("\n".join(error))
-                                        self.output.put("  [x] Bing>DNS:\n\t%s\n" % "\n\t".join(error))
+                                        self.output.put("  " + TCOLORS.RED + "[x]" + TCOLORS.END +
+                                                        " Bing>DNS:\n\t%s\n" % "\n\t".join(error))
                                         bing_res = ""
 
                                     hostnames = []
@@ -145,7 +146,8 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                     if len(hostnames) > 0:
                                         # remove any duplicates from our list of domains...
                                         hostnames = list(set(hostnames))
-                                        self.output.put("  [+] Bing>DNS\t: found %s DNS names for %s" %
+                                        self.output.put("  " + TCOLORS.CYAN + "[+]" + TCOLORS.END +
+                                                        " Bing>DNS\t: found %s DNS names for %s" %
                                                         (len(hostnames), target['ipv4']))
 
                                         # distribute the load
@@ -154,12 +156,14 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                                 new_target = target.copy()
                                                 new_target['is_bing_result'] = True
                                                 new_target['hostnames'] = [hostname.strip()]
-                                                self.output.put("  [+] Bing>DNS\t: [ %s ] injected into queue." %
+                                                self.output.put("  " + TCOLORS.CYAN + "[+]" + TCOLORS.END +
+                                                                " Bing>DNS\t: [ %s ] injected into queue." %
                                                                 (new_target['hostnames'][0]))
                                                 q.put(new_target)
 
                                     else:
-                                        self.output.put("  [x] Bing>DNS\t: found no DNS entries for %s" %
+                                        self.output.put("  " + TCOLORS.RED + "[x]" + TCOLORS.END +
+                                                        " Bing>DNS\t: found no DNS entries for %s" %
                                                         (target['ipv4']))
 
                                     binged[target['ipv4']] = [hostnames, [target['port']]]
@@ -176,23 +180,25 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                 new_target = target.copy()
                                 new_target['hostnames'] = [hostname.strip()]
                                 q.put(new_target)
-                                self.output.put("  [+] Off-loaded %s:%s to the queue. [ %s%s ]" %
+                                self.output.put("  " + TCOLORS.BLUE + "[i]" + TCOLORS.END +
+                                                " Off-loaded %s:%s to the queue. [ %s:%s ]" %
                                                 (new_target['hostnames'][0],
                                                  new_target['port'],
-                                                 target['ipv4'], port))
+                                                 target['hostnames'][0], target['port']))
 
                         if len(target['hostnames']) > 0:
                             hostname = target['hostnames'][0]
 
                             target['url'] = prefix + hostname + port
-                            self.output.put("  [>] Pulling\t: " + hostname + ":" + target['port'])
+                            self.output.put("  " + TCOLORS.GREEN + "[>]" + TCOLORS.END +
+                                            " Pulling\t: " + hostname + ":" + target['port'])
 
                             try:
                                 target['res'] = requests.get(target['url'], headers={"user-agent": useragent},
                                                              verify=False, timeout=timeout, allow_redirects=allow_redir,
                                                              proxies=self.opts.proxy_dict)
 
-                                msg = ["  [+] Finished", ""]
+                                msg = ["  " + TCOLORS.GREEN + "[>]" + TCOLORS.END + " Finished", ""]
 
                             except requests.ConnectionError:
                                 try:
@@ -202,18 +208,19 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                 except:
                                     pass
                                 
-                                msg = ["  [x] Not found", ""]
+                                msg = ["  " + TCOLORS.RED + "[x]" + TCOLORS.END + " Not found", ""]
 
                             except socket.timeout:
-                                msg = ["  [x] Timed out", ""]
+                                msg = ["  " + TCOLORS.RED + "[x]" + TCOLORS.END + " Timed out", ""]
 
                             except requests.Timeout:
-                                msg = ["  [x] Timed out", ""]
+                                msg = ["  " + TCOLORS.RED + "[x]" + TCOLORS.END + " Timed out", ""]
 
                             except:
                                 error = traceback.format_exc().splitlines()
                                 error_msg("\n".join(error))
-                                msg = ["  [x] Error ", ":\n\t%s\n" % "\n\t".join(error)]
+                                msg = ["  " + TCOLORS.RED + "[x]" + TCOLORS.END +
+                                       " Error ", ":\n\t%s\n" % "\n\t".join(error)]
 
                             if 'res' in target.keys():
                                 if self.opts.getoptions:
@@ -226,22 +233,26 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                         if 'allow' in res.headers:
                                             target['options'] = res.headers['allow'].replace(",", " | ")
 
-                                        self.output.put("      [o] Pulled OPTIONS : [ %s ]" % target['url'])
+                                        self.output.put("      " + TCOLORS.PURPLE + "[o]" + TCOLORS.END +
+                                                        " Pulled OPTIONS : [ " + hostname + ":" + target['port'] + " ]")
 
                                     except requests.ConnectionError:
-                                        msg = ["  [x] Not found", ""]
+                                        msg = ["  " + TCOLORS.RED + "[x]" + TCOLORS.END + " Not found", ""]
 
                                     except socket.timeout:
-                                        self.output.put("      [x] Timed out pulling OPTIONS: [ %s ]" % target['url'])
+                                        self.output.put("      " + TCOLORS.RED + "[x]" + TCOLORS.END +
+                                                        " Timed out pulling OPTIONS: [ " +
+                                                        hostname + ":" + target['port'] + " ]")
 
                                     except requests.Timeout:
-                                        msg = ["  [x] Timed out", ""]
+                                        msg = ["  " + TCOLORS.RED + "[x]" + TCOLORS.END + " Timed out", ""]
 
                                     except:
                                         error = traceback.format_exc().splitlines()
                                         error_msg("\n".join(error))
-                                        self.output.put("      [x] Failed pulling OPTIONS: [ %s ]\n\t%s\n" %
-                                                        (target['url'], "\n\t".join(error)))
+                                        self.output.put("      " + TCOLORS.RED + "[x]" + TCOLORS.END +
+                                                        " Failed pulling OPTIONS: [ %s ]\n\t%s\n" %
+                                                        (hostname + ":" + target['port'], "\n\t".join(error)))
 
                                 if not self.opts.json_min:
                                     target['hist'] = 256
@@ -273,25 +284,27 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
 
                                                 open("./cross_domain/%s_%s_crossdomain.xml" %
                                                      (hostname, target['port']), 'w').write(v)
-                                                self.output.put("      [c] Pulled crossdomain.xml: " +
-                                                                "./cross_domain/%s_%s_crossdomain.xml  " %
-                                                                (hostname, target['port']))
+                                                self.output.put("      " + TCOLORS.PURPLE + "[c]" + TCOLORS.END +
+                                                                " Pulled crossdomain.xml : [ %s ]" %
+                                                                (hostname + ":" + target['port']))
                                             target['crossdomain'] = "y"
 
                                     except requests.ConnectionError:
-                                        msg = ["  [x] Not found", ""]
+                                        msg = ["  " + TCOLORS.RED + "[x]" + TCOLORS.END + " Not found", ""]
 
                                     except socket.timeout:
-                                        self.output.put("      [x] Timed out pulling crossdomain.xml: [ %s%s ]" %
-                                                        (hostname, port))
+                                        self.output.put("      " + TCOLORS.RED + "[x]" + TCOLORS.END +
+                                                        " Timed out pulling crossdomain.xml : [ %s ]" %
+                                                        (hostname + ":" + target['port']))
 
                                     except requests.Timeout:
-                                        msg = ["  [x] Timed out", ""]
+                                        msg = ["  " + TCOLORS.RED + "[x]" + TCOLORS.END + " Timed out", ""]
 
                                     except:
                                         error = traceback.format_exc().splitlines()
                                         error_msg("\n".join(error))
-                                        self.output.put("      [x] Failed pulling crossdomain.xml:\n\t%s\n" %
+                                        self.output.put("      " + TCOLORS.RED + "[x]" + TCOLORS.END +
+                                                        " Failed pulling crossdomain.xml :\n\t%s\n" %
                                                         "\n\t".join(error))
 
                                 if self.opts.getrobots:
@@ -316,25 +329,27 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
 
                                                 open("./robots/%s_%s_robots.txt" %
                                                      (hostname, target['port']), 'w').write(v)
-                                                self.output.put("      [r] Pulled robots.txt:  ./" +
-                                                                "robots/%s_%s_robots.txt " % (hostname, target['port']))
+                                                self.output.put("      " + TCOLORS.PURPLE + "[r]" + TCOLORS.END +
+                                                                " Pulled robots.txt :      [ %s:%s ]" %
+                                                                (hostname, target['port']))
                                             target['robots'] = "y"
 
                                     except requests.ConnectionError:
-                                        msg = ["  [x] Not found", ""]
+                                        msg = ["  " + TCOLORS.RED + "[x]" + TCOLORS.END + " Not found", ""]
 
                                     except socket.timeout:
-                                        self.output.put("      [x] Timed out pulling robots.txt: [ %s%s ]" %
-                                                        (hostname, port))
+                                        self.output.put("      " + TCOLORS.RED + "[x]" + TCOLORS.END +
+                                                        " Timed out pulling robots.txt :      [ %s:%s ]" %
+                                                                (hostname, target['port']))
 
                                     except requests.Timeout:
-                                        msg = ["  [x] Timed out", ""]
+                                        msg = ["  " + TCOLORS.RED + "[x]" + TCOLORS.END + " Timed out", ""]
 
                                     except:
                                         error = traceback.format_exc().splitlines()
                                         error_msg("\n".join(error))
-                                        self.output.put("      [x] Failed pulling robots.txt:\n\t%s\n" %
-                                                        "\n\t".join(error))
+                                        self.output.put("      " + TCOLORS.RED + "[x]" + TCOLORS.END +
+                                                        " Failed pulling robots.txt :\n\t%s\n" % "\n\t".join(error))
 
                                 if self.opts.crawl and not self.opts.json_min:
                                     if not os.path.exists("maps"):
@@ -357,7 +372,8 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                     except:
                         error = traceback.format_exc().splitlines()
                         error_msg("\n".join(error))
-                        self.output.put("  [x] Failed : [ %s%s ]\n\t%s\n" % (hostname, port, "\n\t".join(error)))
+                        self.output.put("  " + TCOLORS.RED + "[x]" + TCOLORS.END +
+                                        " Failed : [ %s:%s ]\n\t%s\n" % (hostname, target['port'], "\n\t".join(error)))
 
                     self.busy = False
 
@@ -366,7 +382,8 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                         if t.busy:
                             busy_count += 1
 
-                    self.output.put("  [i] Main queue size [ %s ] - Threads Busy/Total [ %s/%s ]" %
+                    self.output.put("  " + TCOLORS.BLUE + "[i]" + TCOLORS.END +
+                                    " Main queue size [ %s ] - Threads Busy/Total [ %s/%s ]" %
                                     (str(q.qsize()), busy_count, nthreads))
 
                     q.task_done()
@@ -414,7 +431,7 @@ def screenshot(target, logdir, timestamp, scriptpath, proxy, pjs_path, o, silent
 
         if os.path.exists(filename): 
             if os.stat(filename).st_size > 0:
-                o.put('      [+] Screenshot :     [ %s ]' % target['url'])
+                o.put("      " + TCOLORS.CYAN + "[+]" + TCOLORS.END + " Screenshot :     [ %s ]" % target['url'])
 
                 try:  # histogram time!
                     r, g, b, c = 0, 0, 0, 0
@@ -434,7 +451,8 @@ def screenshot(target, logdir, timestamp, scriptpath, proxy, pjs_path, o, silent
                     return 0
 
             else:
-                o.put('      [X] Screenshot :     [ %s ] Failed - 0 byte file. Deleted.' % target['url'])
+                o.put("      " + TCOLORS.RED + "[x]" + TCOLORS.END +
+                      " Screenshot :     [ %s ] Failed - 0 byte file. Deleted." % target['url'])
                 try:
                     os.remove(filename)
                     shutil.copyfile(scriptpath + "/data/error.png", "%s/images/error.png" % logdir)
@@ -442,48 +460,59 @@ def screenshot(target, logdir, timestamp, scriptpath, proxy, pjs_path, o, silent
                 except:
                     pass
         else:
-            o.put('      [X] Screenshot :     [ %s ] Failed - %s' % (target['url'], err))
+            o.put("      " + TCOLORS.RED + "[x]" + TCOLORS.END +
+                  " Screenshot :     [ %s ] Failed - %s" % (target['url'], err))
             shutil.copyfile(scriptpath + "/data/error.png", "%s/images/error.png" % logdir)
 
     except:
         error = traceback.format_exc().splitlines()
         error_msg("\n".join(error))
-        o.put("      [!] Screenshot :     [ %s ] Failed\n\t%s\n" % (target['url'], "\n\t".join(error)))
+        o.put("      " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+              " Screenshot :     [ %s ] Failed\n\t%s\n" % (target['url'], "\n\t".join(error)))
 
 
 def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
-    output.put("      [>] Spidering  :     [ %s ]" % target['url'])
+    output.put("      " + TCOLORS.GREEN + "[>]" + TCOLORS.END + " Spidering  :     [ %s ]" % target['url'])
 
     def recurse(url_t1, urls_t2, tabs, depth):
-        url_t1 = url_t1.replace(":", "-")  # supplement regx
+        url_t1 = url_t1.strip('"/\; ()')
 
         for url_t2 in urls_t2:
+            url_t2 = url_t2.strip('"/\; ()')
+
             if opts.verbose:
-                output.put("      [i] [%s] threads %s/%s - depth %s/%s - sec %d/%s - urls %s/%s" %
+                output.put("      " + TCOLORS.BLUE + "[i]" + TCOLORS.END +
+                           " [%s] threads %s/%s - depth %s/%s - sec %d/%s - urls %s/%s" %
                            (target['url'], crawling, opts.spider_thread_limit, depth, opts.spider_depth,
                             (datetime.now() - time_start).total_seconds(),
                             opts.spider_timeout, len(list(set(urls_visited))), opts.spider_url_limit))
 
             if len(list(set(urls_visited))) > opts.spider_url_limit:
                 if opts.verbose:
-                    output.put("      [!] Spidering stopped :   [ %s ] - URL limit reached" % target['url'])
+                    output.put("      " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                               " Spidering stopped at depth - %s:   [ %s ] - URL limit reached" %
+                               (str(depth), target['url']))
 
                 break
 
             elif (datetime.now() - time_start).total_seconds() > opts.spider_timeout:
                 if opts.verbose:
-                    output.put("      [!] Spidering stopped :   [ %s ] - Timed out" % target['url'])
+                    output.put("      " + TCOLORS.YELLOW + "[!]" +
+                               TCOLORS.END + " Spidering stopped at depth - %s:   [ %s ] - Timed out" %
+                               (str(depth), target['url']))
 
                 break
 
             if not url_t2 in ("https://ssl", "http://www", "http://", "http://-", "http:", "https:"):  # ga junk
-                coll.append((url_t1, url_t2.replace(":", "-")))
+                coll.append((url_t1.replace(":", "-"), url_t2.replace(":", "-")))
 
-                url_t2_f = url_t2.encode('utf-8','ignore')
-                open('%s/maps/links_%s_%s__%s.txt' %
-                     (logdir, hname, target['port'], timestamp), 'a').write(tabs + url_t2_f + "\n")
+                if not (spider_breadth_first
+                        or (url_t2 in urls_visited or (opts.spider_url_blacklist and (url_t2 in url_blacklist)))):
+                    open('%s/maps/links_%s_%s__%s.txt' %
+                         (logdir, hname, target['port'], timestamp), 'a').write(tabs +
+                                                                                url_t2.encode('utf-8', 'ignore') + "\n")
 
-                if not url_t2 in urls_visited and not (opts.spider_url_blacklist and (url_t2 in url_blacklist)):
+                if not (url_t2 in urls_visited or (opts.spider_url_blacklist and (url_t2 in url_blacklist))):
                     urls_visited.append(url_t2)
                     p = urlparse(url_t2)
 
@@ -540,13 +569,12 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                                                         v = "/" + v
 
                                                                     v = p.scheme + "://" + p.netloc + v
-
                                                                     urls_t3.append(v)
 
                                             except Exception:
-                                                error = traceback.format_exc().splitlines()[-1]
+                                                e = traceback.format_exc().splitlines()[-1]
                                                 error_msg(" [spider] parsing HTML element [ %s ]:\n\t%s" %
-                                                          (target['url'], error))
+                                                          (target['url'], e))
 
                                     except:
                                         e = traceback.format_exc().splitlines()[-1]
@@ -558,8 +586,8 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                         if not (len(list(set(urls_visited))) > opts.spider_url_limit
                                                 or depth >= opts.spider_depth
                                                 or (datetime.now() - time_start).total_seconds() > opts.spider_timeout):
-                                            if spider_breadth_first:
-                                                urls_to_crawl.put([url_t2, urls_t3, tabs + "\t", depth + 1])
+                                            if spider_breadth_first:  # Not a 'tree' until we move to nosqlite
+                                                urls_to_crawl.put([url_t2, urls_t3, "\t", depth + 1])
 
                                             else:
                                                 recurse(url_t2, urls_t3, tabs + "\t", depth + 1)
@@ -568,14 +596,15 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                 e = traceback.format_exc().splitlines()
                                 error_msg(" [spider] pulling [ %s ]:\n\t%s" % (target['url'], e))
 
-    global crawling
     if opts.spider_url_blacklist:
         if os.path.isfile(opts.spider_url_blacklist):
             url_blacklist = open(opts.spider_url_blacklist).read().split('\n')
-            output.put("        [i] Spidering - blacklisting %s urls." % (len(url_blacklist)-1))
+            output.put("        " + TCOLORS.BLUE + "[i]" + TCOLORS.END + " Spidering - blacklisting %s urls." %
+                       (len(url_blacklist)-1))
 
         else:
-            output.put("        [i] Spidering - unable to find blacklist file - " % opts.spider_url_blacklist)
+            output.put("        " + TCOLORS.BLUE + "[i]" + TCOLORS.END +
+                       " Spidering - unable to find blacklist file - " % opts.spider_url_blacklist)
 
     coll, urls_visited, target['docs'] = [], [], []
     hname = urlparse(target['url']).netloc
@@ -590,7 +619,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
 
         urls_to_crawl = None
 
-    else:  # length first...
+    else:  # length first
         recurse(target['url'], [target['url']], "\t", 0)
 
     target['doc_count'] = len(target['docs'])
@@ -598,49 +627,61 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
     if len(coll) > 1:
         try: 
             import pygraphviz as pgv
-
-            output.put("      [+] Finished spider: [ %s ] - building graph..." % target['url'])
+            output.put("      " + TCOLORS.CYAN + "[+]" + TCOLORS.END +
+                       " Finished spider: [ %s ] - building graph..." % target['url'])
 
             # Graph creation
             gr = pgv.AGraph(splines='ortho', rankdir='LR')
             gr.node_attr['shape'] = 'rect'
 
             c = []
-            domain = urlparse(target['url']).netloc
-            # Add nodes and edges
-            for x, y in coll:
-                c.append(x.strip('"/\; ()'))  # Stripping these actually fixes the previous errors
-                c.append(y.strip('"/\; ()'))  # Not a permanent fix, but will do for now!
+            for x, y in coll:  # Add nodes and edges
+                print(x, y)
+                if not x in c:
+                    c.append(x)
 
-            for node in list(set(c)):
-                if node == target['url'].replace('://', '-//'):
+                if not (x == y or y in c):
+                    c.append(y)
+
+            if opts.verbose:
+                output.put("      " + TCOLORS.BLUE + "[i]" + TCOLORS.END +
+                           " Processing data for [ %s ]:   %s nodes / %s unique" %
+                           (target['url'], len(c), len(list(set(c)))))
+
+            for node in c:
+                if node == target['url'].replace(':', '-'):
                     gr.add_node(node, root=True, shape=ROOT_NODE_SHAPE, color=ROOT_NODE_COLOR)
 
-                elif not domain in node:
+                elif not urlparse(target['url']).netloc in node:
                     gr.add_node(node, shape=EXTERNAL_NODE_SHAPE, color=EXTERNAL_NODE_COLOR)
 
                 else:
                     gr.add_node(node)
 
-            for x, y in coll:
-                if not x == y:
-                    try:
-                        gr.add_edge((x.strip('"/\; ()'), y.strip('"/\; ()')))
+            if opts.verbose:
+                output.put("      " + TCOLORS.BLUE + "[i]" + TCOLORS.END +
+                           " Processing colls for [ %s ]:   %s colls" % (target['url'], len(coll)))
 
-                    except:
-                        pass
+            for x, y in [z for z in coll if z[0] != z[1]]:
+                gr.add_edge((x, y))
 
             # Draw as PNG
             gr.layout(prog='dot')
             # will get a warning if the graph is too large - not fatal
             f = '%s/maps/diagram_%s_%s__%s.png' % (logdir, urlparse(target['url']).netloc, target['port'], timestamp)
+
+            if opts.verbose:
+                output.put("      " + TCOLORS.BLUE + "[i]" + TCOLORS.END +
+                           " Drawing diagram for [ %s ]: %s" % (target['url'], f))
+
             gr.draw(f)
             target['diagram'] = f
 
         except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            output.put("\n    [!] Unable to create site chart: [ %s ]\n\t%s\n" % (target['url'], "\n\t".join(error)))
+            output.put("\n    " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                       " Unable to create site chart: [ %s ]\n\t%s\n" % (target['url'], "\n\t".join(error)))
 
 
 def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response and parses it.
@@ -662,7 +703,8 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
     except:
         error = traceback.format_exc().splitlines()
         error_msg("\n".join(error))
-        output.put("  [!] IPtoCountry parse error:\n\t%s\n" % "\n\t".join(error))
+        output.put("  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                   " IPtoCountry parse error:\n\t%s\n" % "\n\t".join(error))
 
     if 'res' in target.keys():
         # eat cookie now....omnomnom
@@ -733,12 +775,13 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
                         parsermods.append((field, regxp, modtype))
 
                 else:
-                    output.put("  [!] skipping %s - invalid modtype" % field)
+                    output.put("  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " skipping %s - invalid modtype" % field)
 
             except:
                 error = traceback.format_exc().splitlines()
                 error_msg("\n".join(error))
-                output.put("  [!] skipping module '%s' :\n\t%s\n" % (field, "\n\t".join(error)))
+                output.put("  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                           " skipping module '%s' :\n\t%s\n" % (field, "\n\t".join(error)))
 
         # not bound to specific elements/attributes
         target['urls'] = []
@@ -789,7 +832,8 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
                             except:
                                 error = traceback.format_exc().splitlines()
                                 error_msg("\n".join(error))
-                                output.put("  [!] skipping module '%s':\n\t%s\n" % (n, "\n\t".join(error)))
+                                output.put("  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                                           " skipping module '%s':\n\t%s\n" % (n, "\n\t".join(error)))
 
                         # some default checks
                         if tag == "meta":
@@ -839,13 +883,15 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
                         error = traceback.format_exc().splitlines()[-1]
                         error_msg(" parsing HTML element [ %s ]:\n\t%s" % (target['url'], error))
                         if opts.verbose:
-                            output.put("  [!] Error parsing HTML element:\n\t%s\n" % error)
+                            output.put("  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                                       " Error parsing HTML element:\n\t%s\n" % error)
 
             except Exception:
                 error = traceback.format_exc().splitlines()[-1]
                 error_msg(" parsing HTML from [ %s ]:\n\t%s" % (target['url'], error))
                 if opts.verbose:
-                    output.put("  [!] Error parsing HTML from:\n\t%s\n" % error)
+                    output.put("  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                               " Error parsing HTML from:\n\t%s\n" % error)
 
             finally:
                 cxt = None
@@ -880,12 +926,14 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
                     except:
                         error = traceback.format_exc().splitlines()
                         error_msg("\n".join(error))
-                        output.put("  [!] Error parsing defpass.csv:\n\t%s\n" % "\n\t".join(error))
+                        output.put("  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                                   " Error parsing defpass.csv:\n\t%s\n" % "\n\t".join(error))
 
     if "https" in target['service_name']:
         if not 'ssl-cert' in target.keys() and 'returncode' in target.keys():
             # ^ hosts were loaded by a file that didn't contain SSL info
-            output.put("  [>] Pulling SSL cert for  %s:%s" % (target['hostnames'][0], target['port']))
+            output.put("  " + TCOLORS.GREEN + "[>]" + TCOLORS.END +
+                       " Pulling SSL cert for  %s:%s" % (target['hostnames'][0], target['port']))
 
             import ssl
             cert = None
@@ -963,7 +1011,8 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
             except:
                 error = traceback.format_exc().splitlines()
                 error_msg("\n".join(error))
-                output.put("\n  [!] Error parsing cert:\n\t%s\n" % "\n\t".join(error))
+                output.put("\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                           " Error parsing cert:\n\t%s\n" % "\n\t".join(error))
 
         # Parse cert and write to file
         if not opts.json_min and 'ssl-cert' in target.keys():
@@ -988,21 +1037,6 @@ def parsedata(target, timestamp, scriptpath, opts):  # Takes raw site response a
         
 
 def write_to_sqlitedb(timestamp, targets, opts):
-    if not os.path.exists("rawr_%s_sqlite3.db" % timestamp):
-        try:
-            cmd = 'CREATE TABLE hosts ("%s");' % str('", "'.join(flist.replace('"', "'").split(", ")))
-            conn = sqlite3.connect("rawr_%s_sqlite3.db" % timestamp, timeout=10)
-            conn.cursor().execute(cmd)
-            conn.commit()
-            conn.close()
-
-        except:
-            conn = None
-            error = traceback.format_exc().splitlines()
-            error_msg("\n".join(error))
-            output.put("\n  [!] Error creating SQLite db:\n\t%s\n" % "\n\t".join(error))
-            opts.sqlite = False
-
     try:
         conn = sqlite3.connect("rawr_%s_sqlite3.db" % timestamp, timeout=45)
         cursor = conn.cursor()
@@ -1033,7 +1067,8 @@ def write_to_sqlitedb(timestamp, targets, opts):
         conn = None
         error = traceback.format_exc().splitlines()
         error_msg("\n".join(error))
-        output.put("\n  [!] Error writing to SQLite db:\n\t%s\n" % "\n\t".join(error))
+        output.put("\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                   " Error writing to SQLite db:\n\t%s\n" % "\n\t".join(error))
 
 
 def write_to_csv(timestamp, target):
@@ -1058,7 +1093,8 @@ def write_to_csv(timestamp, target):
     except:
         error = traceback.format_exc().splitlines()
         error_msg("\n".join(error))
-        output.put("\n  [!] Unable to write .csv:\n\t%s\n" % "\n\t".join(error))
+        output.put("\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                   " Unable to write .csv:\n\t%s\n" % "\n\t".join(error))
 
 
 def write_to_html(timestamp, target):
@@ -1084,7 +1120,8 @@ def write_to_html(timestamp, target):
     except:
         error = traceback.format_exc().splitlines()
         error_msg("\n".join(error))
-        output.put("\n  [!] Unable to write .html:\n\t%s\n" % "\n\t".join(error))
+        output.put("\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                   " Unable to write .html:\n\t%s\n" % "\n\t".join(error))
 
 
 # Our parsers:
@@ -1146,7 +1183,7 @@ def parse_csv(filename):
             except:
                 error = traceback.format_exc().splitlines()
                 error_msg("\n".join(error))
-                print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
+                print("      " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Parse Error:\n\t%s\n" % "\n\t".join(error))
 
     return targets
 
@@ -1177,7 +1214,7 @@ def parse_qualys_port_service_csv(filename):
             except:
                 error = traceback.format_exc().splitlines()
                 error_msg("\n".join(error))
-                print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
+                print("      " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Parse Error:\n\t%s\n" % "\n\t".join(error))
 
     return targets
 
@@ -1205,7 +1242,7 @@ def parse_openvas_xml(r):     # need a scan of a server using SSL!
         except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
+            print("      " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Parse Error:\n\t%s\n" % "\n\t".join(error))
 
     return targets
 
@@ -1243,7 +1280,7 @@ def parse_nexpose_xml(r):     # need a scan of a server using SSL!
         except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
+            print("      " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Parse Error:\n\t%s\n" % "\n\t".join(error))
 
     return targets
 
@@ -1278,7 +1315,7 @@ def parse_nexpose_simple_xml(r):     # need a scan of a server using SSL!
         except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
+            print("      " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Parse Error:\n\t%s\n" % "\n\t".join(error))
 
     return targets
 
@@ -1381,7 +1418,7 @@ def parse_qualys_scan_report_xml(r):
         except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
+            print("      " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Parse Error:\n\t%s\n" % "\n\t".join(error))
 
     return targets
 
@@ -1494,7 +1531,7 @@ def parse_nessus_xml(r):
         except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
+            print("      " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Parse Error:\n\t%s\n" % "\n\t".join(error))
 
     return targets
 
@@ -1607,7 +1644,7 @@ def parse_nmap_xml(r):
         except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            print("      [!] Parse Error:\n\t%s\n" % "\n\t".join(error))
+            print("      " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Parse Error:\n\t%s\n" % "\n\t".join(error))
     
     return targets
 
@@ -1616,29 +1653,31 @@ def update(force, ckinstall, pjs_path, scriptpath):
     os.chdir(scriptpath)
 
     url = REPO_DL_PATH + VER_FILE
-    print("  [>] Checking current versions...  \n\t%s\n" % url)
+    print("  " + TCOLORS.GREEN + "[>]" + TCOLORS.END + " Checking current versions...  \n\t%s\n" % url)
     try:
         rawr_ver, defpass_ver, ip2c_ver, pjs_ver = requests.get(url).text.replace('\n', '').split(",")
 
     except:
         error = traceback.format_exc().splitlines()
         error_msg("\n".join(error))
-        print("      [x] Update Failed:\n\t%s\n" % "\n\t".join(error))
+        print("      " + TCOLORS.RED + "[x]" + TCOLORS.END + " Update Failed:\n\t%s\n" % "\n\t".join(error))
         sys.exit(1)
 
     if ckinstall:
         # nmap
         if not (inpath("nmap") or inpath("nmap.exe")):
-            print("  [i]  NMap not found in $PATH.  You'll need to install it to use RAWR.  \n")
+            print("  " + TCOLORS.BLUE + "[i]" + TCOLORS.END +
+                  "  NMap not found in $PATH.  You'll need to install it to use RAWR.  \n")
 
         else:
             proc = subprocess.Popen(['nmap', '-V'], stdout=subprocess.PIPE)
             ver = proc.stdout.read().split(' ')[2]
             if int(ver.split('.')[0]) < 6:  # 6.00 is when ssl_num_ciphers.nse was added.
-                print("  [i]  ** NMap %s found, but versions prior to 6.00 won't return all SSL data. **\n" % ver)
+                print("  " + TCOLORS.BLUE + "[i]" + TCOLORS.END +
+                      "  ** NMap %s found, but versions prior to 6.00 won't return all SSL data. **\n" % ver)
 
             else:
-                print("  [i]  ++ NMap %s found ++\n" % ver)
+                print("  " + TCOLORS.BLUE + "[i]" + TCOLORS.END + "  ++ NMap %s found ++\n" % ver)
 
         try:
             proc = subprocess.Popen([pjs_path, '-v'], stdout=subprocess.PIPE)
@@ -1650,7 +1689,8 @@ def update(force, ckinstall, pjs_path, scriptpath):
         if force or (pjs_ver > pjs_curr):
             if not force:
                 if pjs_curr != 0 and (pjs_ver > pjs_curr):
-                    choice = raw_input('\n  [i] phantomJS %s found (current is %s) - do you want to update? [Y/n]: ' %
+                    choice = raw_input('\n  " + TCOLORS.BLUE + "[i]" + TCOLORS.END +'
+                                       ' " phantomJS %s found (current is %s) - do you want to update? [Y/n]: ' %
                                        (pjs_curr, pjs_ver))
                     if choice.lower() in ("y", "yes", ''):
                         force = True
@@ -1659,14 +1699,15 @@ def update(force, ckinstall, pjs_path, scriptpath):
                     if platform.machine() == "armv7":
                         # Not a binary compiled for arm out there for DL just yet.
                         # I'll put it as a download in the RAWR repo if someone can provide it.
-                        print("      [i] Please install phantomJS via apt-get.")
-                        print("\n  [!] Exiting...\n\n")
+                        print("      " + TCOLORS.BLUE + "[i]" + TCOLORS.END + " Please install phantomJS via apt-get.")
+                        print("\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Exiting...\n\n")
                         sys.exit(0)
 
                     else:
-                        choice = raw_input('\n  [!] phantomJS was not found - do you want to install it? [Y/n]: ')
+                        choice = raw_input('\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +'
+                                           ' " phantomJS was not found - do you want to install it? [Y/n]: ')
                         if not (choice.lower() in ("y", "yes", '')):
-                            print("\n  [!] Exiting...\n\n")
+                            print("\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Exiting...\n\n")
                             sys.exit(0)
 
                         else:
@@ -1695,7 +1736,7 @@ def update(force, ckinstall, pjs_path, scriptpath):
                     fname = pre + "-linux-i686.tar.bz2"  # default is 32bit *nix
                     url = PJS_REPO + fname
 
-                print("  [>] Pulling/installing phantomJS >\n\t%s" % url)
+                print("  " + TCOLORS.GREEN + "[>]" + TCOLORS.END + " Pulling/installing phantomJS >\n\t%s" % url)
 
                 try:
                     data = requests.get(url).content
@@ -1712,7 +1753,8 @@ def update(force, ckinstall, pjs_path, scriptpath):
                         except:
                             error = traceback.format_exc().splitlines()
                             error_msg("\n".join(error))
-                            print("        [!] Failed to remove data/phantomjs:\n\t%s\n" % "\n\t".join(error))
+                            print("        " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                                  " Failed to remove data/phantomjs:\n\t%s\n" % "\n\t".join(error))
 
                     if fname.endswith(".zip"):
                         import zipfile
@@ -1731,15 +1773,17 @@ def update(force, ckinstall, pjs_path, scriptpath):
                         f.write(OSX_PLIST)
                         f.close()
 
-                    print("      [+] Success\n")
+                    print("      " + TCOLORS.CYAN + "[+]" + TCOLORS.END + " Success\n")
 
                 except:
                     error = traceback.format_exc().splitlines()
                     error_msg("\n".join(error))
-                    print("  [!] Download Failed:\n\t%s\n" % "\n\t".join(error))
+                    print("  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                          " Download Failed:\n\t%s\n" % "\n\t".join(error))
 
         else:
-            print("  [i] phantomJS %s found (current supported version) ++\n" % pjs_curr)
+            print("  " + TCOLORS.BLUE + "[i]" + TCOLORS.END +
+                  " phantomJS %s found (current supported version) ++\n" % pjs_curr)
 
     try:
         defpass_curr = open(DEFPASS_FILE).readline().split(' ')[1].replace('\n', '')
@@ -1750,14 +1794,16 @@ def update(force, ckinstall, pjs_path, scriptpath):
     if force or (defpass_ver > defpass_curr):
         # defpass
         if not force:
-            choice = raw_input('\n  [!] Update defpass.csv from rev.%s to rev.%s? [Y/n]: ' %
+            choice = raw_input('\n  " + TCOLORS.YELLOW +'
+                               ' "[!]" + TCOLORS.END + " Update defpass.csv from rev.%s to rev.%s? [Y/n]: ' %
                                (defpass_curr, defpass_ver))
             if choice.lower() in ("y", "yes", ''):
                 force = True
 
         if force:
             url = REPO_DL_PATH + DEFPASS_FILE.split("/")[1]
-            print("  [>] Updating %s rev.%s >> rev.%s\n\t%s" % (DEFPASS_FILE, defpass_curr, defpass_ver, url))
+            print("  " + TCOLORS.GREEN + "[>]" + TCOLORS.END + " Updating %s rev.%s >> rev.%s\n\t%s" %
+                  (DEFPASS_FILE, defpass_curr, defpass_ver, url))
             try:
                 data = requests.get(url).content
                 open("data/defpass_tmp.csv", 'w').write(data)
@@ -1774,15 +1820,16 @@ def update(force, ckinstall, pjs_path, scriptpath):
                     for c, l in enumerate(f):
                         pass
 
-                print("      [+] Success - (Contains %s entries) " % c)
+                print("      " + TCOLORS.CYAN + "[+]" + TCOLORS.END + " Success - (Contains %s entries) " % c)
 
             except:
                 error = traceback.format_exc().splitlines()
                 error_msg("\n".join(error))
-                print("  [x] Failed to parse defpass file:\n\t%s\n" % "\n\t".join(error))
+                print("  " + TCOLORS.RED + "[x]" + TCOLORS.END + " Failed to parse defpass file:\n\t%s\n" %
+                      "\n\t".join(error))
 
     else:
-        print("  [i] %s - already at rev.%s" % (DEFPASS_FILE, defpass_ver))
+        print("  " + TCOLORS.BLUE + "[i]" + TCOLORS.END + " %s - already at rev.%s" % (DEFPASS_FILE, defpass_ver))
 
     ip2c_curr = 0
     try:
@@ -1798,31 +1845,33 @@ def update(force, ckinstall, pjs_path, scriptpath):
     if force or (ip2c_ver > ip2c_curr):
         # IpToCountry
         if not force:
-            choice = raw_input('\n  [!] Update IpToCountry.csv from rev.%s to rev.%s? [Y/n]: ' %
+            choice = raw_input('\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +'
+                               ' " Update IpToCountry.csv from rev.%s to rev.%s? [Y/n]: ' %
                                (ip2c_curr, ip2c_ver))
             if choice.lower() in ("y", "yes", ''):
                 force = True
 
         if force:
             url = REPO_DL_PATH + IP_TO_COUNTRY.split("/")[1] + ".tar.gz"
-            print("\n  [>] Updating %s ver.%s >> ver.%s\n\t%s" % (IP_TO_COUNTRY, ip2c_curr, ip2c_ver, url))
+            print("\n  " + TCOLORS.GREEN + "[>]" + TCOLORS.END + " Updating %s ver.%s >> ver.%s\n\t%s" %
+                  (IP_TO_COUNTRY, ip2c_curr, ip2c_ver, url))
             try:
                 data = requests.get(url).content
                 open(IP_TO_COUNTRY + ".tar.gz", 'w+b').write(data)
                 tarfile.open(IP_TO_COUNTRY + ".tar.gz").extractall('./data')
                 os.remove(IP_TO_COUNTRY + ".tar.gz")
-                print("      [+] Success\n")
+                print("      " + TCOLORS.CYAN + "[+]" + TCOLORS.END + " Success\n")
 
             except:
                 error = traceback.format_exc().splitlines()
                 error_msg("\n".join(error))
-                print("  [x] Update Failed:\n\t%s\n" % "\n\t".join(error))
+                print("  " + TCOLORS.RED + "[x]" + TCOLORS.END + " Update Failed:\n\t%s\n" % "\n\t".join(error))
                 sys.exit(1)
 
     else:
-        print("\n  [i] %s - already at ver.%s\n" % (IP_TO_COUNTRY, ip2c_ver))
+        print("\n  " + TCOLORS.BLUE + "[i]" + TCOLORS.END + " %s - already at ver.%s\n" % (IP_TO_COUNTRY, ip2c_ver))
 
-    print("  [+] Update Complete  ++\n\n")
+    print("  " + TCOLORS.CYAN + "[+]" + TCOLORS.END + " Update Complete  ++\n\n")
     sys.exit(2)
 
 

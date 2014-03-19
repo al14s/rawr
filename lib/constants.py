@@ -1,4 +1,4 @@
-VERSION = "0.1.74"
+VERSION = "0.1.75"
 
 # Update information
 REPO_DL_PATH = "https://bitbucket.org/al14s/rawr/downloads/"
@@ -39,3 +39,13 @@ ROOT_NODE_SHAPE = 'circle'  # http://www.graphviz.org/doc/info/shapes.html
 ROOT_NODE_COLOR = 'blue'  # http://www.graphviz.org/doc/info/colors.html
 EXTERNAL_NODE_SHAPE = 'box'  # http://www.graphviz.org/doc/info/shapes.html
 EXTERNAL_NODE_COLOR = 'orangered'  # http://www.graphviz.org/doc/info/colors.html
+
+# Terminal color defs
+class TCOLORS:
+    PURPLE = '\033[95m'
+    BLUE = '\033[94m'
+    YELLOW = '\033[93m'
+    GREEN = '\033[92m'
+    RED = '\033[91m'
+    CYAN = '\033[96m'
+    END = '\033[0m'

@@ -14,10 +14,18 @@ ToDo
         make target fields cumulative
         change flist to apply only to CSV
 
-    compare .db file from previous scan (in progress)
+    spidering BUGS!!!
+        links file shows incorrect tree when 'breadth first'
+        crawl goes to depth +1
+        diagram shows soup sandwich
+        deal with diagrams dying when there are too many discovered URLs
 
-    deal with diagrams dying when there are too many discovered URLs
-        split into multiple?
-        limit the number per depth level?
+    "-m" to pull and parse docs and images for sensitive info
+        form PIL import Image
+        from PIL.ExifTags import TAGS
+        i = Image.open("image.jpg")
+        for t, v in i._getexif().items(): print v
 
-    give option to pull and parse docs and images for sensitive info
+    scan comparison functionality
+        compare two scans within one db
+        compare a db scan with new scan

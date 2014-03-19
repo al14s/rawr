@@ -1,4 +1,4 @@
-from lib.constants import VERSION
+from lib.constants import VERSION, TCOLORS
 
 m = m2 = (29 - len(VERSION))/2
 if len(VERSION) % 2 == 0:
@@ -15,7 +15,7 @@ banner = """
    o.     `          ``    .  :-    `  ym `moy.   `..-:///:/` `N/-
                                       :M+ .yhy+-.,/:--/o\ /d`  om/`',
                                       -M:  .'-/+:symdyysy+oN+  .N+:-
-   Rapid Assessment of Web Resources   dd  .h/hyhddMms+:-/./m   dy-
+   """ + TCOLORS.BLUE + "Rapid Assessment of Web Resources" + TCOLORS.END + """   dd  .h/hyhddMms+:-/./m   dy-
                                        /M-  -NmmNhms`     ``m`  sd.;.
 %s[Version %s]%s`Ms   mNmNN+       s/y   oNoyM:
                                    ,os+-mh   /mymm :./+:/+s+/ :hs``mM-

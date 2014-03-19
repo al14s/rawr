@@ -183,22 +183,23 @@ elif opts.checkinstall:
 
 
 if pjs_path == "" and not opts.noss:
-    print("  [x] phantomJS not found in $PATH or in RAWR folder.  \n\n\tTry running 'rawr.py --check-install'\n\n\tOr"
-          " run rawr without screenshots (--noss)\n\n  [x] Exiting... !!\n\n")
+    print("  " + TCOLORS.RED + "[x]" + TCOLORS.END +
+          " phantomJS not found in $PATH or in RAWR folder.  \n\n\tTry running 'rawr.py --check-install'\n\n\tOr"
+          " run rawr without screenshots (--noss)\n\n  " + TCOLORS.RED + "[x]" + TCOLORS.END + " Exiting... !!\n\n")
     sys.exit(1)
 
 opts.compfile = None  # for now
 
 # sanity checks
 if sum(map(bool, [opts.nmap_il, opts.nmaprng, opts.xmlfile, opts.compfile])) > 1:
-    parser.error("  [x] Can't use -c, -f, -i, or -n in the same command.")
+    parser.error("  " + TCOLORS.RED + "[x]" + TCOLORS.END + " Can't use -c, -f, -i, or -n in the same command.")
     sys.exit(1)
 
 # Take a look at our inputs
 if opts.compfile:
     # check if actual RAWR sqlite3 db output
     if not True:
-        parser.error("  [x] -c <file> must be a RAWR sqlite3 db file.")
+        parser.error("  " + TCOLORS.RED + "[x]" + TCOLORS.END + " -c <file> must be a RAWR sqlite3 db file.")
         sys.exit(1)
 
 elif opts.xmlfile:
@@ -224,13 +225,13 @@ elif opts.xmlfile:
     files = []
     for f in ftemp:
         if not os.path.isfile(os.path.abspath(f)):  # path not found
-            print("\n\n\n  [x] Unable to locate: \n\t%s\n" % os.path.abspath(f))
+            print("\n\n\n  " + TCOLORS.RED + "[x]" + TCOLORS.END + " Unable to locate: \n\t%s\n" % os.path.abspath(f))
 
         else:
             files.append(os.path.abspath(f))
 
     if len(files) < 1:
-        print("\n  [x]  No usable files specified. \n")
+        print("\n  " + TCOLORS.RED + "[x]" + TCOLORS.END + "  No usable files specified. \n")
         sys.exit(1)
 
 elif opts.nmap_il or opts.nmaprng:
@@ -238,7 +239,7 @@ elif opts.nmap_il or opts.nmaprng:
         if os.path.exists(opts.nmap_il): 
             nmap_il = os.path.realpath(opts.nmap_il)
         else:
-            print("  [x] Unable to locate file \n  [%s]. =-\n" % opts.nmap_il)
+            print("  " + TCOLORS.RED + "[x]" + TCOLORS.END + " Unable to locate file \n  [%s]. =-\n" % opts.nmap_il)
             sys.exit(1)
 
     else:
@@ -261,11 +262,11 @@ elif opts.nmap_il or opts.nmaprng:
             else:
                 raise()
         except:
-            print("\n  [x]  Scan Timing (-t) must be numeric and 1-5 \n")
+            print("\n  " + TCOLORS.RED + "[x]" + TCOLORS.END + "  Scan Timing (-t) must be numeric and 1-5 \n")
             sys.exit(1)
 
 else:
-    print(usage + "\n\n\n  [x]  No input specified. \n")
+    print(usage + "\n\n\n  " + TCOLORS.RED + "[x]" + TCOLORS.END + "  No input specified. \n")
     sys.exit(1)
 
 
@@ -307,38 +308,47 @@ try:
             if a == "s":
                 if v.lower() in ("false", "f"):
                     opts.spider_follow_subdomains = False
-                    writelog("\n  [i] spider_follow_subdomains set to 'False'", logfile, opts)
+                    writelog("\n  " + TCOLORS.BLUE + "[i]" + TCOLORS.END +
+                             " spider_follow_subdomains set to 'False'", logfile, opts)
 
                 elif v.lower() in ("true", "t"):
                     opts.spider_follow_subdomains = True
-                    writelog("\n  [i] spider_follow_subdomains set to 'True'", logfile, opts)
+                    writelog("\n  " + TCOLORS.BLUE + "[i]" + TCOLORS.END +
+                             " spider_follow_subdomains set to 'True'", logfile, opts)
 
             elif a == "d" and int(v) in range(0, 999):
                 opts.spider_depth = int(v)
-                writelog("\n  [i] spider_depth set to '%s'" % v, logfile, opts)
+                writelog("\n  " + TCOLORS.BLUE + "[i]" + TCOLORS.END + " spider_depth set to '%s'" %
+                         v, logfile, opts)
 
             elif a == "t" and int(v) in range(0, 999):
                 opts.spider_timeout = int(v)
-                writelog("\n  [i] spider_timeout set to '%s'" % v, logfile, opts)
+                writelog("\n  " + TCOLORS.BLUE + "[i]" + TCOLORS.END + " spider_timeout set to '%s'" %
+                         v, logfile, opts)
 
             elif a == "th" and int(v) in range(0, 999):
                 opts.spider_thread_limit = int(v)
-                writelog("\n  [i] spider_thread_limit set to '%s'" % v, logfile, opts)
+                writelog("\n  " + TCOLORS.BLUE + "[i]" + TCOLORS.END + " spider_thread_limit set to '%s'" %
+                         v, logfile, opts)
 
             elif a == "l" and int(v) in range(0, 9999):
                 opts.spider_url_limit = int(v)
-                writelog("\n  [i] spider_url_limit set to '%s'" % v, logfile, opts)
+                writelog("\n  " + TCOLORS.BLUE + "[i]" + TCOLORS.END + " spider_url_limit set to '%s'" %
+                         v, logfile, opts)
 
             elif a == "u" and int(v) in range(0, 9999):
                 opts.spider_url_timeout = int(v)
-                writelog("\n  [i] spider_url_timeout set to '%s'" % v, logfile, opts)
+                writelog("\n  " + TCOLORS.BLUE + "[i]" + TCOLORS.END + " spider_url_timeout set to '%s'" %
+                         v, logfile, opts)
 
             # elif a == "h" and int(v) in range(0, 999):
             #        opts.spider_url_max_hits = int(v)
-            #        writelog("\n  [i] spider_url_max_hits set to '%s'" % v, logfile, opts)
+            #        writelog("\n  " + TCOLORS.BLUE + "[i]" + TCOLORS.END +
+            #  " spider_url_max_hits set to '%s'" % v, logfile, opts)
 
 except Exception, ex:
-    print("      [!] Error with --spider_opts:  '%s'\n\n\t\t%s" % (opts.crawl_opts, ex))
+    print("      " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Error with --spider_opts:  '%s'\n\n\t\t%s" %
+          (opts.crawl_opts, ex))
     exit()
 
 if opts.logo:
@@ -347,7 +357,8 @@ if opts.logo:
             from PIL import Image
             l, h = Image.open(os.path.abspath(opts.logo)).size
             if l > 400 or h > 80:
-                writelog("  [!]  The specified logo may not show up correctly.\n\tA size no larger than 400x80 is "
+                writelog("  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                         "  The specified logo may not show up correctly.\n\tA size no larger than 400x80 is "
                          "recommended.\n", logfile, opts)
 
         except:
@@ -356,50 +367,53 @@ if opts.logo:
         logo_file = os.path.realpath(opts.logo)
 
     else:
-        print("\t  [x]  Unable to locate logo file \n\t\t[%s] \n" % opts.logo)
+        print("\t  " + TCOLORS.RED + "[x]" + TCOLORS.END + "  Unable to locate logo file \n\t\t[%s] \n" % opts.logo)
         sys.exit(1)
 
 
 if opts.title:
     if len(opts.title) > 60:
-        writelog("  [!] warning The title specified might not show up properly.", logfile, opts)
+        writelog("  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                 " warning The title specified might not show up properly.", logfile, opts)
 
     report_title = opts.title
 
 
 # Check for the list of default passwords
 if opts.defpass:
-    if os.path.exists("%s/%s" % (scriptpath, DEFPASS_FILE)): 
-        writelog("\n  [i] Located defpass.csv\n", logfile, opts)
+    if os.path.exists("%s/%s" % (scriptpath, DEFPASS_FILE)):
+        writelog("\n  " + TCOLORS.BLUE + "[i]" + TCOLORS.END + " Located defpass.csv\n", logfile, opts)
 
     else:
-        writelog("  [!] Unable to locate %s. =-\n" % DEFPASS_FILE, logfile, opts)
+        writelog("  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Unable to locate %s. =-\n" %
+                 DEFPASS_FILE, logfile, opts)
         choice = raw_input("\tContinue without default password info? [Y|n] ").lower()
         defpass = False
-        if (not choice in "yes") and choice != "": 
-            print("\n  [x] Exiting... \n\n")
+        if (not choice in "yes") and choice != "":
+            print("\n  " + TCOLORS.RED + "[x]" + TCOLORS.END + " Exiting... \n\n")
             sys.exit(2)
 
 # Check for the IpToCountry list
 if os.path.exists("%s/%s" % (scriptpath, IP_TO_COUNTRY)):
-    writelog("\n  [i] Located IpToCountry.csv\n", logfile, opts)
+    writelog("\n  " + TCOLORS.BLUE + "[i]" + TCOLORS.END + " Located IpToCountry.csv\n", logfile, opts)
 
 else:
-    writelog("  [!] Unable to locate %s. =-\n" % IP_TO_COUNTRY, logfile, opts)
+    writelog("  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Unable to locate %s. =-\n" % IP_TO_COUNTRY, logfile, opts)
     choice = raw_input("\tContinue without Ip to Country info? [Y|n] ").lower()
     defpass = False
     if (not choice in "yes") and choice != "":
-        print("\n  [x] Exiting... \n\n")
+        print("\n  " + TCOLORS.RED + "[x]" + TCOLORS.END + " Exiting... \n\n")
         sys.exit(2)
 
 if not opts.json_min:
     msg = "\nStarted RAWR : %s\n     cmdline : %s\n\n" % (timestamp, " ".join(sys.argv))
     open("%s/rawr_%s.log" % (logdir, timestamp), 'a').write(msg)  # Log created
-    writelog("\n  [+] Log Folder created :\n      %s \n" % logdir, logfile, opts)  # Second log entry
+    writelog("\n  " + TCOLORS.CYAN + "[+]" + TCOLORS.END + " Log Folder created :\n      %s \n" %
+             logdir, logfile, opts)  # Second log entry
 
 
 if opts.ver_dg:
-    writelog("  [i] Downgrading all requests to HTTP/1.0...\n", logfile, opts)
+    writelog("  " + TCOLORS.BLUE + "[i]" + TCOLORS.END + " Downgrading all requests to HTTP/1.0...\n", logfile, opts)
     import httplib  # requests uses urllib3, which uses httplib...
     httplib.HTTPConnection._http_vsn = 10
     httplib.HTTPConnection._http_vsn_str = 'HTTP/1.0'
@@ -420,7 +434,8 @@ if opts.nmap_il or opts.nmaprng:
         # ^^ check for valid nmap input (can use hostnames, subnets (ex. 192.168.0.0/24), stars (ex. 192.168.*.*),
         # and split ranges (ex. 192.168.1.1-10,14))
         if not (inpath("nmap") or inpath("nmap.exe")):
-            writelog("  [x] NMap not found in $PATH.  Exiting... \n\n", logfile, opts)
+            writelog("  " + TCOLORS.RED + "[x]" + TCOLORS.END +
+                     " NMap not found in $PATH.  Exiting... \n\n", logfile, opts)
             sys.exit(1)
 
         # Build the NMap command args
@@ -456,7 +471,7 @@ if opts.nmap_il or opts.nmaprng:
         else:
             cmd.append(opts.nmaprng)
 
-        writelog('  [>] Scanning >\n      ' + " ".join(cmd), logfile, opts)
+        writelog("  " + TCOLORS.GREEN + "[>]" + TCOLORS.END + " Scanning >\n      " + " ".join(cmd), logfile, opts)
 
         # need to quiet this when running with --json & --json-min
         try:
@@ -468,14 +483,16 @@ if opts.nmap_il or opts.nmaprng:
                 with open('/dev/null', 'w') as log_pipe:
                     ret = subprocess.Popen(cmd, stdout=log_pipe, stderr=subprocess.PIPE).wait()
 
-        except KeyboardInterrupt: 
-            writelog("\n\n  [!]  Scanning Halted (ctrl+C).  Exiting!   \n\n", logfile, opts)
+        except KeyboardInterrupt:
+            writelog("\n\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                     "  Scanning Halted (ctrl+C).  Exiting!   \n\n", logfile, opts)
             sys.exit(2)
 
         except Exception:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            writelog("\n\n  [x]  Error in scan - %s\n\n" % "\n".join(error), logfile, opts)
+            writelog("\n\n  " + TCOLORS.RED + "[x]" + TCOLORS.END + "  Error in scan - %s\n\n" %
+                     "\n".join(error), logfile, opts)
             sys.exit(2)
 
         if ret != 0:
@@ -485,7 +502,8 @@ if opts.nmap_il or opts.nmaprng:
         files = ["rawr_%s.xml" % timestamp]
 
     else:
-        writelog("\n  [!] Specified address range is invalid. !!\n", logfile, opts)
+        writelog("\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                 " Specified address range is invalid. !!\n", logfile, opts)
         sys.exit(1)
 
 
@@ -502,7 +520,8 @@ elif newdir:
 if not opts.json_min:
     # Look for and copy any images from previous scans
     if not newdir and not (glob("*.png") or glob("images/*.png")):
-        writelog("\n  [!] No thumbnails found in [%s/]\n      or in [.%s/images/]. **\n" %
+        writelog("\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                 " No thumbnails found in [%s/]\n      or in [.%s/images/]. **\n" %
                  (os.getcwd(), os.getcwd()), logfile, opts)
         if not opts.noss:
             writelog("      Will take website screenshots during the enumeration. ", logfile, opts)
@@ -518,11 +537,11 @@ if not opts.json_min:
 
 targets = []
 for filename in files:
-    writelog("\n  [>] Parsing: %s" % filename, logfile, opts)
+    writelog("\n  " + TCOLORS.GREEN + "[>]" + TCOLORS.END + " Parsing: %s" % filename, logfile, opts)
     c = 0
     try:
         if filename.endswith(".csv"):
-            with open(filename) as r: 
+            with open(filename) as r:
                 head = ' '.join([r.next() for x in xrange(2)])
 
             if 'Asset Group:' in head:
@@ -548,9 +567,10 @@ for filename in files:
                         c += 1
 
                     targets.append(target)
-    
+
             else:
-                writelog("  [!] Unrecognized file format.  [ %s ]" % filename, logfile, opts)
+                writelog("  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                         " Unrecognized file format.  [ %s ]" % filename, logfile, opts)
                 continue
 
         elif filename.endswith(".xml"):
@@ -576,7 +596,7 @@ for filename in files:
                         c += 1
 
                     targets.append(target)
-                
+
             elif len(r.xpath('//nmaprun')) > 0:
                 for target in parse_nmap_xml(r):
                     if "http" in target['service_name']:
@@ -590,22 +610,24 @@ for filename in files:
                         c += 1
 
                     targets.append(target)
-    
+
             else:
-                writelog("      [!] Unrecognized file format.\n\n", logfile, opts)
+                writelog("      " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                         " Unrecognized file format.\n\n", logfile, opts)
                 continue
 
         else:
-            writelog("      [!] Unsupported file type.\n\n", logfile, opts)
+            writelog("      " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Unsupported file type.\n\n", logfile, opts)
             continue
 
     except Exception:
         error = traceback.format_exc().splitlines()
         error_msg("\n".join(error))
-        writelog("      [!] Unable to parse: \n\t\t Error: %s\n\n" % "\n".join(error), logfile, opts)
+        writelog("      " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Unable to parse: \n\t\t Error: %s\n\n" %
+                 "\n".join(error), logfile, opts)
         continue
 
-    writelog("      [+] Found [ %s ] web interface(s)\n" % c, logfile, opts)
+    writelog("      " + TCOLORS.CYAN + "[+]" + TCOLORS.END + " Found [ %s ] web interface(s)\n" % c, logfile, opts)
 
 # cleaning up for the --json-min run
 if opts.json_min:
@@ -616,7 +638,7 @@ for target in targets:
     if "http" in target['service_name']:
         q.put(target)
 
-    else: 
+    else:
         if opts.allinfo:
             write_to_csv(timestamp, target)
 
@@ -636,26 +658,32 @@ if opts.parsertest:  # for parser testing.  activated using the --parsertest swi
 if opts.sqlite:
     try:
         cmd = 'CREATE TABLE hosts ("%s");' % str('", "'.join(flist.replace('"', "'").split(", ")))
-        conn = sqlite3.connect("rawr_%s_sqlite3.db" % timestamp, timeout=30)
+        conn = sqlite3.connect("rawr_%s_sqlite3.db" % timestamp, timeout=10)
         conn.cursor().execute(cmd)
+        #cmd = 'CREATE TABLE scans ("id","","","");'
+        #conn.cursor().execute(cmd)
+        #cmd = 'INSERT INTO meta VALUES ();' % (timestamp, )
+        #conn.cursor().execute(cmd)
         conn.commit()
+        conn.close()
 
     except Exception:
         error = traceback.format_exc().splitlines()
         error_msg("\n".join(error))
-        output.put("\n  [!] Error creating SQLite db:\n\t%s\n" % "\n\t".join(error))
+        output.put("\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Error creating SQLite db:\n\t%s\n" %
+                   "\n\t".join(error))
         opts.sqlite = False
 
     finally:
         conn.close()
 
 if opts.sqlite and opts.allinfo and len(sqltargets) > 0:
-    writelog("\n  [>] Populating sqlite db", logfile, opts)        
+    writelog("\n  " + TCOLORS.GREEN + "[>]" + TCOLORS.END + " Populating sqlite db", logfile, opts)
     write_to_sqlitedb(timestamp, targets, opts)
 
 if q.qsize() > 0:
     if not opts.json_min:
-        writelog("\n  [>] Building Attack surface matrix", logfile, opts)
+        writelog("\n  " + TCOLORS.GREEN + "[>]" + TCOLORS.END + " Building Attack surface matrix", logfile, opts)
 
         # create our attack surface matrix
         asm_f = "%s/rawr_%s_attack_surface.csv" % (logdir, timestamp)
@@ -716,7 +744,8 @@ if q.qsize() > 0:
         except Exception:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            writelog("\n  [!] Error creating attack surface matrix :\n\t%s\n" % "\n".join(error), logfile, opts)
+            writelog("\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Error creating attack surface matrix :\n\t%s\n" %
+                     "\n".join(error), logfile, opts)
 
         if opts.asm:  # quit after creating the asm
             exit(0)
@@ -727,7 +756,7 @@ if q.qsize() > 0:
     # Begin processing any hosts found
     if not opts.json_min:
         # Create the folder for html resource files
-        if not os.path.exists("./html_res"): 
+        if not os.path.exists("./html_res"):
             os.makedirs("./html_res")
 
         shutil.copy("%s/data/jquery.js" % scriptpath, "./html_res/jquery.js")
@@ -775,7 +804,7 @@ if q.qsize() > 0:
         open('index_%s.html' % timestamp, 'w').write(filedat)
 
         if os.path.exists("%s/data/nmap.xsl" % scriptpath):
-            if not os.path.exists("./html_res/nmap.xsl"): 
+            if not os.path.exists("./html_res/nmap.xsl"):
                 shutil.copy("%s/data/nmap.xsl" % scriptpath, "./html_res/nmap.xsl")
 
             for xmlfile in glob("rawr_*.xml"):
@@ -783,15 +812,17 @@ if q.qsize() > 0:
                     filedat = open(xmlfile).read().replace(fileloc, 'html_res/nmap.xsl')
                     open(xmlfile, 'w').write(filedat)
 
-            writelog("\n  [i] Copied nmap.xsl to %s\n\tand updated link in files.\n" % logdir, logfile, opts)
+            writelog("\n  " + TCOLORS.BLUE + "[i]" + TCOLORS.END +
+                     " Copied nmap.xsl to %s\n\tand updated link in files.\n" % logdir, logfile, opts)
 
-        else: 
-            writelog("\n  [!] Unable to locate nmap.xsl.\n", logfile, opts)
+        else:
+            writelog("\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " Unable to locate nmap.xsl.\n", logfile, opts)
 
         if not os.path.exists("rawr_%s_serverinfo.csv" % timestamp):
             open("rawr_%s_serverinfo.csv" % timestamp, 'w').write('"' + flist.replace(', ', '","') + '"')
 
-        writelog("\n  [>] Beginning enumeration of [ %s ] host(s)\n" % q.qsize(), logfile, opts)
+        writelog("\n  " + TCOLORS.GREEN + "[>]" + TCOLORS.END + " Beginning enumeration of [ %s ] host(s)\n" %
+                 q.qsize(), logfile, opts)
 
     # Create the output queue - prevents output overlap
     o = OutThread(output, logfile, opts)
@@ -811,10 +842,11 @@ if q.qsize() > 0:
             q.join()
 
     except KeyboardInterrupt:
-        print("\n\n  [i]  ******  Ctrl+C recieved - All threads halted.  ****** \n\n")
+        print("\n\n  " + TCOLORS.BLUE + "[i]" + TCOLORS.END +
+              "  ******  Ctrl+C recieved - All threads halted.  ****** \n\n")
 
     # Queue is clear, tell the threads to close.
-    output.put("\n\n  [i]   ** Finished.  Stopping Threads. **\n")
+    output.put("\n\n  " + TCOLORS.BLUE + "[i]" + TCOLORS.END + "   ** Finished.  Stopping Threads. **\n")
 
     for t in threads:
         t.terminate = True
@@ -825,7 +857,7 @@ if q.qsize() > 0:
     t = None
     o = None
     q = None
-    
+
     # Add the data and ending tags to the HTML report
     if not opts.json_min:
         open('index_%s.html' % timestamp, 'a').write("</div></body></html>")
@@ -848,13 +880,15 @@ if q.qsize() > 0:
             open("rawr_%s_serverinfo.csv" % timestamp, 'w').write(headers+"\n"+"\n".join(data_list))
 
         except:
-            writelog("\n  [!] '%s' was not found in the column list.  Skipping the CSV sort function." %
+            writelog("\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                     " '%s' was not found in the column list.  Skipping the CSV sort function." %
                      csv_sort_col, logfile, opts)
 
-        writelog("\n  [+] Report created in [%s/]\n" % os.getcwd(), logfile, opts)
+        writelog("\n  " + TCOLORS.CYAN + "[+]" + TCOLORS.END +
+                 " Report created in [%s/]\n" % os.getcwd(), logfile, opts)
 
         if opts.compress_logs:
-            writelog("  [>] Compressing logfile...\n", logfile, opts)
+            writelog("  " + TCOLORS.GREEN + "[>]" + TCOLORS.END + " Compressing logfile...\n", logfile, opts)
             logdir = os.path.basename(os.getcwd())
             os.chdir("../")
             try:
@@ -867,14 +901,15 @@ if q.qsize() > 0:
                     tfile.close()
                     logdir_c = logdir + ".tar"
 
-                writelog("  [+] Created  %s ++\n" % logdir_c, logfile, opts)
+                writelog("  " + TCOLORS.CYAN + "[+]" + TCOLORS.END + " Created  %s ++\n" % logdir_c, logfile, opts)
                 if os.path.exists(logdir) and os.path.exists(logdir_c):
                     shutil.rmtree(logdir)
 
             except Exception:
                 error = traceback.format_exc().splitlines()
                 error_msg("\n".join(error))
-                writelog("  [!] Failed\n\t%s\n" % "\n\t".join(error), logfile, opts)
+                writelog("  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END +
+                         " Failed\n\t%s\n" % "\n\t".join(error), logfile, opts)
 
 else:
-    writelog("\n  [!] No data returned. \n\n", logfile, opts)
+    writelog("\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " No data returned. \n\n", logfile, opts)

@@ -1,3 +1,6 @@
+3/18/2014
+    colorize output
+
 3/12/2014
     removed fields w/ blank values, and 'hist' from html report 'info' popup
     removed a debug message during spider
