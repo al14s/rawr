@@ -22,6 +22,8 @@ from lxml import etree
 from lib.banner import *
 from conf.settings import *
 from lib.functions import *
+import time
+start = time.time()
 
 # Set a few static variables
 timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -913,3 +915,10 @@ if q.qsize() > 0:
 
 else:
     writelog("\n  " + TCOLORS.YELLOW + "[!]" + TCOLORS.END + " No data returned. \n\n", logfile, opts)
+
+
+
+
+end = time.time()
+elapsed = end - start
+print "Time taken: ", elapsed, "seconds."
