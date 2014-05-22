@@ -1555,7 +1555,7 @@ def parse_nmap_xml(r):
 
                 target['hostnames'] = list(set(target['hostnames']))
 
-				target["service_version"] = []
+                target["service_version"] = []
                 for el_svc in el_port.xpath("service"):
                     for key in el_svc.keys():
                         if key == "tunnel":
@@ -1567,8 +1567,8 @@ def parse_nmap_xml(r):
                         else: 
                             target["service_"+key] = el_svc.attrib[key]
             
-				if target["service_version"] != []:
-					target["service_version"] = ' '.join(target["service_version"])
+                if target["service_version"] != []:
+                    target["service_version"] = ' '.join(target["service_version"])
 
                 for el_scpt in el_port.xpath("script"):
                     if el_scpt.attrib['id'] == "ssl-cert":
