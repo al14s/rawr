@@ -1,4 +1,4 @@
-from lib.constants import VERSION, TCOLORS
+from lib.constants import VERSION, TC
 
 m = m2 = (29 - len(VERSION))/2
 if len(VERSION) % 2 == 0:
@@ -15,7 +15,7 @@ banner = """
    o.     `          ``    .  :-    `  ym `moy.   `..-:///:/` `N/-
                                       :M+ .yhy+-.,/:--/o\ /d`  om/`',
                                       -M:  .'-/+:symdyysy+oN+  .N+:-
-   """ + TCOLORS.BLUE + "Rapid Assessment of Web Resources" + TCOLORS.END + """   dd  .h/hyhddMms+:-/./m   dy-
+   """ + TC.BLUE + "Rapid Assessment of Web Resources" + TC.END + """   dd  .h/hyhddMms+:-/./m   dy-
                                        /M-  -NmmNhms`     ``m`  sd.;.
 %s[Version %s]%s`Ms   mNmNN+       s/y   oNoyM:
                                    ,os+-mh   /mymm :./+:/+s+/ :hs``mM-
@@ -33,12 +33,8 @@ banner = """
 """ % (" " * m, VERSION, " " * m2)
 
 usage = """
- ./rawr.py
-        [-n <range>|-i <list> (-p <ports> -s <src port> -t <timing>)|-f <file>]
-             [-d <dir>] [--sslv] [-aboqrvxz] [--downgrade] [--noss]
-           [--proxy <ip:port>] [-m] [--sqlite] [--json] [--json-min]
-          [--spider] [--spider-opts <opts>] [--alt-domains <domains>]
-                    [-e] [--title <title>] [--logo <file>]
-           [--parsertest] [-u|-U] [--check-install|--force-install]"""
+  ./rawr.py [options] [ <range|host|url> | [-c|-f|-i] <file> ]
+
+"""
 
 words = "Random,Ragged,Rabid,Rare,Radical,Rational,Risky,Remote,Rowdy,Rough,Rampant,Ruthless:Act,Audit,Arming,Affront,Arc,Attack,Apex,Assault,Answer,Assembly,Attempt,Alerting,Arrest,Account,Apparel,Approval,Army:Wily,Weird,Wonky,Wild,Wascawy,Wimpy,Winged,Willing,Working,Warring,Wacky,Wasteful,Wealthy,Worried:Ravioli,Rats,Rabbits,Rhinos,Robots,Rigatoni,Reindeer,Roosters,Robins,Raptors,Raccoons,Reptiles"

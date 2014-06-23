@@ -7,51 +7,100 @@ PARSER_TRUEFALSE = 4    # Places 'True' or 'False' based on tag and attr specifi
 PARSER_COUNT = 5        # Places the number of results in the specified field.
 
 # Format
-#	WHOLEDOC: ( <field name>, <regex>, <type> )
-#	PARSER:   ( <field name>, [<tag>, ("<attrib>"|"text"), <regex>], <type> )
+#	WHOLEDOC: ( <field name>, <regex>, <type>, <usable for nonHTML> )
+#	PARSER:   ( <field name>, [<tag>, ("<attrib>"|"text"), <regex>], <type>, <usable for nonHTML>  )
 
 modules = [
     (
-        "analytics_ID",
-        """["']UA-[0-9]{8}-[0-9]{1}["']""",
-        WHOLEDOC_CONTENT),
+        "analytics_id",                                  # store the results in the 'analytics_ID' column
+        """["']UA-[0-9]{8}-[0-9]{1}["']""",              # look for google analytics IDs
+        WHOLEDOC_CONTENT,                                # Search the whole response content
+        False),  
     (
-        "email_addresses",                               # store the results in the 'emailaddresses' field
-        """[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}""",   # In the whole response content - look for email addresses
-        WHOLEDOC_CONTENT),
+        "index_pages",
+        """[Ii]ndex [Oo]f""",
+        WHOLEDOC_TRUEFALSE,
+        False),
     (
-        "phone_numbers",
-        """^(?:(?:\+?1\s*(?:[.-]\s*)?)?(?:\(\s*([2-9]1[02-9]|[2-9][02-8]1|[2-9][02-8][02-9])\s*\)|([2-9]1[02-9]""" +
-        """|[2-9][02-8]1|[2-9][02-8][02-9]))\s*(?:[.-]\s*)?)?([2-9]1[02-9]|[2-9][02-9]1|[2-9][02-9]{2})\s*(?:[.-]""" +
-        """\s*)?([0-9]{4})(?:\s*(?:#|x\.?|ext\.?|extension)\s*(\d+))?$""",
-        WHOLEDOC_CONTENT),
+        "email_addresses",                               # store the results in the 'email_addresses' column
+        """([a-zA-Z0-9._+-]{2,}@[a-zA-Z0-9.-]{1,}\.(?:[A-Z]{2,4}|[a-z]{2,4}))""",    # look for email addresses
+        WHOLEDOC_CONTENT,                                # Search the whole response content
+        True),
     (
-        "HTML5",
+        "keywords",
+        """((?:username|user|password|passwd)[\:\s]+[^\n\r]{,10})""",  # One of the keywords + 10 chars
+        WHOLEDOC_CONTENT,
+        True),
+    (
+        "urls",
+        """(http[s]?://[0-9a-zA-Z.@:&+-]+(?:[/][0-9a-zA-Z-&\?]+)+(?:[/]|[.][0-9a-z][0-9a-z-]{0,2}|[.][0-9A-Z][0-9A-Z-]{0,2}]))""",
+        WHOLEDOC_CONTENT,
+        True),
+    (
+        "files",  # needs testing
+        """(http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+)""",
+        WHOLEDOC_CONTENT,
+        True),
+    (
+        "us_phone_numbers",
+        """((?:(?:[\(\[][2-9]{1}[0-9]{2}[\)\]]|[2-9]{1}[0-9]{2})[\-\s]{1}){0,1}[2-9]{3}[\-]{1}[0-9]{4})[^\-]""",
+        WHOLEDOC_CONTENT,
+        True),                                          # Should be used during document/image document parsing
+    (
+        "unc_paths",                                   # store the results in the 'share_paths' column
+        """[^http:](?:[a-zA-Z]:[\\\\]{1,}|file:[\\\\]{1,}|[\\\\]{1,})((?:[\\\\]{1,}[a-z.A-Z0-9]{1,30}){2,}[/|\\\\]?)""",
+        WHOLEDOC_CONTENT,                                # Search the whole response content
+        True),                                          # Should be used during document/image document parsing
+    (
+        "sql_statements",
+        """(ALTER|CREATE|DELETE|DROP|EXEC(?:UTE){0,1}|INSERT(?:INTO){0,1}""" +
+        """|MERGE|SELECT|UPDATE|UNION(?:ALL){0,1}[^;]{2,10})""",
+        WHOLEDOC_CONTENT,
+        True),
+    (
+        "internal_ips",
+        "((?:127.0.0.1|(?:10\.(?:25[0-4]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[1-9])|192\.168|172\." +
+        "(?:1[6-9]|2[0-9]|3[0-1]))(?:\.(?:25[0-4]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[1-9])){2}))",
+        WHOLEDOC_CONTENT,
+        True),
+    (
+        "usernames",
+		"""(?:[a-zA-Z]:[\\\\]{1,}[U|u]sers|[D|d]ocuments and [S|s]ettings)[\\\\]{1,}(.*?)[\\\\]{1,}""",
+        WHOLEDOC_CONTENT,
+        True),
+    (
+        "html5",
         """<!DOCTYPE html>""",
-        WHOLEDOC_TRUEFALSE),
+        WHOLEDOC_TRUEFALSE,
+        False),
     (
         "jquery",
         ("script", ("src", "href"), """jquery"""),       # SCRIPT tags in SRC & HREF attr - look for the regxp "jquery"
-        PARSER_CONTENT),
+        PARSER_CONTENT,
+        False),
     (
         "comments",
         """<!--(.*?)-->""",
-        WHOLEDOC_CONTENT),
+        WHOLEDOC_CONTENT,
+        False),
     (
         "docwrites",
         """document.write'""",
-        WHOLEDOC_CONTENT),
+        WHOLEDOC_CONTENT,
+        False),
     (
-        "Flash_Objects",
+        "flash_objects",
         """new[\s]+FlashObject[\s]*\([\s]*['"]?[^'^"]+""",
-        WHOLEDOC_COUNT),
+        WHOLEDOC_COUNT,
+        False),
     (
-        "Flash_Objects",
+        "flash_objects",
         """new[\s]+SWFObject[\s]*\([\s]*['"]?[^'^"]+""",
-        WHOLEDOC_COUNT),
+        WHOLEDOC_COUNT,
+        False),
     (
-        "Flash_Objects",
+        "flash_objects",
         """\.embedSWF[\s]*\([\s]*["']?[^'^"]+""",
-        WHOLEDOC_COUNT
-    )
+        WHOLEDOC_COUNT,
+        False)
 ]

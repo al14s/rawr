@@ -16,46 +16,33 @@ It uses NMap(live or from file), Metasploit, Qualys, Nexpose, or Nessus scan dat
 each host on each port with an identified web service and gathers as much data as possible.  
 
 
+Requirements:
 
-REQUIREMENTS:
+    nmap - at least 6.00 - required for SSL strength assessment
+    phantomJS - tested with 1.9.1, can be downloaded/installed during update.
+    python-lxml - parsing xml & html
+    graphviz - site diagram from crawl (optional)
+    python-pygraphviz - site layout from crawl (optional) 
 
-    nmap               - at least 6.00 - required for SSL strength assessment
-    phantomJS          - tested with 1.9.1 - if not installed, can be downloaded into data/ folder during --check-install
-    python-lxml        - for quick file parsing
-    graphviz           - (optional) for creating site diagrams
-    python-pygraphviz  - (optional) for creating site diagrams
+OS Compatibility (tested with):
 
-    'requests' has been ported to the lib/ folder
+    Backtrack 6
+    Ubuntu 12.04LTS 
 
-
-INSTALLATION:
-
-    ' ./rawr.py --check-install '
-
-
-OS COMPATIBILITY:
-
-    Backtrack 6 / NMap 6.01
-    Ubuntu 12.04LTS / NMap 5.21 (nmap caused errors due to absence of ssl-enum-ciphers.nse)
-
-
-BROWSER COMPATIBILITY:
+Browser Compatibility (HTML report):
 
     Supported - Firefox (tested w/ 23)
     Tested/working on - Safari (tested w/ 5), Chrome (tested w/ 22), IE (tested w/ 7-9) 
 
+Embedded Packages:
 
-FILE INPUT FORMATS:
+    python-requests - 2.3.0 - http://docs.python-requests.org/en/latest/user/install/#install
+    python-imaging - 1.1.7 - http://effbot.org/downloads/#Imaging 
 
-    NMap       - XML
-    Nessus     - XML v2   (requires "Service Detection" plugin)
-    Metasploit - CSV
-    Qualys     - Port Services Report CSV
-    Qualys     - Asset Search XML (requires QIDs 86000,86001,86002)
-    Nexpose   - Simple XML, XML+v2  *parse v1 and v2 w/ the same setup*
-    OpenVAS    - XML
+Installation / Setup
 
-    + any CSV with at least the following fields: 
-			host,port,name,info  with values (ip, port, http|https|ssl|tls|www, service info)
-			headers must be on first row of doc
-			use --parsertest to output the first 3 targets and exit (to aide in parser dev)
+    apt-get install nmap 
+    apt-get install graphviz python-pygraphviz python-lxml 
+    git clone https://bitbucket.org/al14s/rawr.git 
+    cd rawr 
+    ./rawr.py -u

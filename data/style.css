@@ -53,7 +53,30 @@ a { cursor:default; text-decoration:none;color:#000; }
 	top:0;left:0;right:0;
 }
 #report_caption{position:fixed;right:0px;padding: 0px 10px 0px 5px;font-size:14px;font-weight:bold;text-align:right;}
-
+ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+ul li {
+    display: block;
+    position: relative;
+    float: left;
+}
+ul li ul li a {width: 105px;}
+li ul {display: none;}
+ul li a {
+    display: block;
+    text-decoration: none;
+    color: #ffffff;
+    padding: 10px 15px 10px 15px;
+    margin-left: 1px;
+    white-space: nowrap;
+}
+li:hover ul {display: block;top:24;position: absolute;}
+li:hover li {float: none;}
+li:hover a {background: #3b3b3b;}
+li:hover li a:hover {background: #7d7e7d;}
 .placeholder{padding-left:10px;float:right;height:100%;}
 .textwds{float:left;padding: 8px 10px 0px 5px;font-size:12px;color:#ffffff;font-weight:bold;text-shadow: #35333A 0.1em 0.1em 0.25em;}
 .links{display:inline;float:right;}

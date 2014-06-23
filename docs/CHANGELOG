@@ -1,5 +1,127 @@
-3/19/2014
+6/18/2014
+	removed '-n' and '-url' switches, now looking for the range/host/url as an arg
+		ex:  ./rawr.py -x -o -r --spider http://canhazcode.com
+		ex:  ./rawr.py google.com -x -o -r
+		ex:  ./rawr.py 10.0.0.0/24 -x -o -r
+	changed '--cfg' switch to '-c'
+	edited/updated usage and help texts
+	incremented to 0.1.80
+	now pulling response content for each host (+spider) into a 'uniqued' wordlist
+		<logfolder>/input_lists/wordlist_<host>_<port>_<ts>.lst
+	updated regexes for modules, added a check for index pages
 
+6/17/2014
+    now pulling all alphanumeric words longer than 3 chars into a wordlist
+        accumulates for the host during a crawl as well
+        saved to ./iL/wordlist__<host>_<port>.lst
+        make this an option?
+
+6/9/2014
+	added --url, which accepts a single url for enumeration
+	fixed a bug in the detection of metadata 'findings'
+	changed metadata output to .csv and cleaned it up
+
+6/5/2014
+	pulled ssl-cert(raw content), defpass, and res from target object before it gets inserted into the db
+
+6/4/2014
+	added security headers listing as an html output
+		- kudos to @SmeegeSec for the idea and the layout
+	updated html report to include dropdown for sec_headers and nmap_xml docs
+
+6/2/2014
+	updated functions.py (optimization/cleanup/bugfixes)
+		finished:
+			update
+				removed '--check-install' and '--force-install'
+				now uses -u and -U for all install/update functions
+				removed the need to download ver.csv - file versions are now in lib/constants.py
+	meta grab update
+		place all doc_, and exif_ files in the meta folder or...
+		all meta data (doc, exif, OTHER) in a 'findings' text file in the 'meta' folder
+		make exif_ files more readable
+	logfolder and input_lists created during --json_min
+		iLs no longer created if --json_min
+		.db file is now removed upon script completion
+	added '-S' for using crawl 'agression level' presets
+	ConfigParser
+		use .cfg files for portability of settings (needs more testing)
+		.cfg files are produced for every scan and placed in the logfolder
+		-- only values that deviate from the defaults are included in .cfg
+
+5/30/2014
+	updated rawr.py (optimization/cleanup/bugfixes) - completed
+		fixed issue with -i (NMap input list)
+		improved the speed of db writes
+		fixed a bug with recursive glob if a directory is given
+		fixed a bug with with recursive glob if a glob syntax (*) is given
+	fixed screenshot hang/delay issue in screenshot.js
+	updated functions.py (optimization/cleanup/bugfixes)
+		finished so far:
+			screenshot
+			write_to_csv
+			write_to_html
+			parse_csv
+			parse_nexpose_xml
+			writelog
+			error_msg
+			inpath
+		started:
+			parsedata - initial cleanup
+			crawl - initial cleanup... still need to break the file meta check out into its own function
+			parse_openvas_xml - need to get a scan w/ ssl data, otherwise ok
+			parse_nexpose_simple_xml - need to get a scan w/ ssl data, otherwise ok
+			parse_qualys_scan_report_xml - initial cleanup
+			parse_nessus_xml - initial cleanup
+			parse_nmap_xml - initial cleanup
+		fixed url issue with screenshots
+		improved the speed of db writes
+    'targets' update (nosql - shelve)
+        queue only holds a small ID for the task in memory
+        drop identical targets
+        make target fields cumulative
+        change flist to apply only to CSV
+        
+4/29/2014
+    added SQL statement detection module
+    put auth failures in an input list 'auth_fail.lst'
+    implemented session-aware requests during crawl
+    module for SQL statement detection (needs a lot of help at the moment)
+    create iLs along w/ asm
+        put in ./input_lists
+        iL_<port>_<timestamp>.lst
+        iL_<port>_<timestamp>.csv
+        iL_all_<timestamp>.lst
+        iL_all_<timestamp>.csv
+    now pulls/parses EXIF from all valid files
+    set hard limit for diagrams (100 nodes) - may not be enough
+    disabled 'follow redirects' during crawl
+        now parsing the redirect msg to make sure the destination is within scope
+
+3/24/2014
+    fixed request formatting issues with parse+meta pull from documents
+
+3/21/2014
+    removed color formatting strings from .log output
+    did some output message formatting
+    added "--mirror" option, which initiates a '--spider' and creates a cached copy of the site in <logfolder>/mirrored_sites/.
+    added the function to parse and pull meta from documents when it comes across them (done by default during crawl)
+        phone numbers
+        UNC paths
+        <domain>\<username> pairs
+        server addresses
+        non-routable (internal) IPs
+        email addresses
+    BUGFIXES
+        arm7l detection now works - still working on a good arm7l phantomJS bin
+        "ValueError: Unicode strings with encoding declaration are not supported."
+            casting requests content as string - works in test cases
+        lxml.etree.ParserError: Document is empty >>> added check for content before parse
+        ValueError: Invalid IPv6 URL >>> catching ugly urls now
+        we're accepting errors in HTML parsing during crawl (for now)
+            errors recieved were non-fatal and dealt with libxml2 and its ability to deal with broken html
+
+3/19/2014
     fixed logic bug in link list printing
     formatting bugs from colorization update
     fixed spidering bugs:

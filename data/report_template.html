@@ -342,15 +342,23 @@
 	<body>
 		<div id="header">
 			<span class="srch_area">
-				<span class="textwds">Search: </span>
-				<input type="text" id="q" size="15"/>
+				<input type="text" id="q" size="15" />
 				<button id="search">search</button>
 				<button id="reset">reset</button>
 			</span>
 			<span class="links_area">
-				<a class="textwds" onselect=False target="_blank" href="<!-- REPLACEWITHLINK -->">NMap XML</a>
-				<a class="textwds" onselect=False target="_blank" onClick="printable();">Printable</a>
-				<a class="textwds" onselect=False target="_blank" id="showips">List</a>
+				<ul id="menu">
+					<li><a class="textwds" onselect=False href="#">Reports</a>
+						<ul>
+							<li><a class="textwds" onselect=False target="_blank" href="<!-- REPLACEWITHSECHEADERS -->">Security Headers</a></li>
+							<!-- REPLACEWITHLINK -->
+							<!-- REPLACEWITHMETALINK -->
+						</ul>
+					</li>
+					<li><a class="textwds" onselect=False target="_blank" onClick="printable();">Printable</a></li>
+					<li><a class="textwds" onselect=False target="_blank" id="showips">List</a></li>
+				</ul>
+			</span>
 			</span>
 			<span id="srchindex" class='textwds'></span>
 			<span class="filter_btns">
@@ -393,3 +401,4 @@
 		<div id="sidepanel"></div>
 		<div id="bd"></div>
 		<div id="data">
+

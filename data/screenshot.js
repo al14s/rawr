@@ -11,12 +11,14 @@ page.open(url, function (status) {
     if (status !== 'success') {
         //console.log('[Screenshot]  Failed: Unable to load the address.  ' + url);
         page.close();
+        phantom.exit();
     } else {
 		page.evaluate(function() { document.body.bgColor = 'white'; });
         window.setTimeout(function () {
             page.render(filename);
 		    //console.log('[Screenshot] '+url+' >> ' + filename);
             page.close();
+            phantom.exit();
         }, timeout*1000);
     };
 });
