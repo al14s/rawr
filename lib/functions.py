@@ -10,7 +10,10 @@ import time
 import threading
 import sqlite3
 import traceback
-import Image
+try:
+   import Image
+except ImportError:
+   from PIL.Image import core as _imaging
 import colorsys
 import socket
 from warnings import simplefilter
