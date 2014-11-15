@@ -17,19 +17,19 @@ import time
 # start the stop-watch
 start = time.time()
 
-import optparse
+import optparse, os, sys
 from glob import glob
-
-# Non stdlib - must be installed
-from lxml import etree
-
 from lib.banner import *
 from conf.settings import *
-from lib.functions import *
 
 scriptpath = os.path.dirname(os.path.realpath(__file__))
-unix_ts = datetime.now().strftime("%s")
+sys.path.append(scriptpath + '/lib')
 
+#non stdlib
+from lib.functions import *
+from lxml import etree
+
+unix_ts = datetime.datetime.now().strftime("%s")
 
 def process_targets(targets):
 	for target in targets:
@@ -89,7 +89,6 @@ def process_targets(targets):
 
 	writelog("	  %s[+]%s Found [ %s ] web interface(s)\n" % (TC.CYAN, TC.END, len(targets)), logfile, opts)
 
-print('\n')
 
 # pull/parse our commandline args
 parser = optparse.OptionParser(usage=usage, version=VERSION)
@@ -103,8 +102,8 @@ parser.add_option('-f', metavar="<file>",
 parser.add_option('-c', metavar="<rawr .cfg file>",
 				  help='Use configuration file from previous scan.', dest='cfgfile')
 parser.add_option('-i', metavar="<file>",
-				  help="Supply a line-seperated input list. [NMap format] [can't be used with -n]", dest='nmap_il', default=False)
-parser.add_option('-m', help="Process inputs, create an Attack Surface Matrix, and exit.",
+				  help="Supply a line-seperated input list. [NMap format]", dest='nmap_il', default=False)
+parser.add_option('-m', help="Process inputs, create an Attack Surface Matrix, then exit.",
 				  dest='asm', action='store_true', default=False)
 parser.add_option('-p', metavar="<port(s)>",
 				  help="Specify port(s) to scan.   [default is '80,443,8080,8088']", dest='ports', default=ports)
@@ -131,8 +130,10 @@ group.add_option('--db-list', metavar="<file>",
 #parser.add_option_group(group)
 
 group = optparse.OptionGroup(parser, "ENUMERATION")
-group.add_option('-b', help='Use Bing to gather external hostnames. (good for shared hosting)', dest='bing_dns',
+group.add_option('--dns', help='Attempt AXFR for internal(non-routable) or use Bing for external.', dest='dns',
 				 action='store_true', default=False)
+#group.add_option('--dorks', help='Use Google filetype: to pull common doctypes.', dest='dorks',
+#				 action='store_true', default=False)
 group.add_option('-o', help="Make an 'OPTIONS' call to grab the site's available methods.", dest='getoptions',
 				 action='store_true', default=False)
 group.add_option('-r', help='Make an additional web call to get "robots.txt"', dest='getrobots', action='store_true',
@@ -222,7 +223,7 @@ if opts.cfgfile:
 		sys.exit(1)
 
 	#print dir(config), config.sections()
-	print dir(opts)
+	#print dir(opts)
 	for i in config.items('Settings'):
 		if i[1] in ('True', 'False'):
 			x = bool(i[1])
@@ -239,7 +240,7 @@ if not (opts.quiet or opts.json or opts.json_min):
 
 # sanity check
 if sum(map(bool, [opts.nmap_il, opts.nmaprng, opts.xmlfile, opts.compfile])) > 1:
-	parser.error("  %s[x]%s Can't use --url, -c, -f, -i, or -n in the same command." % (TC.RED, TC.END))
+	parser.error("  %s[x]%s Can't use more than one input in the same command." % (TC.RED, TC.END))
 	sys.exit(1)
 
 elif sum(map(bool, [opts.crawl_level, opts.crawl_opts])) > 1:
@@ -259,16 +260,16 @@ elif platform_type in "CYGWIN|Windows" and inpath("phantomjs.exe"):  # Windows, 
 
 elif platform_type in "CYGWIN|Windows" and (os.path.exists("%s/data/phantomjs/phantomjs.exe" % scriptpath)):
 	pjs_path = "%s/data//phantomjs/phantomjs.exe" % scriptpath
-	
+
 
 if opts.update:
-	update(pjs_path, scriptpath, False)
+	update(pjs_path, scriptpath, False, use_ghost)
 
 elif opts.forceupdate:
-	update(pjs_path, scriptpath, True)
+	update(pjs_path, scriptpath, True, use_ghost)
 
 
-if not pjs_path:
+if not any([pjs_path, opts.noss, use_ghost, opts.asm]):
 	print("  %s[x]%s phantomJS not found in $PATH or in RAWR folder.  \n\n\tTry running 'rawr.py -u'\n\n\tOr"
 	  " run rawr without screenshots (--noss)\n\n  %s[x]%s Exiting... !!\n\n" % (TC.RED, TC.END, TC.RED, TC.END))
 	sys.exit(1)
@@ -326,7 +327,17 @@ elif opts.nmap_il or opts.nmaprng:
 			sys.exit(1)
 
 	if opts.ports:
-		if str(opts.ports).lower() == "fuzzdb":
+		portswitch = "-p"
+		if 'top' in str(opts.ports).lower():
+			try:
+				opts.ports = str(int(str(opts.ports).replace('top', '')))
+				portswitch = "--top-ports"
+
+			except:
+				print("\n  %s[x]%s  Invalid 'top ports' specification. \n" % (TC.RED, TC.END))
+				sys.exit(1)
+
+		elif str(opts.ports).lower() == "fuzzdb":
 			opts.ports = fuzzdb
 
 		elif str(opts.ports).lower() == "all":
@@ -374,8 +385,13 @@ if not opts.json_min:  # Create the log directory if it doesn't already exist.
 	x = eval(str(parser.values))
 	y = eval(str(parser.get_default_values()))
 	if 'nmaprng' in x:
-		config.set('Settings', 'nmaprng', x['nmaprng'])
+		if x['nmaprng']:
+			config.set('Settings', 'nmaprng', x['nmaprng'])
+
 		del x['nmaprng']
+
+	if opts.cfgfile:
+		del x['cfgfile']
 
 	for opt in x.keys():
 		if not x[opt] == y[opt]:
@@ -384,7 +400,8 @@ if not opts.json_min:  # Create the log directory if it doesn't already exist.
 	with open('rawr_%s.cfg' % timestamp, 'wb') as configfile:
 		config.write(configfile)
 
-if opts.crawl or opts.mirror:
+if any([opts.crawl_level, opts.crawl, opts.mirror, opts.crawl_opts]):
+	opts.crawl = True
 	if opts.crawl_level:
 		sl = opts.crawl_level
 	
@@ -461,12 +478,12 @@ if opts.title and len(opts.title) > 60:
 
 # Check for the list of default passwords
 if opts.defpass:
-	if os.path.exists("%s/%s" % (scriptpath, DEFPASS_FILE)):
-		writelog("\n  %s[i]%s Located defpass.csv\n" % (TC.BLUE, TC.END), logfile, opts)
+	if os.path.exists("%s/%s" % (scriptpath, DPE_FILE)):
+		writelog("\n  %s[i]%s Located dpe_db.xml\n" % (TC.BLUE, TC.END), logfile, opts)
 
 	else:
-		writelog("  %s[!]%s Unable to locate %s. =-\n" % (TC.BLUE, TC.END, DEFPASS_FILE), logfile, opts)
-		choice = raw_input("\tContinue without default password info? [Y|n] ").lower()
+		writelog("  %s[!]%s Unable to locate %s. =-\n" % (TC.BLUE, TC.END, DPE_FILE), logfile, opts)
+		choice = raw_input("\tContinue without the DPE Database? [Y|n] ").lower()
 		defpass = False
 		if (not choice in "yes") and choice != "":
 			print("\n  %s[x]%s Exiting... \n\n" % (TC.RED, TC.END))
@@ -497,9 +514,7 @@ if opts.ver_dg:
 	httplib.HTTPConnection._http_vsn_str = 'HTTP/1.0'
 
 if opts.proxy_dict:
-	opts.proxy_dict = {"http": opts.proxy_dict, "https": opts.proxy_dict}
-
-delthis = False
+	opts.proxy_dict = {"http": "http://" + opts.proxy_dict, "https": "http://" + opts.proxy_dict}
 
 # Create a list called 'files', which contains filenames of all our .xml sources.
 if opts.nmap_il or opts.nmaprng and not 'http' in opts.nmaprng:
@@ -536,11 +551,11 @@ if opts.nmap_il or opts.nmaprng and not 'http' in opts.nmaprng:
 		proc = subprocess.Popen(['nmap', '-V'], stdout=subprocess.PIPE)
 		ver = proc.stdout.read().split(' ')[2]
 
-		# greatly increases scan speed, introduced in nmap v.6.4
-		if float(ver) > 6.3:
+		# greatly increases scan speed, introduced in nmap v.6.25(?)
+		if float(ver) >= 6.25:
 			cmd += "--max-retries", "0"
 
-		cmd += "-p", opts.ports, "-T%s" % opts.nmapspeed, "-vv", "-sV", sslscripts, outputs, fname, "--open"
+		cmd += portswitch, opts.ports, "-T%s" % opts.nmapspeed, "-vv", "-sV", sslscripts, outputs, fname, "--open"
 
 		if opts.nmap_il:
 			cmd += "-iL", opts.nmap_il
@@ -696,7 +711,11 @@ else:
 
 # cleaning up for the --json-min run
 if opts.json_min:
-	os.remove(files[0])
+	try:
+		os.remove(files[0])
+
+	except:
+		pass
 
 if q.qsize() > 0:
 	if not opts.json_min:
@@ -801,7 +820,7 @@ if q.qsize() > 0:
 			x = '<li><a class="textwds" onselect=False target="_blank" href="%s">NMap XML</a></li>' % fname
 			filedat = filedat.replace('<!-- REPLACEWITHLINK -->', x)
 
-		filedat = filedat.replace('<!-- REPLACEWITHDATE -->', datetime.now().strftime("%b %d, %Y"))
+		filedat = filedat.replace('<!-- REPLACEWITHDATE -->', datetime.datetime.now().strftime("%b %d, %Y"))
 		filedat = filedat.replace('<!-- REPLACEWITHTITLE -->', opts.title)
 		filedat = filedat.replace('<!-- REPLACEWITHRANGE -->', report_range)
 		filedat = filedat.replace('<!-- REPLACEWITHTIMESTAMP -->', timestamp)
@@ -868,8 +887,19 @@ if q.qsize() > 0:
 
 	# Add the data and ending tags to the HTML report
 	if not opts.json_min:
-		with open('index_%s.html' % timestamp, 'a') as of:
-			of.write("</div></body></html>")
+		if os.path.exists('meta_report_%s.html' % timestamp):
+			filedat = open('index_%s.html' % timestamp).read()
+			x = '<li><a class="textwds" onselect=False target="_blank" href="meta_report_%s.html">META Report</a></li>' % timestamp
+			filedat = filedat.replace('<!-- REPLACEWITHMETALINK -->', x)
+			with open('index_%s.html' % timestamp, 'w') as of:
+				of.write(filedat + "</div></body></html>")
+
+			with open('meta_report_%s.html' % timestamp, 'a') as of:
+				of.write("</body></html>")
+				
+		else:
+			with open('index_%s.html' % timestamp, 'a') as of:
+				of.write("</div></body></html>")
 
 		with open('sec_headers_%s.html' % timestamp, 'a') as of:
 			of.write("""</table><br><br>\n<h5>Access Control Allow Origin (Access-Control-""" + \
@@ -949,7 +979,7 @@ if q.qsize() > 0:
 			logdir = os.path.basename(os.getcwd())
 			os.chdir("../")
 			try:
-				if system() in "CYGWIN|Windows":
+				if platform_type in "CYGWIN|Windows":
 					shutil.make_archive(logdir, "zip", logdir)
 					logdir_c = logdir + ".zip"
 				else:

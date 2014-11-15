@@ -16,33 +16,39 @@ It uses NMap(live or from file), Metasploit, Qualys, Nexpose, or Nessus scan dat
 each host on each port with an identified web service and gathers as much data as possible.  
 
 
+
 Requirements:
 
     nmap - at least 6.00 - required for SSL strength assessment
-    phantomJS - tested with 1.9.1, can be downloaded/installed during update.
+    Ghost or phantomJS
+        *Can be switched in conf/settings.py - default setting is Ghost
+        phantomJS can be automatically downloaded/installed during update.
+        PySide or PyQT4 - needed if using Ghost 
     python-lxml - parsing xml & html
-    graphviz - site diagram from crawl (optional)
-    python-pygraphviz - site layout from crawl (optional) 
+    python-pygraphviz - create PNG diagrams from site crawl (optional) 
 
-OS Compatibility (tested with):
-
-    Backtrack 6
-    Ubuntu 12.04LTS 
 
 Browser Compatibility (HTML report):
 
     Supported - Firefox (tested w/ 23)
     Tested/working on - Safari (tested w/ 5), Chrome (tested w/ 22), IE (tested w/ 7-9) 
 
+
 Embedded Packages:
 
     python-requests - 2.3.0 - http://docs.python-requests.org/en/latest/user/install/#install
-    python-imaging - 1.1.7 - http://effbot.org/downloads/#Imaging 
+    python-imaging - 1.1.7 - http://effbot.org/downloads/#Imaging
+    Ghost - http://jeanphix.me/Ghost.py/ 
+
 
 Installation / Setup
 
     apt-get install nmap 
-    apt-get install graphviz python-pygraphviz python-lxml 
+
+    apt-get install python-pygraphviz python-lxml python-pyside 
+
     git clone https://bitbucket.org/al14s/rawr.git 
+
     cd rawr 
+
     ./rawr.py -u

@@ -15,7 +15,7 @@ banner = """
    o.     `          ``    .  :-    `  ym `moy.   `..-:///:/` `N/-
                                       :M+ .yhy+-.,/:--/o\ /d`  om/`',
                                       -M:  .'-/+:symdyysy+oN+  .N+:-
-   """ + TC.BLUE + "Rapid Assessment of Web Resources" + TC.END + """   dd  .h/hyhddMms+:-/./m   dy-
+ """ + TC.BLUE + "  Rapid Assessment of Web Resources " + TC.END + """  dd  .h/hyhddMms+:-/./m   dy-
                                        /M-  -NmmNhms`     ``m`  sd.;.
 %s[Version %s]%s`Ms   mNmNN+       s/y   oNoyM:
                                    ,os+-mh   /mymm :./+:/+s+/ :hs``mM-
@@ -33,6 +33,7 @@ banner = """
 """ % (" " * m, VERSION, " " * m2)
 
 usage = """
+
   ./rawr.py [options] [ <range|host|url> | [-c|-f|-i] <file> ]
 
 """

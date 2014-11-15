@@ -8,21 +8,22 @@ RAWR would not be possible if it weren't for all of your feedback on what it
 
 
 	DEVELOPERS (RAWR):
-		Adam Byers              @al14s
-		Tom Moore			    @c0ncealed
+		Adam Byers (@al14s)
+		Tom Moore  (@c0ncealed)
 
 
 	DEVELOPERS (OTHER):
 		fyodor				    Creator of NMap
 		Ariya Hidayat		    Creator of PhantomJS
+		NJ OUCHN (@toolswatch)	Creator of the DPE (http://www.toolswatch.org/dpe/)
 		WEBNet77.net		    Source, IPtoCountry.csv
 		@SmeegeSec				idea and initial layout for sec_headers page
 
 
 	CONTRIBUTORS:
-		Bryan Tobey			Tester              @_fmm
-		Chris Teodorski		Tester              @can0beans
-		Artis Schlossberg	Tester, SSL suggestion
-		human39				Tester
-		justbill			Tester
-		Richard Stevens     Tester
+		Bryan Tobey (@_fmm)
+		Chris Teodorski	(@can0beans)
+		Artis Schlossberg
+		human39
+		justbill
+		Richard Stevens

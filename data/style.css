@@ -73,7 +73,7 @@ ul li a {
     margin-left: 1px;
     white-space: nowrap;
 }
-li:hover ul {display: block;top:24;position: absolute;}
+li:hover ul {display: block;top:22;position: absolute;}
 li:hover li {float: none;}
 li:hover a {background: #3b3b3b;}
 li:hover li a:hover {background: #7d7e7d;}

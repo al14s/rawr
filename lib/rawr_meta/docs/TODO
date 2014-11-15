@@ -1,0 +1,7 @@
+TODO
+	find something to consistently determine OS
+	tune regexes:
+		bad locations     	  \jU\uxtL
+		bad email addresses   fZB@k.AL
+
+   

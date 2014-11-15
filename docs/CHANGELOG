@@ -1,445 +1,63 @@
-6/18/2014
-	removed '-n' and '-url' switches, now looking for the range/host/url as an arg
-		ex:  ./rawr.py -x -o -r --spider http://canhazcode.com
-		ex:  ./rawr.py google.com -x -o -r
-		ex:  ./rawr.py 10.0.0.0/24 -x -o -r
-	changed '--cfg' switch to '-c'
-	edited/updated usage and help texts
-	incremented to 0.1.80
-	now pulling response content for each host (+spider) into a 'uniqued' wordlist
-		<logfolder>/input_lists/wordlist_<host>_<port>_<ts>.lst
-	updated regexes for modules, added a check for index pages
-
-6/17/2014
-    now pulling all alphanumeric words longer than 3 chars into a wordlist
-        accumulates for the host during a crawl as well
-        saved to ./iL/wordlist__<host>_<port>.lst
-        make this an option?
-
-6/9/2014
-	added --url, which accepts a single url for enumeration
-	fixed a bug in the detection of metadata 'findings'
-	changed metadata output to .csv and cleaned it up
-
-6/5/2014
-	pulled ssl-cert(raw content), defpass, and res from target object before it gets inserted into the db
-
-6/4/2014
-	added security headers listing as an html output
-		- kudos to @SmeegeSec for the idea and the layout
-	updated html report to include dropdown for sec_headers and nmap_xml docs
-
-6/2/2014
-	updated functions.py (optimization/cleanup/bugfixes)
-		finished:
-			update
-				removed '--check-install' and '--force-install'
-				now uses -u and -U for all install/update functions
-				removed the need to download ver.csv - file versions are now in lib/constants.py
-	meta grab update
-		place all doc_, and exif_ files in the meta folder or...
-		all meta data (doc, exif, OTHER) in a 'findings' text file in the 'meta' folder
-		make exif_ files more readable
-	logfolder and input_lists created during --json_min
-		iLs no longer created if --json_min
-		.db file is now removed upon script completion
-	added '-S' for using crawl 'agression level' presets
-	ConfigParser
-		use .cfg files for portability of settings (needs more testing)
-		.cfg files are produced for every scan and placed in the logfolder
-		-- only values that deviate from the defaults are included in .cfg
-
-5/30/2014
-	updated rawr.py (optimization/cleanup/bugfixes) - completed
-		fixed issue with -i (NMap input list)
-		improved the speed of db writes
-		fixed a bug with recursive glob if a directory is given
-		fixed a bug with with recursive glob if a glob syntax (*) is given
-	fixed screenshot hang/delay issue in screenshot.js
-	updated functions.py (optimization/cleanup/bugfixes)
-		finished so far:
-			screenshot
-			write_to_csv
-			write_to_html
-			parse_csv
-			parse_nexpose_xml
-			writelog
-			error_msg
-			inpath
-		started:
-			parsedata - initial cleanup
-			crawl - initial cleanup... still need to break the file meta check out into its own function
-			parse_openvas_xml - need to get a scan w/ ssl data, otherwise ok
-			parse_nexpose_simple_xml - need to get a scan w/ ssl data, otherwise ok
-			parse_qualys_scan_report_xml - initial cleanup
-			parse_nessus_xml - initial cleanup
-			parse_nmap_xml - initial cleanup
-		fixed url issue with screenshots
-		improved the speed of db writes
-    'targets' update (nosql - shelve)
-        queue only holds a small ID for the task in memory
-        drop identical targets
-        make target fields cumulative
-        change flist to apply only to CSV
-        
-4/29/2014
-    added SQL statement detection module
-    put auth failures in an input list 'auth_fail.lst'
-    implemented session-aware requests during crawl
-    module for SQL statement detection (needs a lot of help at the moment)
-    create iLs along w/ asm
-        put in ./input_lists
-        iL_<port>_<timestamp>.lst
-        iL_<port>_<timestamp>.csv
-        iL_all_<timestamp>.lst
-        iL_all_<timestamp>.csv
-    now pulls/parses EXIF from all valid files
-    set hard limit for diagrams (100 nodes) - may not be enough
-    disabled 'follow redirects' during crawl
-        now parsing the redirect msg to make sure the destination is within scope
-
-3/24/2014
-    fixed request formatting issues with parse+meta pull from documents
-
-3/21/2014
-    removed color formatting strings from .log output
-    did some output message formatting
-    added "--mirror" option, which initiates a '--spider' and creates a cached copy of the site in <logfolder>/mirrored_sites/.
-    added the function to parse and pull meta from documents when it comes across them (done by default during crawl)
-        phone numbers
-        UNC paths
-        <domain>\<username> pairs
-        server addresses
-        non-routable (internal) IPs
-        email addresses
-    BUGFIXES
-        arm7l detection now works - still working on a good arm7l phantomJS bin
-        "ValueError: Unicode strings with encoding declaration are not supported."
-            casting requests content as string - works in test cases
-        lxml.etree.ParserError: Document is empty >>> added check for content before parse
-        ValueError: Invalid IPv6 URL >>> catching ugly urls now
-        we're accepting errors in HTML parsing during crawl (for now)
-            errors recieved were non-fatal and dealt with libxml2 and its ability to deal with broken html
-
-3/19/2014
-    fixed logic bug in link list printing
-    formatting bugs from colorization update
-    fixed spidering bugs:
-        links file shows incorrect tree when 'breadth first'
-            # just made it a 'uniqued' list of links until we're using nosqlite for 'targets' object
-            # if it's 'depth first', it will still be in a tabbed tree structure
-        crawl goes to depth +1
-        diagram shows soup sandwich (fixed w/ crawl depth correction)
-        deal with diagrams dying when there are too many discovered URLs
-            will provide documentation and control recommendations + warnings on repo instruction page
-            future plan is to break the diagrams up at a certain point
-
-3/18/2014
-    colorize output
-
-3/12/2014
-    removed fields w/ blank values, and 'hist' from html report 'info' popup
-    removed a debug message during spider
-    added try/except within html parsing 'for' loop to allow for element parse failure w/o dropping entire page
-    added 'phone_numbers' module and enabled 'docwrites' and 'Flash_Objects'
-    added checking for blank responses to avoid HTML parsing errors
-    crawl now checking and correctly following whitelisted domains
-    added --blacklist-urls - can feed it an input list of urls to ignore
-    now runs 4 a max of spider jobs at a time by default (changeable via --spider-opts or settings.py)
-    added breadth vs. length option to spidering
-    seperated url call timeout for spidering, also configurable via cli and settings.py
-    started forming code for '-c', or the option to use scan settings from a prior scan (.db?) and rerun
-        would add to the .db, then create a csv and HTML report to show differences between the two scans
-
-3/3/2014
-    code optimization
-
-3/1/2014
-    dynamic fields now show properly in HTML report (printable view)
-    now piping NMap warnings and errors to error.log when using json & json-min
-    python warnings now 'ignored'
-    fixed bug - no stdout from --json or --json-min
-    silenced screenshot warnings/errors during --json-min and --json
-    ran all tests in docs/TESTS file
-
-2/28/2014
-    cleaned up imports
-    relocated thread 'busy' flag - was causing odd active thread count
-    updated TESTS
-    seperated CHANGELOG from tasklist
-    changed root node in diagram - border color to blue, shape to circle
-    changed border color of external links in diagram to purple
-    optimized NMap regex, relocated to constants.py
-
-2/27/2014
-    diagram value changed to filename
-    added --alt-domains ""  ->  string or list to specify more domains to be followed during crawl
-    added --spider-opts d:<depth>,s:<follow_subdomains>,t:<timeout>,u:<url_limit>
-    pulled 'found doc' notification to avoid scope creep
-        breaking doc parsing & file meta off into seperate tool for specifically for spidering/mirroring
-        will be able to feed the 'links_' file into the tool if desired.
-
-2/26/2014
-    fixed inconsistency with email_addresses, also now removing duplicates
-    ctrl+c is now much more effective in stopping the process.
-        * screenshot & spider take a second to die, but script finishes out properly after threads are closed.
-    fixed --downgrade, verified via wireshark (screenshots are still pulled via 1.1, so expect that in a pcap)
-    corrected the 'timeout' exception reference -> socket.timeout
-    report scope value may be 'None' if using multiple files
-    don't allow the '!' image to be previewed
-    changed 'html5' to true/false instead of content
-    added module for comments >>> 'comments' column
-    spider
-        doesn't attempt to crawl links that are already in the host's urls visited
-        populates 'docs' and 'doc_count' columns when docs are found during spider
-            new file "_docs" under 'maps' contains links to all docs found
-        now notifies of docs found during crawl
-        doesn't attempt to crawl files
-        now parsing html (using html.fromstring(html) iterator) as well as hitting the doc w/ a regex
-    move index arrows to the right (overlaps the list button)
-    fixed regex for bing result detection
-
-2/25/2014
-    * performed code cleanup
-    set botched pic hue from 0 to 256, so they'll go at the end of the line w/ the lighter colors
-
-2/24/2014
-    added 'order thumbnails by color weight'
-    crawl now uses prior link as 'referer'
-    fixed bug in SSL cert date parsing
-
-1/8/2014
-    added more fields to the CSV
-    added check for charset specification in Content-Type and cookies
-    if it's on a PwnPad, default logdir changes - *** need path to android docs folder ***
-
-12/24/2013
-    fixed --proxy function - tested w/ burp
-        (was building the phantomjs command incorrectly.)
-    tested RAWR on pwnpad
-    added --check-install message for PwnPad users - "Please install phantomJS via apt-get."
-
-11/5/2013
-    added '--max-retries 0' to nmap if version is > 6.3  - greatly increases speed of scan
-
-
-11/4/2013
-    fixed: ANNOYANCE - CSV field quotes showing up in Excel
-    made a special '401' image for the HTML report for easy identification(?)
-    added --proxy <ip:port>, so you can have Zap/Burp/w3af feed creds to the sites
-    added a check for crossdomain.xml
-    added './<logfolder>/auth_fail.log' - containing all 401's
-
-
-10/18/2013
-    BUG - EC2 instances - screenshots don't work  -  have worked footprint down to minimum for now
-
-
-10/4/2013
-    fixed folder deletion when updating/installing phantomjs
-    fixed some output inconsistancies
-    fixed SSL identification error in NMap parser
-    fixed (muted for now) null hostname error
-    fixed thread exception where target['url'] is empty (kills thread, causes a continual run)
-    shortened HTML parsing error to make them less dominant, added url to msg
-
-
-9/25/2013
-    catch agraph() errors - now escaping quotes to prevent the current error.  will revisit if different errors occur
-    SSL parsing/testing Nessus & Qualys XML
-
-
-9/24/2013
-    *code cleanup/optimization
-    *Decided to make RAWR a linux-only project.
-        i'll leave the WIN/OSX code that is currently in place - in the event someone wants to create a windows or OSX fork
-    fixed error messages - variable ref needed to be updated
-
-
-9/23/2013
-    fixed - HTML - 'show only these' button inop.
-    added '-m', which makes an attack surface matrix from the inputs and exits
-    removed 'port' if/then from "Pulling" msg - it adds the port automatically if it's not 80 or 443...
-    removed pygraphviz from lib/ - _graphviz.so doesn't run on OSX (x64?)
-    use 'diagram' key in HTML (for missing diagrams) - added it to flist (must be present for now)
-
-
-9/22/2013
-    added '-v' to show spidering updates
-    added crawl 'overall' timeout, url limit
-    added a "diag" key to target obj upon successful creation of diagram
-    added timeout and 'not found' error handling to requests
-    improved output
-    improved error displays
-    *Added/tested ability to parse the following formats (tested against metasploitable2)
-        Nexpose - XML+v2  *parse v1 and v2 w/ the same setup*
-       OpenVAS XML
-
-
-9/21/2013
-    *Added/tested ability to parse the following formats (tested against metasploitable2)
-        Nexpose    - Simple XML
-    improvements to output
-    using traceback to send more info to the new error.log
-    fixed a type/casting error with the binged ports array
-    ported requests and pygraphviz into our lib/ folder (working on lxml)
-    fixed issue with file processing in -f switch
-    fixed bug in defpass parsing
-
-
-9/20/2013
-    *Added/tested ability to parse the following formats (tested against metasploitable2)
-        NMap       - XML
-        Nessus     - XMLv2   (requires "Service Detection" plugin)
-        Metasploit - CSV
-        Qualys     - Port Services Report CSV
-        Qualys     - Asset Search XML (requires QIDs 86000,86001,86002)
-        any CSV with at least the following fields: host,port,name,info (ip, port, http|https|ssl|tls|www, service info)
-            ~~! must have headers as first row of document
-
-    added --parsertest to output the first 3 targets and exit (to aide in parser dev)
-    fixed bugs in .nessus file parser
-    added ssl-cert pull to .nessus file parser
-
-
-9/19/2013
-    fixed a bug in SSL cert parsing
-    added hostname to ASM
-    added fallback ssl cert grab - when pulling hosts from a file without cert info
-    added the creation of an attack surface matrix - csv (different output for -a?)
-        very simple for now... thinking of expanding to include top talkers, etc.
-    accept hosts from Qualys csv port/service export
-
-
-9/18/2013
-    removed script updater (use repo)
-    HTML rehash
-        BUG - arrows cover 'printable' button
-        BUG - '+' too close to 'Results'
-        redesign info display window
-            add cert info
-        use an id # for each entry and select only that one (IPLIST)
-        write flist as a list
-        only process as many entries as we're showing  ;)
-        add button for diagram (m = map)
-
-
-9/17/2013
-    *add module code to the parser func.
-
-
-9/16/2013
-    fixed BUG - Alive threads count... counts?
-    dead threads shouldn't hinder a scan from finishing - added another try/except to catch and warn of errors
-    fixed BUG - now catching errors from lxml parser
-    small supplements to url regex
-    fixed BUG - sqlite data issue - parameterized the queries
-    fixed BUG - -e was operating backwards, disabled defpass unless specified
-    fixed BUG - duplicate diagram entries w/ and w/o "/" on end of url
-    fixed BUG - character/string formatting errors
-    add checks at beginning for python-requests python-lxml
-    added error messages for extra web calls
-    disabled further web calls if main call fails
-
-
-9/15/2013
-    split PARSER modules from WHOLEDOC ones
-    *threads now feed all but the first hostname back to the queue - does more to distribute the load
-    fixed a double-feed issue with the individual XML parsers
-    fixed a double-feed issue with Bing>DNS
-
-
-9/14/2013
-    revisit meta tags & parser
-    make site layout left to right, more readable - moved from libgv-python/pygraph to pygraphviz
-    fixed json output so that it doesn't walk all over itself...
-    test/tweak spidering
-
-
-9/13/2013
-    clean up output messages (tabbing)
-    --json, --json-min fully implemented
-    urlparse - pull vars from URLs - deemed unneccessary for now
-    implemented html parser (lxml)
-    clean up data in csv
-    added sqlite3 db file output
-    add 'threads active' back into status msg
-    BUGFIX: SSL parsing error
-    made --noss gracefully deal w/ 'found' pngs and images folder creation
-
-
-8/15/2013
-    *read all files as streams
-    *change xml parser to lxml
-    *switched to optparse
-    *switched to requests from urllib2
-    made screenshot optional
-    forgo saving nmap data and use header data from pull
-    *use dict object for target info
-    *rehash NMAP and NESSUS doc parse
-    *break xml parsing functions out into functions.py
-    allow spidering without PNG output
-    add redirect history to target object
-
-
-8/03/2013
-    *finished first implementation of spider/map
-    *split rawr up into folders/files for easier understanding
-        - my thanks to the Cuckoo crew for setting a good example!
-    added more code comments
-    added AUTHORS doc
-    moved default settings to conf/settings.py
-    added TESTS to docs folder in order to document the testing process
-    added modules/default.py, so users can easily add checks for enumeration
-    images now include a timestamp in their name
-    pulled css styles out into ./html_res/styles.css
-    ---* changed behavior of -d *---
-        now simply decides where the log folder will reside.
-        log_<date>_<time>_rawr/  is created inside the specified directory.
-    updated to phantomJS 1.9.1
-
-
-7/26/2013
-    *add ability to spider links (only enumerate links on that domain)
-    add modules for java, JS, flash, jquery, etc.
-    *create graph from spider (https://code.google.com/p/python-graph/)
-
-
-7/25/2013
-    *updated usage and -h (+examples) with new options
-    move modules to beginning of script or to another file and call them all during data parse
-
-
-7/23/2013
-    no longer exits update process if user declines to update phantomJS
-
-
-7/8/2013
-    fixed bug - error with range in report when using a file
-    fixed bug in logo size warning  (called writelog before it was defined)
-    fixed nmap.xsl reference in .xml file (it wasn't looking in the html_res folder)
-
-
-
-6/24/2013
-    recreated changelog
-    *optimize XML parsing
-    *HTML report 'print mode' with user's logo in header
-        class 'Header' >> hidden
-        ignore mouseovers
-        ignore keystrokes - except for 'esc', which reloads the page
-        logo align right and veritcal center
-        add --title switch
-            warn if longer than 60 chars
-        replace <!-- REPLACEWITHDATE --> w/ date
-        replace <!-- REPLACEWITHTITLE --> and set default
-        replace <!-- REPLACEWITHLINK --> with just the link
-        replace <!-- REPLACEWITHLOGO --> w/ logo if specified
-        replace <!-- REPLACEWITHRANGE -->
-        add --logo switch
-            check size and warn if odd
-    move nmap.xsl, jquery.js, and logo.png to html_res folder
-    updated usage to reflect new options
-    accept Qualys XML (requires QID 86000)
-
-
+----- 0.2 -----
+
+	BUGFIXES
+		no longer importing Ghost when not in use
+		now initiating spider upon -S (--spider not required if using -S or --spider-opts
+		diagrams not showing in html  ('m')
+
+	CHANGES
+		added install.sh
+		added a null 'Accept-Encoding' header to disable compression
+			re: https://github.com/ariya/phantomjs/issues/10930
+		added title to meta html report
+
+
+----- 0.1.91 -----
+
+	BUGFIXES
+		fixed HTML report madness - the one pixel space between the button and dropdown in FF on windows
+
+	CHANGES
+		pointed update function to latest phantomJS install
+			https://bitbucket.org/ariya/phantomjs/downloads/phantomjs-1.9.7...
+
+
+----- 0.1.9 -----
+
+	BUGFIXES
+		removed 'cfgfile' setting when creating config file on current scan
+		fixed a bug in glob_recurse recursion call
+		fixed a bug in .cfg file creation - now excluding 'nmaprng' if False
+		removed a line break that showed up even in --json and --json-min
+		fixed bug in platform type check during tar function
+		fixed bug in proxy usage due to update in requests module
+		fixed bug in proxy error message
+		fixed Bing Reverse DNS lookup
+		fixed bug where PhantomJS was required during -m
+
+	CHANGES
+		changed '-b' to '--dns'
+			placeholder code for DNS server axfr/queries
+		started updating changelog by version rather than date
+		implemented rawr_meta - now creates meta_report_<timestamp>.html if there are findings
+		started pulling/storing CPE from NMap XML
+		removed defpass.csv in favor of the DPE DB - http://www.toolswatch.org/dpe/  @ToolsWatch
+			now matching CVE and default password info via CPE
+		settings.py/use_ghost now used as switch for using phantomJS or ghost.py
+		removed check for PhantomJS during update if use_ghost is True
+		added break in Bing if "No Results Found" in return
+
+
+----- 0.1.8 -----
+
+	CHANGES
+		removed '-n' and '-url' switches, now looking for the range/host/url as an arg
+			ex:  ./rawr.py -x -o -r --spider http://canhazcode.com
+			ex:  ./rawr.py google.com -x -o -r
+			ex:  ./rawr.py 10.0.0.0/24 -x -o -r
+		changed '--cfg' switch to '-c'
+		edited/updated usage and help texts
+		incremented to 0.1.80
+		now pulling response content for each host (+spider) into a 'uniqued' wordlist
+			<logfolder>/input_lists/wordlist_<host>_<port>_<ts>.lst
+		updated regexes for modules, added a check for index pages

@@ -90,7 +90,7 @@
 								hostname = item.url.split('/')[2];
 								if (hostname == "") { hostname = "n/a"; }
 
-								diagram_url="maps/diagram_" + hostname + "_" + item['port'] + "__" + timestamp + ".png";
+								diagram_url="diagrams/diagram_" + hostname + "_" + item['port'] + "__" + timestamp + ".png";
 
 								// find pic if present
 								picurl = "images/" + hostname + "_" + timestamp + "_" + item.port + ".png";
@@ -358,7 +358,6 @@
 					<li><a class="textwds" onselect=False target="_blank" onClick="printable();">Printable</a></li>
 					<li><a class="textwds" onselect=False target="_blank" id="showips">List</a></li>
 				</ul>
-			</span>
 			</span>
 			<span id="srchindex" class='textwds'></span>
 			<span class="filter_btns">

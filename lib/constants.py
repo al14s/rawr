@@ -1,24 +1,25 @@
-VERSION = "0.1.80"
+VERSION = "0.2"
 
 # Update information
 REPO_DL_PATH = "https://bitbucket.org/al14s/rawr/downloads/"
 IP_TO_COUNTRY = "data/IpToCountry.csv"
-DEFPASS_FILE = "data/defpass.csv"
+DPE_DL_PATH = "http://www.toolswatch.org/dpe/dpe_db.xml"
+DPE_FILE = "data/dpe_db.xml"
 VER_FILE = "ver.csv"
 DEFPASS_VER = "2"
 IP2C_VER = "5.9.1"
-PJS_VER = "1.9.1"
+PJS_VER = "1.9.7"
 
 # doc extensions for detection during crawl
 DOC_TYPES = ("DS_Store", "pdf", "log", "dot", "doc", "docx", "xls", "xlsx", "txt", "ods", "odf", "ppt", "pptx",
              "rtf", "odg", "odp", "potx", "potm", "pot", "otp", "xlt", "stc", "stw", "dotm", "odb", "ott",
              "pxl", "wks", "wk1", "xlsb", "sylk", "xlc", "dif", "oth", "xml", "odt", "pptm", "xlm", "xltm",
-             "xltx", "docm", "xlsm", "123", "dbf", "ppsx", "ps1", "pl", "bat", "vbs", "py", "rb", "sh")
-EXIF_TYPES = ("jpeg", "jpg", "tiff", "wav", "riff")
+             "xltx", "docm", "xlsm", "123", "dbf", "ppsx", "ps1", "pl", "bat", "vbs", "py", "rb", "sh",
+			 "jpeg", "jpg", "tiff", "wav", "riff")
 OTHER_TYPES = ("cab", "swf", "jsp", "db", "gif", "png", "rar", "xz", "gz", "tar", "zip", "ico")
 
 # PhantomJS - http://phantomjs.org/
-PJS_REPO = "http://phantomjs.googlecode.com/files/"
+PJS_REPO = "https://bitbucket.org/ariya/phantomjs/downloads/"
 #Tell OSX not to let phantomjs steal focus or create a new icon in the dock for every instance.
 OSX_PLIST = """<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist SYSTEM "file://localhost/System/Library""" +\
             """/DTDs/PropertyList.dtd"><plist version="0.9"><dict><key>CFBundleExecutable</key><string>""" +\

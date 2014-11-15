@@ -1,0 +1,47 @@
+RAWR_META - Rapid Assessment of Web Resources Metadata Parser
+Written by: Adam Byers (al14s)
+
+Romans 5:6-8
+
+
+DISCLAIMER:
+    This is only for testing purposes and can only be used where strict consent has been given. Do not use
+this for illegal purposes period.                                                   
+                                                                            
+Any modifications, changes, or alterations to this application is acceptable, however, any public releases utilizing 
+this code must be approved by its creator. Check the LICENSE file for more information.
+
+RAWR_META is designed to do a recursive search for files in a folder, pulling as much information as possible from
+each file's properties, content, and metadata. It creates an HTML report of each file and any findings.  It can be
+run in conjunction with a RAWR scan using --meta, or as a standalone process by running the script directly and
+specifying a file/files/glob-format string.
+
+Requirements:
+
+    ~$
+
+OS Compatibility (tested with):
+
+    Backtrack 6
+    Ubuntu 12.04LTS 
+
+Browser Compatibility (HTML report):
+
+    Supported - Firefox (tested w/ 23)
+    Tested/working on - Safari (tested w/ 5), Chrome (tested w/ 22), IE (tested w/ 7-9) 
+
+Embedded Packages:
+
+	OleFileIO_PL - An enhanced version of the PIL lib's 'OleFileIO_PL' (http://www.decalage.info/python/olefileio)
+		by Philippe Lagadec	(http://www.decalage.info)
+
+	docx.py - a docx parser (http://github.com/mikemaccana/python-docx)
+		by mikemaccana
+
+Installation / Setup
+
+    apt-get install nmap 
+    apt-get install graphviz python-pygraphviz python-lxml 
+    git clone https://bitbucket.org/al14s/rawr.git 
+    cd rawr 
+    ./rawr.py -u
