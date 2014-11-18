@@ -550,7 +550,8 @@ if opts.nmap_il or opts.nmaprng and not 'http' in opts.nmaprng:
 
 		proc = subprocess.Popen(['nmap', '-V'], stdout=subprocess.PIPE)
 		ver = proc.stdout.read().split(' ')[2]
-
+		ver = re.sub(r'[^0-9.:]', '', ver) # the SVN ver. of NMap includes 'svn' in the version string
+		
 		# greatly increases scan speed, introduced in nmap v.6.25(?)
 		if float(ver) >= 6.25:
 			cmd += "--max-retries", "0"

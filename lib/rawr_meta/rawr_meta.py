@@ -499,7 +499,7 @@ if __name__ == "__main__":
 	for f in scope:
 		if os.path.isfile(f) and not f == sys.argv[0]:
 			ret = parser.parse(f)
-			parser.add_to_report(f, report_file, ret)
+			parser.add_to_report(f, report_file, ret, report_file)
 	
 	with open(report_file, 'a') as of:
 		of.write('</body></html>')
