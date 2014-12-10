@@ -16,30 +16,48 @@ if [ `id -u` != 0 ]; then
 	exit 1
 fi
 
-case `cat /etc/issue | cut -d" " -f1 | head -n1` in
+if [[ `uname -a` == *"Kali"* ]]; then
+	echo -e '\n   [>] Installing Kali Deps\n'
+	apt-get install python-qt4 python-pip xvfb python-lxml python-pygraphviz $y
 
-	Kali)
-		echo -e '\n   [>] Installing Kali Deps\n'
-		apt-get install python-qt4 python-pip xvfb python-lxml python-pygraphviz $y
-	;;
+elif [[ `uname -a` == *"Debian"* ]]; then
+	echo -e '\n   [>] Installing Debian Deps\n'
+	apt-get install cmake qt4-qmake python xvfb python-qt4 python-pip python-netaddr python-lxml python-pygraphviz $y
+	pip install python_qt_binding
 
-	Debian)
-		echo -e '\n   [>] Installing Debian Deps\n'
-		apt-get install cmake qt4-qmake python xvfb python-qt4 python-pip python-netaddr python-lxml python-pygraphviz $y
-		pip install python_qt_binding
-	;;
+elif [[ `uname -a` == *"Ubuntu"* ]]; then
+	echo -e '\n   [>] Installing Ubuntu Deps\n'
+	apt-get install cmake qt4-qmake python xvfb python-qt4 python-pip python-netaddr python-lxml python-pygraphviz $y
+	pip install python_qt_binding
 
-	Ubuntu)
-		echo -e '\n   [>] Installing Ubuntu Deps\n'
-		apt-get install cmake qt4-qmake python xvfb python-qt4 python-pip python-netaddr python-lxml python-pygraphviz $y
-		pip install python_qt_binding
-	;;
+elif [[ `uname -a` == *"archassault"* ]]; then
+	echo -e '\n   [>]  Installing ArchAssault deps...\n'
+	# fix a broken link
+	ln -sf /usr/share/rawr/rawr.py /usr/bin/rawr
 
-	*)
-	echo -e "\n   [!] This OS isn't supported.\n\n"
+elif [[ `cat /etc/issue | cut -d" " -f1 | head -n1` == 'CentOS' ]]; then
+	echo -e '\n   [>] Installing CentOS Deps\n'
+	read -p '[?] Install and Enable EPEL Repository? (y/n): ' epel
+	if [ "${epel}" == 'y' ]; then
+		rpm -ivh http://linux.mirrors.es.net/fedora-epel/6/i386/epel-release-6-8.noarch.rpm
+
+	else
+		echo '[!] Installation Cancelled.'
+		exit 1
+
+	fi
+
+	yum install cmake python python-pip PyQt4 PyQt4 PyQt4-webkit python-argparse xvfb python-netaddr python-lxml
+	curl "https://bootstrap.pypa.io/get-pip.py" > get-pip.py
+	python get-pip.py
+	pip install python_qt_binding pygraphviz
+
+else
+	echo -e "\n   [x] This OS isn't supported by the install script as of yet."
+	echo -e "\n         Please let al14s@pdrcorps.com know."
 	exit 1
 
-esac
+fi
 
 echo -e "\n  [>] Running RAWR update...\n"
 "$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"/rawr.py $u -q
