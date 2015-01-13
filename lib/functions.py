@@ -581,7 +581,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
 
                 break
 
-            elif (datetime.datetime.now() - time_start).total_seconds() > opts.spider_timeout:
+            elif (datetime.datetime.now() - time_start).seconds > opts.spider_timeout:
                 if opts.verbose:
                     output.put("      %s[!]%s Spidering stopped at depth - %s:   [ %s ] - Timed out" %
                                (TC.YELLOW, TC.END, str(depth), target['url']))

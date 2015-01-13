@@ -35,6 +35,24 @@ elif [[ `uname -a` == *"archassault"* ]]; then
 	# fix a broken link
 	ln -sf /usr/share/rawr/rawr.py /usr/bin/rawr
 
+elif [[ `cat /etc/issue | cut -d" " -f1,2 | head -n1` == 'Red Hat' ]]; then
+        echo -e '\n   [>] Installing Red Hat Deps\n'
+        read -p '[?] Install and Enable EPEL Repository? (y/n): ' epel
+        if [ "${epel}" == 'y' ]; then
+                rpm -Uvh http://download.fedoraproject.org/pub/epel/6/i386/epel-release-6-8.noarch.rpm
+
+        else
+            	echo '[!] Installation Cancelled.'
+                exit 1
+
+	fi
+
+    	yum install cmake python python-pip PyQt4 PyQt4 PyQt4-webkit python-argparse xvfb python-netaddr python-lxml graphviz $y
+       	curl "https://bootstrap.pypa.io/get-pip.py" > get-pip.py
+        python get-pip.py
+       	pip install python_qt_binding pygraphviz
+	rm -rf get-pip.py
+
 elif [[ `cat /etc/issue | cut -d" " -f1 | head -n1` == 'CentOS' ]]; then
 	echo -e '\n   [>] Installing CentOS Deps\n'
 	read -p '[?] Install and Enable EPEL Repository? (y/n): ' epel
@@ -47,10 +65,11 @@ elif [[ `cat /etc/issue | cut -d" " -f1 | head -n1` == 'CentOS' ]]; then
 
 	fi
 
-	yum install cmake python python-pip PyQt4 PyQt4 PyQt4-webkit python-argparse xvfb python-netaddr python-lxml
+	yum install cmake python python-pip PyQt4 PyQt4 PyQt4-webkit python-argparse xvfb python-netaddr python-lxml graphviz $y
 	curl "https://bootstrap.pypa.io/get-pip.py" > get-pip.py
 	python get-pip.py
 	pip install python_qt_binding pygraphviz
+	rm -rf get-pip.py
 
 else
 	echo -e "\n   [x] This OS isn't supported by the install script as of yet."

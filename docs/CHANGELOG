@@ -1,6 +1,16 @@
 ----- 0.2 -----
 
 	BUGFIXES
+		changed total_seconds() to seconds on line 584 in functions.py for compat. with 2.6 (CentOS/RedHat)
+
+	CHANGES
+		added RedHat OS detection to install.sh
+			** graphviz install is not detected by 'pip install pygraphviz - might need to work w/ env vars to make this happen **
+
+
+----- 0.2 -----
+
+	BUGFIXES
 		no longer importing Ghost when not in use
 		now initiating spider upon -S (--spider not required if using -S or --spider-opts
 		diagrams not showing in html  ('m')
