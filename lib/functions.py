@@ -30,7 +30,6 @@ meta_parser = Meta_Parser()
 # Non stdlib
 try:
     from lxml import html
-    import pygraphviz as pgv
     if use_ghost:
         from ghost import Ghost
 
@@ -42,7 +41,15 @@ except Exception, e:
 
     else:
         print(e)
-        exit(1)
+
+    exit(1)
+
+
+try:
+    import pygraphviz as pgv
+
+except Exception, e:
+    print("\n\t%s[!]%s - pygraphviz - %s\n\n                * Diagrams will not be available. *" % (TC.YELLOW, TC.END, str(e)))
 
 
 timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")

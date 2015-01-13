@@ -725,30 +725,35 @@ if q.qsize() > 0:
 		# create the attack surface matrix
 		asm_f = "%s/rawr_%s_attack_surface.csv" % (logdir, timestamp)
 		try:
-			ports = []
+			ports = {}
 			for i in ints:
 				for p in ints[i][1]:
 					if not p in ports:
-						ports.append(p)
+						ports[p] = 1
 
-			ports.sort(key=int)	# ports is a list of ports found while parsing files
-			cols = ["IP", "HOSTNAME"] + ports + [" ", "TOTAL"]
+					else:
+						ports[p] += 1
+
+			pl = ports.keys()
+			pl.sort(key=int)	# ports is a list of ports found while parsing files
+			cols = ["IP", "HOSTNAME"] + pl + [" ", "TOTAL"]
 
 			with open(asm_f, 'a') as f:
 				f.write('"' + '","'.join(cols) + '"\n')  # write the column headers
 
 				for ip in ints:  # ints is a list of interfaces found while parsing files
-					hn, ports = ints[ip]
+					hn, pts = ints[ip]
 					line = [ip, hn] + [" "] * (len(cols)-3)
-					for port in ports:
+					for port in pts:
 						line[cols.index(port)] = "x"
 
-					line += (str(line.count("x")))
+					line.append(str(line.count("x")))
 					f.write('"' + '","'.join(line) + '"\n')
 
 				line = ["TOTAL"] + [" "] * len(cols)
+
 				for port in ports:
-					line[cols.index(port)] = str(ports.count(port))  # fill out the last line w/ count totals
+					line[cols.index(port)] = str(ports[port])  # fill out the last line w/ count totals
 
 				f.write('\n"' + '","'.join(line) + '"\n')
 

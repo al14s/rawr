@@ -43,12 +43,5 @@ Embedded Packages:
 
 Installation / Setup
 
-    apt-get install nmap 
+    run 'install.sh'
 
-    apt-get install python-pygraphviz python-lxml python-pyside 
-
-    git clone https://bitbucket.org/al14s/rawr.git 
-
-    cd rawr 
-
-    ./rawr.py -u

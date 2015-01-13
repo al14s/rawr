@@ -44,7 +44,6 @@ ToDo
 		
 
 	---FUTURE-----------------------------------------------------
-		implement curses interface
 		stats page in HTML report
         	div after HTML 'data' div
         	stats ideas: server version, SSL, ports, service (PHP, ASP.NET)
