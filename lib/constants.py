@@ -1,4 +1,4 @@
-VERSION = "0.2"
+VERSION = "0.21"
 
 # Update information
 REPO_DL_PATH = "https://bitbucket.org/al14s/rawr/downloads/"

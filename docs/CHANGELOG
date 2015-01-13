@@ -1,11 +1,15 @@
------ 0.2 -----
+----- 0.21 -----
 
 	BUGFIXES
 		changed total_seconds() to seconds on line 584 in functions.py for compat. with 2.6 (CentOS/RedHat)
+		install script - fixed a bug in kali detection
 
 	CHANGES
-		added RedHat OS detection to install.sh
-			** graphviz install is not detected by 'pip install pygraphviz - might need to work w/ env vars to make this happen **
+		added to install.sh
+			RedHat OS detection 
+				** graphviz install is not detected by 'pip install pygraphviz - might need to work w/ env vars to make this happen **
+			Version/Arch detection for RHEL and CentOS (to grab the correct version of epel
+			
 
 
 ----- 0.2 -----

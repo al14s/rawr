@@ -16,67 +16,68 @@ if [ `id -u` != 0 ]; then
 	exit 1
 fi
 
-if [[ `uname -a` == *"Kali"* ]]; then
-	echo -e '\n   [>] Installing Kali Deps\n'
-	apt-get install python-qt4 python-pip xvfb python-lxml python-pygraphviz $y
+case `uname -a` in
+	*"kali"* )
+		echo -e '\n   [>] Installing Kali Deps\n'
+		apt-get install python-qt4 python-pip xvfb python-lxml python-pygraphviz $y ;;
 
-elif [[ `uname -a` == *"Debian"* ]]; then
-	echo -e '\n   [>] Installing Debian Deps\n'
-	apt-get install cmake qt4-qmake python xvfb python-qt4 python-pip python-netaddr python-lxml python-pygraphviz $y
-	pip install python_qt_binding
+	*"Debian"* )
+		echo -e '\n   [>] Installing Debian Deps\n'
+		apt-get install cmake qt4-qmake python xvfb python-qt4 python-pip python-netaddr python-lxml python-pygraphviz $y
+		pip install python_qt_binding ;;
 
-elif [[ `uname -a` == *"Ubuntu"* ]]; then
-	echo -e '\n   [>] Installing Ubuntu Deps\n'
-	apt-get install cmake qt4-qmake python xvfb python-qt4 python-pip python-netaddr python-lxml python-pygraphviz $y
-	pip install python_qt_binding
+	*"Ubuntu"* )
+		echo -e '\n   [>] Installing Ubuntu Deps\n'
+		apt-get install cmake qt4-qmake python xvfb python-qt4 python-pip python-netaddr python-lxml python-pygraphviz $y
+		pip install python_qt_binding ;;
 
-elif [[ `uname -a` == *"archassault"* ]]; then
-	echo -e '\n   [>]  Installing ArchAssault deps...\n'
-	# fix a broken link
-	ln -sf /usr/share/rawr/rawr.py /usr/bin/rawr
+	*"archassault"* )
+		echo -e '\n   [>]  Installing ArchAssault deps...\n'
+		# they've got it covered - this is just to fix a broken link
+		ln -sf /usr/share/rawr/rawr.py /usr/bin/rawr ;;
 
-elif [[ `cat /etc/issue | cut -d" " -f1,2 | head -n1` == 'Red Hat' ]]; then
-        echo -e '\n   [>] Installing Red Hat Deps\n'
-        read -p '[?] Install and Enable EPEL Repository? (y/n): ' epel
-        if [ "${epel}" == 'y' ]; then
-                rpm -Uvh http://download.fedoraproject.org/pub/epel/6/i386/epel-release-6-8.noarch.rpm
+	* )
+		if [[ `cat /etc/issue` == *"Red Hat"* || `cat /etc/issue` == *"CentOS"* ]]; then
+			echo -e '\n   [>] Installing RHEL / CentOS Deps\n'
+			read -p '[?] Install and Enable EPEL Repository? (y/n): ' epel
+			ver=`sed 's/.*release \(.*\).[0-9] .*/\1/' /etc/issue | head -n1`
 
-        else
-            	echo '[!] Installation Cancelled.'
-                exit 1
+			if [[ `uname -a` == *"x86_64"* ]]; then
+				arch="x86_64"
 
-	fi
+			elif [[ `uname -a` == *"i386"* ]]; then
+				arch="i386"
 
-    	yum install cmake python python-pip PyQt4 PyQt4 PyQt4-webkit python-argparse xvfb python-netaddr python-lxml graphviz $y
-       	curl "https://bootstrap.pypa.io/get-pip.py" > get-pip.py
-        python get-pip.py
-       	pip install python_qt_binding pygraphviz
-	rm -rf get-pip.py
+			else
+				echo -e "\n    [!] Installer not set up for this architecture - Installation Cancelled."
+				echo -e "\n         Please let al14s@pdrcorps.com (Twitter - @al14s) know."
+				exit 1
 
-elif [[ `cat /etc/issue | cut -d" " -f1 | head -n1` == 'CentOS' ]]; then
-	echo -e '\n   [>] Installing CentOS Deps\n'
-	read -p '[?] Install and Enable EPEL Repository? (y/n): ' epel
-	if [ "${epel}" == 'y' ]; then
-		rpm -ivh http://linux.mirrors.es.net/fedora-epel/6/i386/epel-release-6-8.noarch.rpm
+			fi
+			if [ "${epel}" == 'y' ]; then
+		
+				rpm -Uvh http://download.fedoraproject.org/pub/epel/$ver/$arch/epel-release-6-8.noarch.rpm
 
-	else
-		echo '[!] Installation Cancelled.'
-		exit 1
+			else
+			    	echo '[!] Installation Cancelled.'
+				exit 1
 
-	fi
+			fi
 
-	yum install cmake python python-pip PyQt4 PyQt4 PyQt4-webkit python-argparse xvfb python-netaddr python-lxml graphviz $y
-	curl "https://bootstrap.pypa.io/get-pip.py" > get-pip.py
-	python get-pip.py
-	pip install python_qt_binding pygraphviz
-	rm -rf get-pip.py
+		    	yum install cmake python python-pip PyQt4 PyQt4 PyQt4-webkit python-argparse xvfb python-netaddr python-lxml graphviz $y
+		       	curl "https://bootstrap.pypa.io/get-pip.py" > get-pip.py
+			python get-pip.py
+		       	pip install python_qt_binding pygraphviz
+			rm -rf get-pip.py
 
-else
-	echo -e "\n   [x] This OS isn't supported by the install script as of yet."
-	echo -e "\n         Please let al14s@pdrcorps.com know."
-	exit 1
+		else
+			echo -e "\n   [x] This OS isn't supported by the install script as of yet."
+			echo -e "\n         Please let al14s@pdrcorps.com (Twitter - @al14s) know."
+			exit 1
 
-fi
+		fi	
+
+esac
 
 echo -e "\n  [>] Running RAWR update...\n"
 "$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"/rawr.py $u -q
