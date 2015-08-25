@@ -1,8 +1,9 @@
+var system = require('system');
 
-url = phantom.args[0];
-filename = phantom.args[1];
-useragent = phantom.args[2];
-timeout = phantom.args[3];
+url = system.args[1];
+filename = system.args[2];
+useragent = system.args[3];
+timeout = system.args[4];
 if (timeout == "") { timeout=1; };   //default is 1 second
 
 function renderPage(url, filename, useragent, timeout) {
