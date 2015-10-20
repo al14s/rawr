@@ -689,7 +689,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                                 urls_t3.append(l)
 
                                 elif dat.status_code in (401, 403):
-                                    open('%s/artifacts/auth_sites.lst' % logdir, 'a').write(url_t2 + '\n')
+                                    open('%s/artifacts/auth_sites.lst' % logdir, 'a').write('[' + str(dat.status_code) + '] ' + url_t2 + '\n')
 
                                 elif dat.content and dat.status_code != 404:
                                     l = list(set(target['res'].content.split()))
