@@ -34,8 +34,11 @@ banner = """
 
 usage = """
 
-  ./rawr.py [options] [ <range|host|url> | [-c|-f|-i] <file> ]
+  ./rawr.py <URL|NMap Range|File> [options]
 
 """
 
-words = "Random,Ragged,Rabid,Rare,Radical,Rational,Risky,Remote,Rowdy,Rough,Rampant,Ruthless:Act,Audit,Arming,Affront,Arc,Attack,Apex,Assault,Answer,Assembly,Attempt,Alerting,Arrest,Account,Apparel,Approval,Army:Wily,Weird,Wonky,Wild,Wascawy,Wimpy,Winged,Willing,Working,Warring,Wacky,Wasteful,Wealthy,Worried:Ravioli,Rats,Rabbits,Rhinos,Robots,Rigatoni,Reindeer,Roosters,Robins,Raptors,Raccoons,Reptiles"
+words = "Random,Ragged,Rabid,Rare,Radical,Rational,Risky,Remote,Rowdy,Rough,Rampant,Ruthless:Act,Audit," \
+        "Arming,Affront,Arc,Attack,Apex,Assault,Answer,Assembly,Attempt,Alerting,Arrest,Account,Apparel," \
+        "Approval,Army:Wily,Weird,Wonky,Wild,Wascawy,Wimpy,Winged,Willing,Working,Warring,Wacky,Wasteful," \
+        "Wealthy,Worried:Ravioli,Rats,Rabbits,Rhinos,Robots,Rigatoni,Reindeer,Roosters,Robins,Raptors,Raccoons,Reptiles"

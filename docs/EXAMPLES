@@ -1,0 +1,28 @@
+This will improve shortly...  all I did was copy my test script tests here.
+
+#########################################################################
+# Use bing dns, using all ports and custom source port, checking for SSL,
+#   with a custom report title and all results in the .csv,
+#   outputting only json to stdout.
+#########################################################################
+scanme.nmap.org -a --dns -s 22 -p 80,443 --title "War and Peace" --sslv -d tests
+
+#########################################################################
+# Use spider function with custom options, 
+#   scanning all fuzzdb ports, outputting only json to stdout.
+#########################################################################
+test.csv --spider -p fuzzdb --spider-opts d:2,l:100,t:10,s:f -d tests --alt-domains nmap.org -v
+
+#########################################################################
+# Use port 80 with custom timing and source port, gathering options,
+#   cross-domain, and robots.  Downgrades to http 1.0.  Zips up the results.
+#   Doesn't show the dino on the splash screen (why????)
+#########################################################################
+nmapiL.lst --json -p 80 -t 4 -o -x -r --downgrade -z -q -d tests
+
+#########################################################################
+# Use port 80 with custom timing, gathering options,
+#   cross-domain, and robots.  Downgrades to http 1.0.  Zips up the results.
+#   Doesn't show the dino on the splash screen (why????)
+#########################################################################
+nmap.xml --json-min -p 80 -t 4 -o -x -r --downgrade -z -q

@@ -4,6 +4,7 @@ url = system.args[1];
 filename = system.args[2];
 useragent = system.args[3];
 timeout = system.args[4];
+
 if (timeout == "") { timeout=1; };   //default is 1 second
 
 function renderPage(url, filename, useragent, timeout) {

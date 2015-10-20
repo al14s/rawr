@@ -2,23 +2,26 @@ ToDo
 
 	---KNOWN ISSUES------------------------------------------------
 		
-		program control
-			possible solution - change queue items to individual tasks rather than one host
-			PAUSE functionality (in-program)
-			STOP file (for resuming scans)
-			Ctrl+C 'graceful stop' effectiveness
-			need a better timeout mechanism for spider and diagram creation
-		html result to thumbnail matchup issues when scanning external websites w/ multiple handles (IP, hn, port)		
-		bing --dns doubles up on targets (inadvertantly pulls the same hosts for each port#)
-		
+		html result to thumbnail matchup issues
+            external websites w/ multiple handles (IP, hn, port)
+        filter input for -p
 
 
 	---FUNCTIONALITY-----------------------------------------------
 
-		dynamic thread count based on RAM availability
+        google dorks function not complete (need to build out API function)
+		figure correct way to init()
+		program control
+			possible solution - change queue items to individual tasks rather than one host
+			PAUSE functionality (in-program)
+			Ctrl+C 'graceful stop' effectiveness
+			STOP file (for resuming scans)
+                a switch to resume a scan
+                <>.q - a dump of the current queue
+                this could take the db and pick up where it left off
+			need a better timeout mechanism for spider and diagram creation
+            dynamic thread count based on RAM availability	
 		cleanup
-			remove raw response object from target - give the option to keep it?
-			remove large/unneeded items from target before insertion into db
 			functions.py
 				SiThread
 				parsedata - initial cleanup
@@ -26,28 +29,27 @@ ToDo
 				parse_qualys_scan_report_xml - initial cleanup
 				parse_nessus_xml - initial cleanup
 				parse_nmap_xml - initial cleanup
-		filter valid element names from wordlists
-		finish DNS axfr/query function
-		add option to use google dorks to pull common docs (crawl or not)
 		postgres compatibility
-		accept --useragent csv input
 		smarter redirects + history
 			if res.status_code == 302 and not domainname in res.get_redirect_location:
 				target['redir_loc'] = res.get_redirect_location
 			else: follow redirect!
 			target['history'] to record all redirect urls
 		better crawling
-			implement spider_url_hit_limit
+			implement spider_url_hit_limit for individual base URLS (without vars)
 			need a better timeout mechanism for spider and diagram creation
-			reduce hard-limit for # of links in diagram
-			
+			reduce hard-limit for # of links in diagram			
 		
 
 	---FUTURE-----------------------------------------------------
+		serverinfo- XSL or XLSX - center all fields, set widths, freeze top row, top row - white/bold font and dark grey bg	
+		burp and faraday plugins
+			faraday - serverinfo into a single XML doc
+				give them the framework for RAWR's XML format
 		stats page in HTML report
-        	div after HTML 'data' div
-        	stats ideas: server version, SSL, ports, service (PHP, ASP.NET)
-		scan comparison functionality
-			compare two scans within one db
+        		div after HTML 'data' div
+        		stats ideas: server version, SSL, ports, service (PHP, ASP.NET)
+		scan comparison functionality - postgres
+			compare two scans
 			compare a db scan with new scan
 			'diff' HTML report

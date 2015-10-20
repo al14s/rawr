@@ -12,57 +12,64 @@ import traceback
 import colorsys
 import socket
 import shelve
+import datetime
+from PIL import Image  # logo size, histogram, and list of Exif tags for file enum
 from warnings import simplefilter
 from urlparse import urlparse
 from glob import glob
 from Queue import Queue
+from lxml import html, etree
 from multiprocessing import Process
 
-# local imports
+# Local Imports
 import requests
-from PIL import Image  # logo size, histogram, and list of Exif tags for file enum
+from lib.requests.auth import HTTPProxyAuth, HTTPDigestAuth
 from lib.constants import *
 from conf.modules import *
-from conf.settings import useragent, flist, timeout, ss_delay, nthreads, allow_redir, use_ghost
-from rawr_meta import *
+from conf.settings import fuzzdb, useragent, flist, timeout, ss_delay, nthreads, allow_redir, use_ghost
+from lib.rawr_meta import *
+from lib.ghost import Ghost
+
 meta_parser = Meta_Parser()
 
 # Non stdlib
 try:
     from lxml import html
+
     if use_ghost:
-        from ghost import Ghost
+        from lib.ghost import Ghost, Session
 
 except Exception, e:
     from lib.banner import *
+
     print(banner)
     if isinstance(e, ImportError) or str(e) == "Ghost.py requires PySide or PyQt4":
-        print("\t%s[x]%s - Run install.sh to get set up." % (TC.RED, TC.END) + str(e))
+        print("\t%s[x]%s - Run install.sh to get set up. " % (TC.RED, TC.END) + str(e))
 
     else:
         print(e)
 
     exit(1)
 
-
 try:
     import pygraphviz as pgv
 
 except Exception, e:
-    print("\n\t%s[!]%s - pygraphviz - %s\n\n                * Diagrams will not be available. *" % (TC.YELLOW, TC.END, str(e)))
-
+    print("\n\t%s[!]%s - pygraphviz - %s\n\n                * Diagrams will not be available. *" %
+          (TC.YELLOW, TC.END, str(e)))
 
 timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 platform_type = platform.machine()
 simplefilter("ignore")  # ignore warnings
-dns_cache = {}  # bing result cache - to avoid duplicate bings
+dns_cache = {}  # DNS lookup result cache - to avoid duplicate records
 binging = False  # to make sure one bing happens at a time
-outs = [] # list of urls that have already been added to the HTML/CSV docs
+outs = []  # list of urls that have already been added to the HTML/CSV docs
 crawling = 0  # a count of the number of crawls happening simultaneously
 
 threads = []  # contains handles for each thread
 q = Queue()  # The main queue.  Holds db reference for each target.
 output = Queue()  # The output queue - prevents output overlap
+
 
 class OutThread(threading.Thread):  # Worker class that displays msgs in the 'output' queue in order and one at a time.
     def __init__(self, queue, logfile, opts):
@@ -78,10 +85,11 @@ class OutThread(threading.Thread):  # Worker class that displays msgs in the 'ou
 
 
 class SiThread(threading.Thread):  # Threading class that enumerates hosts contained in the 'q' queue.
-    def __init__(self, db, timestamp, scriptpath, pjs_path, logdir, o, opts):
+    def __init__(self, db, timestamp, scriptpath, pjs_path, logfile, logdir, o, opts):
         threading.Thread.__init__(self)
         self.timestamp = timestamp
         self.scriptpath = scriptpath
+        self.logfile = logfile
         self.logdir = logdir
         self.output = o
         self.opts = opts
@@ -105,56 +113,58 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                 task = q.get()
                 self.busy = True
 
-                target = dict( self.db[task[0]][task[1]] )  # the dict, rather than a link to the db...
-
+                target = dict(self.db[task[0]][task[1]])  # the dict, rather than a link to the db...
                 if task[1] == '.':
                     hostname = target['ipv4']
-                    
+
                 else:
                     hostname = task[1]
 
                 port = ''
                 try:
                     prefix = "http://"
-                    if 'service_tunnel' in target.keys():                        
+                    if 'service_tunnel' in target:
                         if target['service_tunnel'] == 'ssl':
                             prefix = "https://"
 
                     if not target['port'] in ["80", "443"]:
                         port = ":" + target['port']
 
-                    if self.opts.dns and (not 'is_dns_result' in target.keys()):
+                    if self.opts.dns and ('is_dns_result' not in target):
                         # Don't do Bing>DNS lookups for non-routable IPs
                         if not re.findall(NRIP_REGEX, target['ipv4']):
                             if target['ipv4'] in dns_cache:
-                                self.output.put("  %s[.]%s RevDNS\t: %s (%s) - pulling from cache..." % (TC.PURPLE, TC.END, target['ipv4'], target['hostnames'][0]) )
+                                self.output.put("  %s[.]%s RevDNS\t: %s (%s) - pulling from cache..." %
+                                                (TC.PURPLE, TC.END, target['ipv4'], target['hostnames'][0]))
                                 hostnames = dns_cache[target['ipv4']]
-                            
+
                             else:
                                 while binging:  # The intention here is to avoid flooding Bing with requests.
                                     time.sleep(0.5)
 
                                 binging = True
                                 self.output.put("  %s[@]%s Bing RevDNS\t: %s" % (TC.PURPLE, TC.END, target['ipv4']))
-                                cookies = dict(SRCHHPGUSR = 'NRSLT=50')
+                                cookies = dict(SRCHHPGUSR='NRSLT=50')
 
                                 nxt, old_res, hostnames = (1, [], [])
 
                                 while True:
                                     try:
-                                        bing_res = requests.get("http://www.bing.com/search?q=ip%3a" + target['ipv4'] +
-                                                                    '&format=rss&first=%s' % nxt,
-                                                                headers = {"user-agent": useragent},
-                                                                verify = False,
-                                                                timeout = timeout,
-                                                                allow_redirects = allow_redir,
-                                                                proxies = self.opts.proxy_dict,
-                                                                cookies = cookies).content
+                                        bing_res = requests.get("https://www.bing.com/search?q=ip%3a" + target['ipv4'] +
+                                                                '&format=rss&first=%s' % nxt,
+                                                                headers={"user-agent": target['useragent']},
+                                                                verify=False,
+                                                                timeout=timeout,
+                                                                allow_redirects=allow_redir,
+                                                                proxies=self.opts.proxy_dict,
+                                                                auth=self.opts.proxy_auth,
+                                                                cookies=cookies).content
 
                                     except:
                                         error = traceback.format_exc().splitlines()
                                         error_msg("\n".join(error))
-                                        self.output.put("  %s[x]%s Bing RevDNS:\n\t%s\n" % (TC.RED, TC.END, "\n\t".join(error)) )
+                                        self.output.put(
+                                            "  %s[x]%s Bing RevDNS:\n\t%s\n" % (TC.RED, TC.END, "\n\t".join(error)))
                                         break
 
                                     if "No results found for ip:" + target['ipv4'] in bing_res:
@@ -168,7 +178,7 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                         old_res = res
 
                                     for r in res:
-                                        if not 'bing.com' in r:
+                                        if 'bing.com' not in r:
                                             r = re.sub("http[s]?\:\/\/", '', r)
                                             hostnames.append(r.split('/')[0])
 
@@ -176,38 +186,6 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
 
                                 dns_cache[target['ipv4']] = list(set(hostnames))
                                 binging = False
-
-                        else:                                
-
-                            dns_servers = os.popen("dig soa %s +nostat +nocmd +nocomments | grep -v ';' | grep SOA | cut -f5" % \
-                                                    target['ipv4']).read().strip().strip('.')
-
-                            if not dns_servers:                                
-                                dns_servers = os.popen("dig ns %s +nostat +nocmd +nocomments | grep -v ';' | grep NS | cut -f5" % \
-                                                        target['ipv4']).read().strip().strip('.')
-                        
-                            for dns_server in dns_servers:
-                                if dns_server in dns_cache:
-                                    self.output.put("  %s[@]%s DNS AXFR\t: %s (%s) - pulling from cache..." % (TC.PURPLE, TC.END, dns_server, target['hostnames'][0]) )
-                                    hostnames = dns_cache[dns_server]
-                        
-                                axfr = os.popen("dig %s AXFR +nostat +nocmd +nocomments" % dns_server).read()
-
-                                if not 'Transfer failed' in axfr:
-                                    pass
-                                    # AXFR Placeholder
-                                    # hostnames = axfr
-                                    #    put LOC records in target['dns_loc'] -  <hostname>:<location>
-                                    #    put MX records in target['dns_mx'] -  <hostname>
-                                    #    put TXT records in target['dns_txt'] -  <hostname>:<text>
-                                    #    put A|CNAME records in queue -  <hostname>:<IP>
-                                    #    put NS|SOA records in the dns_servers list if not already there
-                                    # dns_cache[dns_server] = hostnames
-                                    # forward output of all dns activity to <logfldr>/rawr_DNS_<timestamp>.txt
-
-                                else:
-                                    self.output.put("  %s[x]%s RevDNS\t: %s [%s] - Transfer Failed." % (TC.YELLOW, TC.END, dns_server, target['ipv4']))
-                            
 
                         if len(hostnames) > 0:
                             # remove any duplicates from our list of domains...
@@ -218,42 +196,42 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                             # distribute the load
                             for hostname in hostnames:
                                 hn = hostname.strip(': ')
-                                if not hn in [target['ipv4'], "https", "http", '']:
-                                    if not hn in self.db[task[0]]:
+                                if hn not in [target['ipv4'], "https", "http", '']:
+                                    if hn not in self.db[task[0]]:
                                         target['is_dns_result'] = True
                                         target['hostnames'] = [hostname.strip()]
                                         self.db[task[0]][hn] = target
                                         q.put((task[0], hn))
-                                        self.output.put("  %s[+]%s RevDNS\t: [ %s:%s ] injected into queue." % (TC.CYAN, TC.END, hn, target['port']))
+                                        self.output.put("  %s[+]%s RevDNS\t: [ %s:%s ] injected into queue." %
+                                                        (TC.CYAN, TC.END, hn, target['port']))
 
                         else:
-                            self.output.put("  %s[x]%s RevDNS\t: found no DNS entries for %s" % (TC.YELLOW, TC.END, target['ipv4']))
+                            self.output.put(
+                                "  %s[x]%s RevDNS\t: found no DNS entries for %s" % (TC.YELLOW, TC.END, target['ipv4']))
 
-
-
-                    if not 'url' in target:
+                    if 'url' not in target:
                         target['url'] = prefix + hostname + port
 
-                    elif not hostname in target['url']:
-                        o = urlparse(target['url'])    
+                    elif hostname not in target['url']:
+                        o = urlparse(target['url'])
                         target['url'] = target['url'].replace(o.scheme + "://" + o.netloc, prefix + hostname + port)
-                        
 
                     self.output.put("  %s[>]%s Pulling\t: %s" % (TC.GREEN, TC.END, target['url']))
                     try:
                         target['res'] = requests.get(target['url'],
-                                                     headers={"user-agent": useragent},
+                                                     headers={"user-agent": target['useragent']},
                                                      verify=False,
                                                      timeout=timeout,
                                                      allow_redirects=allow_redir,
-                                                     proxies=self.opts.proxy_dict)
+                                                     proxies=self.opts.proxy_dict,
+                                                     auth=self.opts.proxy_auth)
 
                         msg = ["  %s[+]%s Finished" % (TC.CYAN, TC.END), ""]
 
                     except requests.ConnectionError:
                         try:
                             if '[401]' in target['res']:
-                                open('%s/401_failed_auth.lst' % logdir, 'a').write( target['url'] )
+                                open('%s/artifacts/401_failed_auth.lst' % self.logdir, 'a').write(target['url'])
 
                         except:
                             pass
@@ -271,33 +249,37 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                         error_msg("\n".join(error))
                         msg = ["  %s[x]%s Error " % (TC.RED, TC.END), ":\n\t%s\n" % ("\n\t".join(error))]
 
-                    if 'res' in target.keys():
+                    if 'res' in target:
                         wordlist = []
                         if not self.opts.json_min:
-                            wl = list(set( (target['res'].content).split() ) )
+                            wl = list(set(target['res'].content.split()))
                             for w in wl:
                                 if len(w) > 3 and re.search('^[a-zA-Z0-9]+$', w):
-                                    wordlist.append(w)                        
+                                    if w not in ELEMENT_NAMES:
+                                        wordlist.append(w)
 
                         if self.opts.getoptions:
                             try:
                                 res = (requests.options(target['url'],
-                                                        headers={"user-agent": useragent},
+                                                        headers={"user-agent": target['useragent']},
                                                         verify=False,
                                                         timeout=timeout,
                                                         allow_redirects=allow_redir,
-                                                        proxies=self.opts.proxy_dict))
+                                                        proxies=self.opts.proxy_dict,
+                                                        auth=self.opts.proxy_auth))
 
                                 if 'allow' in res.headers:
                                     target['options'] = res.headers['allow'].replace(",", " | ")
 
-                                self.output.put("      %s[o]%s pulled OPTIONS: [ %s:%s ]" % (TC.PURPLE, TC.END, hostname, target['port']))
+                                self.output.put("      %s[o]%s pulled OPTIONS: [ %s:%s ]" %
+                                                (TC.PURPLE, TC.END, hostname, target['port']))
 
                             except requests.ConnectionError:
                                 msg = ["  %s[x]%s Not Found" % (TC.RED, TC.END), ""]
 
                             except socket.timeout:
-                                self.output.put("      %s[x]%s Timed out pulling OPTIONS: [ %s:%s ]" % (TC.RED, TC.END, hostname, target['port']))
+                                self.output.put("      %s[x]%s Timed out pulling OPTIONS: [ %s:%s ]" %
+                                                (TC.RED, TC.END, hostname, target['port']))
 
                             except requests.Timeout:
                                 msg = ["  %s[x]%s Timed out" % (TC.RED, TC.END), ""]
@@ -309,45 +291,93 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                                 (TC.RED, TC.END, hostname, target['port'], "\n\t".join(error)))
 
                         if not self.opts.json_min:
+                            if False and self.opts.dorks and GOOGLE_API_KEY != "X":
+                                # query google dorks for fnames, return list
+                                try:
+                                    res = requests.get("https://www.google.com/?gws_rd=ssl#" +
+                                                       "q=site:" + hostname + "+filetype:" +
+                                                       '+OR+filetype:'.join(DORKS_FILETYPES) +
+                                                       "&format=rss&first=" + str(nxt),
+                                                       headers={"user-agent": target['useragent']},
+                                                       verify=False,
+                                                       timeout=timeout,
+                                                       allow_redirects=allow_redir,
+                                                       proxies=self.opts.proxy_dict,
+                                                       auth=self.opts.proxy_auth,
+                                                       cookies=cookies).content
+
+                                except:
+                                    error = traceback.format_exc().splitlines()
+                                    error_msg("\n".join(error))
+                                    self.output.put(
+                                        "  %s[x]%s Google Dorks:\n\t%s\n" % (TC.RED, TC.END, "\n\t".join(error)))
+                                    break
+
+                                docs = re.findall(r"<link>(.*?)</link>", res)
+
+                                for doc in docs:
+                                    fname = urlparse(doc).filename
+                                    fpath = '%s/artifacts/meta/%s_%s_files' % (self.logdir, hostname, target['port'])
+                                    fn = '%s/%s' % (fpath, fname)
+                                    try:
+                                        os.makedirs(fpath)
+
+                                    except:
+                                        pass
+
+                                    with open(doc, 'wb') as wf:
+                                        for chunk in dat.iter_content(200):
+                                            wf.write(chunk)
+
+                                    report_fname = '%s/meta_report_%s.html' % (self.logdir, timestamp)
+                                    ret = meta_parser.parse(fn)
+                                    meta_parser.add_to_report(fn, report_fname, ret, url_t2)
+                                    if ret:
+                                        self.output.put("          %s[#]%s Meta logged: %s" %
+                                                        (TC.PURPLE, TC.END, os.path.basename(fn)))
+
                             target['hist'] = 256
-                            if not (self.opts.noss or self.opts.json_min) and 'res' in target.keys():
+                            if not (self.opts.noss or self.opts.json_min) and 'res' in target:
                                 proc = Process(target=screenshot,
                                                args=(target['url'], target['port'],
-                                               self.logdir, self.timestamp,
-                                               self.scriptpath, self.opts.proxy_dict,
-                                               useragent, self.pjs_path,
-                                               (self.opts.json or self.opts.json_min),
-                                               timeout, use_ghost))
+                                                     self.logfile, self.logdir, self.timestamp,
+                                                     self.scriptpath, self.opts.proxy_dict,
+                                                     target['useragent'], self.pjs_path,
+                                                     (self.opts.json or self.opts.json_min),
+                                                     timeout, use_ghost, self.opts.useragent[target['useragent']]))
                                 proc.start()
                                 proc.join()
 
                                 if proc.exitcode == 0:
-                                    #target['hist'] = proc[1]
-                                    self.output.put("      %s[+]%s Screenshot :   [ %s ]" % (TC.CYAN, TC.END, target['url']))
-                                    
+                                    # target['hist'] = proc[1]
+                                    self.output.put(
+                                        "      %s[+]%s Screenshot :   [ %s ]" % (TC.CYAN, TC.END, target['url']))
+
                                 else:
-                                    #target['hist'] = 0
-                                    self.output.put("      %s[x]%s Screenshot :   [ %s ] Failed" % (TC.RED, TC.END, target['url']))
+                                    # target['hist'] = 0
+                                    self.output.put(
+                                        "      %s[x]%s Screenshot :   [ %s ] Failed" % (TC.RED, TC.END, target['url']))
 
                         if self.opts.getcrossdomain:
                             try:
                                 res = requests.get("%s/crossdomain.xml" % target['url'],
-                                                   headers={"user-agent": useragent},
+                                                   headers={"user-agent": target['useragent']},
                                                    verify=False,
                                                    timeout=timeout,
                                                    allow_redirects=allow_redir,
-                                                   proxies=self.opts.proxy_dict)
+                                                   proxies=self.opts.proxy_dict,
+                                                   auth=self.opts.proxy_auth)
 
                                 if res.status_code == 200:
                                     if not self.opts.json_min:
                                         try:
-                                            os.makedirs("cross_domain")
-                                            
+                                            os.makedirs("./artifacts/cross_domain")
+
                                         except:
                                             pass
 
-                                        open("./cross_domain/%s_%s_crossdomain.xml" %
-                                             (hostname, target['port']), 'w').write( safe_string(res.content) )
+                                        open("./artifacts/cross_domain/%s_%s_crossdomain.xml" %
+                                             (hostname, target['port']), 'w').write(safe_string(res.content))
                                         self.output.put("      %s[c]%s Pulled crossdomain.xml : [ %s:%s ]" %
                                                         (TC.PURPLE, TC.END, hostname, target['port']))
                                     target['crossdomain'] = "y"
@@ -366,27 +396,28 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                 error = traceback.format_exc().splitlines()
                                 error_msg("\n".join(error))
                                 self.output.put("      %s[x]%s Failed pulling crossdomain.xml :\n\t%s\n" %
-                                                (TC.RED, TC.END, "\n\t".join(error)) )
+                                                (TC.RED, TC.END, "\n\t".join(error)))
 
                         if self.opts.getrobots:
                             try:
                                 res = requests.get("%s/robots.txt" % target['url'],
-                                                   headers={"user-agent": useragent},
+                                                   headers={"user-agent": target['useragent']},
                                                    verify=False,
                                                    timeout=timeout,
                                                    allow_redirects=allow_redir,
-                                                   proxies=self.opts.proxy_dict)
+                                                   proxies=self.opts.proxy_dict,
+                                                   auth=self.opts.proxy_auth)
 
                                 if res.status_code == 200 and "llow:" in res.content:
                                     if not self.opts.json_min:
                                         try:
-                                            os.makedirs("robots")
+                                            os.makedirs("./artifacts/robots")
 
                                         except:
                                             pass
 
-                                        open("./robots/%s_%s_robots.txt" %
-                                             (hostname, target['port']), 'w').write( safe_string(res.content) )
+                                        open("./artifacts/robots/%s_%s_robots.txt" %
+                                             (hostname, target['port']), 'w').write(safe_string(res.content))
                                         self.output.put("      %s[r]%s Pulled robots.txt :      [ %s:%s ]" %
                                                         (TC.PURPLE, TC.END, hostname, target['port']))
                                     target['robots'] = "y"
@@ -404,7 +435,8 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                             except:
                                 error = traceback.format_exc().splitlines()
                                 error_msg("\n".join(error))
-                                self.output.put("      %s[x]%s Failed pulling robots.txt :\n\t%s\n" % (TC.RED, TC.END, "\n\t".join(error)) )
+                                self.output.put("      %s[x]%s Failed pulling robots.txt :\n\t%s\n" %
+                                                (TC.RED, TC.END, "\n\t".join(error)))
 
                         if (self.opts.crawl or self.opts.mirror) and not self.opts.json_min:
                             while crawling >= self.opts.spider_thread_limit:
@@ -416,12 +448,13 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
 
                         ret = parsedata(task, target, self.timestamp, self.scriptpath, self.opts)
 
-                        if 'wordlist' in target.keys():
+                        if 'wordlist' in target:
                             wordlist += target['wordlist']  # add all suggested passwords to our wordlist
                             del target['wordlist']
 
                         if not self.opts.json_min:
-                            with open('./input_lists/wordlist__%s_%s_%s.lst' % (hostname, target['port'], self.timestamp), 'w') as of:
+                            with open('./artifacts/input_lists/wordlist__%s_%s_%s.lst' %
+                                      (hostname, target['port'], self.timestamp), 'w') as of:
                                 of.write('\n'.join(list(set(wordlist))))
 
                         wordlist = None
@@ -429,8 +462,9 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                         if self.opts.json or self.opts.json_min:
                             output.put(ret)
 
-                        if not (self.opts.json_min or target['url'] in outs):
-                            outs.append(target['url'])
+                        i = target['url'] + "_" + str(self.opts.useragent[target['useragent']])
+                        if not (self.opts.json or self.opts.json_min or i in outs):
+                            outs.append(i)
                             write_to_html(timestamp, ret)
                             write_to_csv(timestamp, ret)
 
@@ -445,7 +479,8 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                 except:
                     error = traceback.format_exc().splitlines()
                     error_msg("\n".join(error))
-                    self.output.put("  %s[x]%s Failed : [ %s:%s ]\n\t%s\n" % (TC.RED, TC.END, hostname, target['port'], "\n\t".join(error)))
+                    self.output.put("  %s[x]%s Failed : [ %s:%s ]\n\t%s\n" %
+                                    (TC.RED, TC.END, hostname, target['port'], "\n\t".join(error)))
 
                 self.busy = False
 
@@ -457,7 +492,7 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                 self.output.put("  %s[i]%s Main queue size [ %s ] - Threads Busy/Total [ %s/%s ]" %
                                 (TC.BLUE, TC.END, str(q.qsize()), busy_count, nthreads))
 
-                q.task_done()                
+                q.task_done()
 
 
 def glob_recurse(f):
@@ -465,12 +500,29 @@ def glob_recurse(f):
     for i in glob(f):
         if os.path.isfile(i):
             files.append(os.path.abspath(i))
-            
+
         elif os.path.isdir(i):
             for x in glob_recurse(i + "/*"):
                 files.append(os.path.abspath(x))
-    
+
     return files
+
+
+def init(o):
+    global db
+    db = shelve.open('rawr_%s.shelvedb' % timestamp, writeback=True)
+    db['idx'] = {}
+
+    global unix_ts
+    unix_ts = datetime.datetime.now().strftime("%s")
+
+    global ints
+    ints = {}
+
+    global opts
+    opts = o
+
+    return db, ints, opts
 
 
 def safe_string(s):
@@ -483,32 +535,31 @@ def safe_string(s):
     return r
 
 
-def screenshot(url, port, logdir, timestamp, scriptpath, proxy, useragent, pjs_path, silent, timeout, use_ghost):
-    filename = "%s/%s_%s_%s.png" % ("%s/images" % logdir, urlparse(url).netloc, timestamp, port)
+def screenshot(url, port, logfile, logdir, timestamp, scriptpath, proxy, useragent, pjs_path, silent, timeout,
+               use_ghost, ua_cksum):
+    filename = "%s/%s_%s_%s_%s.png" % ("%s/artifacts/images" % logdir, urlparse(url).netloc, timestamp, port, ua_cksum)
 
     if use_ghost:
-        ghost = Ghost(wait_timeout=timeout, user_agent=useragent, show_scrollbars=False, ignore_ssl_errors=True, java_enabled=True, plugins_enabled=True)
-        if proxy: 
-            ghost.set_proxy('default', proxy['host'], proxy['port'])
+        ghost = Ghost()
+        with ghost.start():
+            session = Session(ghost, wait_timeout=timeout, user_agent=useragent, viewport_size=(640, 480),
+                              show_scrollbars=False, ignore_ssl_errors=True, java_enabled=True, plugins_enabled=True)
+            if proxy:
+                session.set_proxy('default', proxy['host'], proxy['port'])
 
-        def get_url(url):
-            page, res = ghost.open(url)
+            page, res = session.open(url)
 
             if page:
-                ghost.capture_to(filename, region=(0,0,640,480))
+                session.capture_to(filename, region=(0, 0, 640, 480))
 
             else:
-                pass # ERROR MSG
-
-            ghost.exit()
-
-        get_url(url)
+                pass  # ERROR MSG
 
     else:
         if not os.path.exists(filename):  # the picture hasn't already been taken
             lp = "/dev/null"  # not logging (json, json-min)
             if not silent:
-                lp = "%s/rawr_%s.log" % (logdir, timestamp)
+                lp = logfile
 
             with open(lp, 'ab') as log_pipe:
                 start = datetime.datetime.now()
@@ -517,9 +568,9 @@ def screenshot(url, port, logdir, timestamp, scriptpath, proxy, useragent, pjs_p
                 if proxy:
                     cmd.append("--proxy=%s" % proxy['http'])  # Same ip:port is used for both http and https.
 
-                cmd += "--web-security=no", "--ignore-ssl-errors=yes", "--ssl-protocol=any",\
+                cmd += "--web-security=no", "--ignore-ssl-errors=yes", "--ssl-protocol=any", \
                        (scriptpath + "/data/screenshot.js"), url, filename, useragent, str(ss_delay)
-                       
+
                 try:
                     process = subprocess.Popen(cmd, stdout=log_pipe, stderr=log_pipe)
 
@@ -531,18 +582,18 @@ def screenshot(url, port, logdir, timestamp, scriptpath, proxy, useragent, pjs_p
                                 sig = getattr(signal, 'SIGKILL', signal.SIGTERM)
                                 os.kill(process.pid, sig)
                                 os.waitpid(-1, os.WNOHANG)
-    
+
                             except:
                                 pass
-                            
-                            return (False, ' Timed Out.')
+
+                            return False, ' Timed Out.'
 
                 except:
-                    return (False, "\n\t\t".join(traceback.format_exc().splitlines()))
+                    return False, "\n\t\t".join(traceback.format_exc().splitlines())
 
         if not os.path.isfile(filename):
-            shutil.copy(scriptpath + "/data/error.png", filename)    
-            return(False, '.png not created')
+            shutil.copy(scriptpath + "/data/error.png", filename)
+            return False, '.png not created'
 
         elif os.stat(filename).st_size > 0:
             try:  # histogram time!
@@ -551,18 +602,18 @@ def screenshot(url, port, logdir, timestamp, scriptpath, proxy, useragent, pjs_p
                 for x in xrange(img.size[0]):
                     for y in xrange(img.size[1]):
                         t = img.load()[x, y]
-                        tuple(map(sum,zip(rgb,t)))
+                        tuple(map(sum, zip(rgb, t)))
                         c += 1
 
-                hsv = colorsys.rgb_to_hsv( tuple((x / c) for x in rgb) )
-                return (True, hsv[2])
+                hsv = colorsys.rgb_to_hsv(tuple((x / c) for x in rgb))
+                return True, hsv[2]
 
             except:  # histogram failed
-                return (True, 0)
+                return True, 0
 
         else:
-            shutil.copy(scriptpath + "/data/error.png", filename)    
-            return(False, '0 byte file. [Deleted]')
+            shutil.copy(scriptpath + "/data/error.png", filename)
+            return False, '0 byte file. [Deleted]'
 
 
 def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
@@ -577,8 +628,9 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
 
             if opts.verbose:
                 output.put("      %s[i]%s [%s] threads %s/%s - depth %s/%s - sec %d/%s - urls %s/%s" %
-                           (TC.BLUE, TC.END, target['url'], crawling, opts.spider_thread_limit, depth, opts.spider_depth,
-                            (datetime.datetime.now() - time_start).total_seconds(),
+                           (TC.BLUE, TC.END, target['url'], crawling,
+                            opts.spider_thread_limit, depth, opts.spider_depth,
+                            (datetime.datetime.now() - time_start).seconds,
                             opts.spider_timeout, len(list(set(urls_visited))), opts.spider_url_limit))
 
             if len(list(set(urls_visited))) > opts.spider_url_limit:
@@ -595,11 +647,12 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
 
                 break
 
-            if not url_t2 in ("https://ssl", "http://www", "http://", "http://-", "http:", "https:"):  # ga junk
+            if url_t2 not in ("https://ssl", "http://www", "http://", "http://-", "http:", "https:"):  # ga junk
                 coll.append((url_t1.replace(":", "-"), url_t2.replace(":", "-")))
 
                 if not (url_t2 in urls_visited or (opts.spider_url_blacklist and (url_t2 in url_blacklist))):
-                    with open('%s/diagrams/links_%s_%s__%s.txt' % (logdir, hname, target['port'], timestamp), 'a') as of:
+                    with open('%s/artifacts/diagrams/links_%s_%s__%s.txt' % (logdir, hname, target['port'], timestamp),
+                              'a') as of:
                         of.write("%s%s\n" % (tabs, safe_string(url_t2)))
 
                 if not (url_t2 in urls_visited or (opts.spider_url_blacklist and (url_t2 in url_blacklist))):
@@ -616,16 +669,18 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                         if url_t2_hn in url_t1 or opts.alt_domains and url_t2_hn in opts.alt_domains.split(','):
                             urls_t3 = []
                             try:
-                                doc_f = '%s/meta/%s_%s_%s_findings.csv' % (logdir, hname, target['port'], timestamp)
+                                doc_f = '%s/artifacts/meta/%s_%s_%s_findings.csv' %\
+                                        (logdir, hname, target['port'], timestamp)
                                 dat = session.get(url_t2,
                                                   headers={"user-agent": useragent, "referer": url_t1},
                                                   verify=False,
                                                   timeout=opts.spider_url_timeout,
                                                   allow_redirects=False,
-                                                  proxies=opts.proxy_dict)
+                                                  proxies=opts.proxy_dict,
+                                                  auth=opts.proxy_auth)
 
                                 if dat.status_code == 201:
-                                    open('%s/201_pages.lst' % logdir, 'a').write(url_t2 + '\n')
+                                    open('%s/artifacts/201_pages.lst' % logdir, 'a').write(url_t2 + '\n')
 
                                 elif dat.status_code == (300, 301, 302, 303, 305, 306, 307, 308):
                                     if "location" in dat.headers.keys():
@@ -633,19 +688,21 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                             if url_t2_hn in l:
                                                 urls_t3.append(l)
 
-                                elif dat.status_code == 401:
-                                    open('%s/401_failed_auth.lst' % logdir, 'a').write(url_t2 + '\n')
+                                elif dat.status_code in (401, 403):
+                                    open('%s/artifacts/auth_sites.lst' % logdir, 'a').write(url_t2 + '\n')
 
                                 elif dat.content and dat.status_code != 404:
-                                    l = list(set( (target['res'].content).split() ) )
+                                    l = list(set(target['res'].content.split()))
                                     for w in l:
                                         if len(w) > 3 and re.search('^[a-zA-Z0-9]+$', w):
-                                            wl.append(w)  
+                                            wl.append(w)
 
                                     page = p.path.split('/')[-1]
                                     if opts.mirror:
-                                        fpath = '%s/mirrored_sites/%s_%s%s' % (logdir, hname, target['port'], p.path.replace(page, ''))
-                                        fn = '%s/mirrored_sites/%s_%s%s' % (logdir, hname, target['port'], p.path)
+                                        fpath = '%s/artifacts/mirrored_sites/%s_%s%s' %\
+                                                (logdir, hname, target['port'], p.path.replace(page, ''))
+                                        fn = '%s/artifacts/mirrored_sites/%s_%s%s' %\
+                                             (logdir, hname, target['port'], p.path)
 
                                         try:
                                             os.makedirs(fpath)
@@ -658,7 +715,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                                 wf.write(chunk)
 
                                     else:
-                                        fpath = '%s/meta/%s_%s_files' % (logdir, hname, target['port'])
+                                        fpath = '%s/artifacts/meta/%s_%s_files' % (logdir, hname, target['port'])
                                         fn = '%s/%s' % (fpath, page)
 
                                     ext = p.path.split(".")[-1].lower()
@@ -672,7 +729,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                             except:
                                                 pass
 
-                                            fpath = '%s/meta/%s_%s_files' % (logdir, hname, target['port'])
+                                            fpath = '%s/artifacts/meta/%s_%s_files' % (logdir, hname, target['port'])
                                             fn = '%s/%s' % (fpath, page)
 
                                             with open(fn, 'wb') as wf:
@@ -684,15 +741,18 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                         with open(doc_f, 'a') as ofn:
                                             ofn.write('DOC,%s\n' % safe_string(url_t2))
 
-                                        try:                                        
+                                        try:
                                             report_fname = '%s/meta_report_%s.html' % (logdir, timestamp)
                                             ret = meta_parser.parse(fn)
                                             meta_parser.add_to_report(fn, report_fname, ret, url_t2)
                                             if ret:
-                                                output.put("          %s[#]%s Meta logged: %s" % (TC.PURPLE, TC.END, os.path.basename(fn)) )
+                                                output.put("          %s[#]%s Meta logged: %s" %
+                                                           (TC.PURPLE, TC.END, os.path.basename(fn)))
 
-                                            try: os.system('rm -rf ./tmp')
-                                            except: pass
+                                            try:
+                                                os.system('rm -rf ./tmp')
+                                            except:
+                                                pass
 
                                         except:
                                             e = traceback.format_exc().splitlines()
@@ -708,10 +768,9 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                         with open(doc_f, 'a') as ofn:
                                             ofn.write('OTHER,%s\n' % safe_string(url_t2))
 
-
                                     for u in list(set(re.findall(URL_REGEX, dat.content, re.I))):
                                         urls_t3.append(u.split('"')[0].split("'")[0].split(
-                                                       "<")[0].split("--")[0].rstrip('%)/.'))  # supplement the regex
+                                            "<")[0].split("--")[0].rstrip('%)/.'))  # supplement the regex
 
                                     if dat.content.rstrip():
                                         try:  # parse the html for tags w/ href or source
@@ -719,16 +778,18 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                             for el in cxt.iter():
                                                 try:
                                                     if str(el.tag).strip().lower() in ['link', 'a', 'script', 'iframe',
-                                                                  'applet', 'area', 'object', 'embed', 'form']:
+                                                                                       'applet', 'area', 'object',
+                                                                                       'embed', 'form']:
                                                         for i, v in el.items():
                                                             if i in ("src", "href"):
                                                                 if "mailto" in v:
                                                                     x = safe_string(v.split(":")[1])
                                                                     try:
-                                                                        if not x in target['email_addresses']:                                    
+                                                                        if x not in target['email_addresses']:
                                                                             target['email_addresses'].append(x)
 
-                                                                    except: target['email_addresses'] = [x]
+                                                                    except:
+                                                                        target['email_addresses'] = [x]
 
                                                                 else:
                                                                     if not v.split("//")[0] in ("http:", "https:"):
@@ -740,30 +801,31 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                                                         urls_t3.append(v)
 
                                                 except:
-                                                    #pass
+                                                    # pass
                                                     e = traceback.format_exc().splitlines()
                                                     error_msg(" [spider] parsing HTML element:\n\t%s\n\t%s" %
                                                               (url_t2, e))
 
                                         except:
                                             pass
-                                            #e = traceback.format_exc().splitlines()[-1]
-                                            #error_msg(" [spider] parsing HTML from:\n\t%s\n\t%s" % (url_t2, e))
+                                            # e = traceback.format_exc().splitlines()[-1]
+                                            # error_msg(" [spider] parsing HTML from:\n\t%s\n\t%s" % (url_t2, e))
 
                                     urls_t3 = list(set(urls_t3))
 
                                     if len(urls_t3) > 0:
-                                        if not (len(list(set(urls_visited))) > opts.spider_url_limit
-                                                or depth >= opts.spider_depth
-                                                or (datetime.datetime.now() - time_start).total_seconds() > opts.spider_timeout):
-                                            if opts.spider_breadth_first:  # Not a 'tree' until we move to nosqlite
-                                                urls_to_crawl.put([url_t2, urls_t3, "\t", depth + 1])
+                                        if not len(list(set(urls_visited))) > opts.spider_url_limit:
+                                            if not depth >= opts.spider_depth:
+                                                d = (datetime.datetime.now() - time_start).seconds
+                                                if not d > opts.spider_timeout:
+                                                    if opts.spider_breadth_first:
+                                                        urls_to_crawl.put([url_t2, urls_t3, "\t", depth + 1])
 
-                                            else:
-                                                recurse(url_t2, urls_t3, tabs + "\t", depth + 1)
+                                                    else:
+                                                        recurse(url_t2, urls_t3, tabs + "\t", depth + 1)
 
                             except:
-                                #pass
+                                # pass
                                 e = traceback.format_exc().splitlines()
                                 error_msg(" [spider] pulling [ %s ]:\n\t%s" % (target['url'], e))
 
@@ -773,10 +835,11 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
     if opts.spider_url_blacklist:
         if os.path.isfile(opts.spider_url_blacklist):
             url_blacklist = open(opts.spider_url_blacklist).read().split('\n')
-            output.put("        %s[i]%s Spidering - blacklisting %s urls." % (TC.BLUE, TC.END, len(url_blacklist)-1) )
+            output.put("        %s[i]%s Spidering - blacklisting %s urls." % (TC.BLUE, TC.END, len(url_blacklist) - 1))
 
         else:
-            output.put("        %s[i]%s Spidering - unable to find blacklist file - " % (TC.BLUE, TC.END, opts.spider_url_blacklist) )
+            output.put("        %s[i]%s Spidering - unable to find blacklist file - %s" %
+                       (TC.BLUE, TC.END, opts.spider_url_blacklist))
 
     coll, urls_visited, target['docs'], target['exif_docs'] = [], [], [], []
     hname = urlparse(target['url']).netloc
@@ -784,9 +847,9 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
     time_start = datetime.datetime.now()
     session = requests.Session()
 
-    if not os.path.exists("diagrams"):
+    if not (opts.json_min or os.path.exists("./artifacts/diagrams")):
         try:
-            os.makedirs("diagrams")
+            os.makedirs("./artifacts/diagrams")
 
         except:
             pass
@@ -795,8 +858,8 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
         urls_to_crawl = Queue()
         urls_to_crawl.put([target['url'], [target['url']], "\t", 1])
         while not urls_to_crawl.empty():
-                x, y, t, d = urls_to_crawl.get()
-                recurse(x, y, t, d)
+            x, y, t, d = urls_to_crawl.get()
+            recurse(x, y, t, d)
 
         urls_to_crawl = None
 
@@ -807,10 +870,11 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
     target['doc_count'] = len(target['docs'])
 
     if len(coll) < 2:
-        output.put("      %s[+]%s Finished spider: [ %s ] - no links, skipping graph..." % (TC.CYAN, TC.END, target['url']) )
+        output.put(
+            "      %s[+]%s Finished spider: [ %s ] - no links, skipping graph..." % (TC.CYAN, TC.END, target['url']))
 
     else:
-        try: 
+        try:
             output.put("      %s[+]%s Finished spider: [ %s ] - building graph..." % (TC.CYAN, TC.END, target['url']))
 
             # Graph creation
@@ -819,7 +883,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
 
             c = []
             for x, y in coll:  # Add nodes and edges
-                if not x in c:
+                if x not in c:
                     c.append(x)
 
                 if not (x == y or y in c):
@@ -840,7 +904,8 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                     gr.add_node(node)
 
             if opts.verbose:
-                output.put("      %s[i]%s Processing colls for [ %s ]:   %s colls" % (TC.BLUE, TC.END, target['url'], len(coll)) )
+                output.put("      %s[i]%s Processing colls for [ %s ]:   %s colls" %
+                           (TC.BLUE, TC.END, target['url'], len(coll)))
 
             for x, y in [z for z in coll if z[0] != z[1]]:
                 gr.add_edge((x, y))
@@ -848,10 +913,11 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
             # Draw as PNG
             gr.layout(prog=LAYOUT_TYPE)
             # will get a warning if the graph is too large - not fatal
-            f = '%s/diagrams/diagram_%s_%s__%s.png' % (logdir, urlparse(target['url']).netloc, target['port'], timestamp)
+            f = '%s/artifacts/diagrams/diagram_%s_%s__%s.png' %\
+                (logdir, urlparse(target['url']).netloc, target['port'], timestamp)
 
             if opts.verbose:
-                output.put("      %s[i]%s Drawing diagram for [ %s ]: %s" % (TC.BLUE, TC.END, target['url'], f) )
+                output.put("      %s[i]%s Drawing diagram for [ %s ]: %s" % (TC.BLUE, TC.END, target['url'], f))
 
             gr.draw(f)
             target['diagram'] = f
@@ -859,7 +925,8 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
         except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            output.put("\n    %s[!]%s Unable to create site chart: [ %s ]\n\t%s\n" % (TC.YELLOW, TC.END, target['url'], "\n\t".join(error)))
+            output.put("\n    %s[!]%s Unable to create site chart: [ %s ]\n\t%s\n" %
+                       (TC.YELLOW, TC.END, target['url'], "\n\t".join(error)))
 
     return wl
 
@@ -872,7 +939,7 @@ def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site resp
     try:
         with open("%s/%s" % (scriptpath, IP_TO_COUNTRY)) as f:
             for c, l in enumerate(f):
-                if l != "" and not "#" in l:
+                if l != "" and "#" not in l:
                     l = l.replace('"', '').split(',')
                     if int(l[1]) > target['ipnum'] > int(l[0]):
                         target['country'] = "[%s]-%s" % (l[4], l[6].strip('\n'))
@@ -881,25 +948,30 @@ def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site resp
     except:
         error = traceback.format_exc().splitlines()
         error_msg("\n".join(error))
-        output.put("  %s[!]%s IPtoCountry parse error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)) )
+        output.put("  %s[!]%s IPtoCountry parse error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)))
 
-    if 'res' in target.keys():
+    if 'res' in target:
         # eat cookie now....omnomnom
         if len(target['res'].cookies) > 0:
-            try:
-                os.mkdir("cookies")
+            if not opts.json_min:
+                try:
+                    os.mkdir("./artifacts/cookies")
 
-            except: pass
+                except:
+                    pass
 
-            with open("./cookies/%s_%s.txt" % (urlparse(target['url']).netloc, target['port']), 'w') as of:
-                of.write(str(target['res'].cookies))
+                with open("./artifacts/cookies/%s_%s.txt" % (urlparse(target['url']).netloc,
+                                                             target['port']), 'w') as of:
+                    of.write(str(target['res'].cookies))
 
             target['cookies'] = len(target['res'].cookies)
             target['content-type'] = re.findall("charset=(.*)[\s|\r]", str(str(target['res'].cookies)))
 
-        if not 'content-type' in target.keys():
-            try: target['content-type'] = re.findall("charset=(.*)[\s|\r]", str(target['res'].headers['content-type']))
-            except: pass
+        if 'content-type' not in target:
+            try:
+                target['content-type'] = re.findall("charset=(.*)[\s|\r]", str(target['res'].headers['content-type']))
+            except:
+                pass
 
         target['endurl'] = target['res'].url
 
@@ -948,7 +1020,7 @@ def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site resp
                         parsermods.append((field, regxp, modtype))
 
                 else:
-                    output.put("  %s[!]%s skipping %s - invalid modtype" % (TC.YELLOW, TC.END, field) )
+                    output.put("  %s[!]%s skipping %s - invalid modtype" % (TC.YELLOW, TC.END, field))
 
             except:
                 error = traceback.format_exc().splitlines()
@@ -979,7 +1051,7 @@ def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site resp
 
                                     if t == 3:
                                         for i in r:
-                                            if not n in target.keys():
+                                            if n not in target:
                                                 target[n] = []
 
                                             target[n].append(i)
@@ -994,12 +1066,13 @@ def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site resp
                                         target[n] = [len(r)]
 
                                     else:
-                                        raise("invalid modtype - %s" % t)
+                                        raise ("invalid modtype - %s" % t)
 
                             except:
                                 error = traceback.format_exc().splitlines()
                                 error_msg("\n".join(error))
-                                output.put("  %s[!]%s skipping module '%s':\n\t%s\n" % (TC.YELLOW, TC.END, n, "\n\t".join(error)))
+                                output.put("  %s[!]%s skipping module '%s':\n\t%s\n" %
+                                           (TC.YELLOW, TC.END, n, "\n\t".join(error)))
 
                         # some default checks
                         if tag == "meta":
@@ -1013,7 +1086,7 @@ def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site resp
                         elif tag == "script":
                             for i, v in items:
                                 if i == "src":
-                                    if not 'file_includes' in target.keys():
+                                    if 'file_includes' not in target:
                                         target['file_includes'] = []
 
                                     target['file_includes'].append(v)
@@ -1026,20 +1099,25 @@ def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site resp
                                     if "mailto:" in v:
                                         x = safe_string(v.split(":")[1])
                                         try:
-                                            if not x in target['email_addresses']:                                    
+                                            if x not in target['email_addresses']:
                                                 target['email_addresses'].append(x)
 
-                                        except: target['email_addresses'] = [x]
+                                        except:
+                                            target['email_addresses'] = [x]
 
                                     else:
-                                        try: target['urls'].append(safe_string(v))
-                                        except: target['urls'] = [safe_string(v)]
+                                        try:
+                                            target['urls'].append(safe_string(v))
+                                        except:
+                                            target['urls'] = [safe_string(v)]
 
                         elif tag == "input":
                             for i, v in items:
                                 if v.lower == "password":
-                                    try: target['passwordFields'].append(html.tostring(safe_string(el)))
-                                    except: target['passwordFields'] = [html.tostring(safe_string(el))]
+                                    try:
+                                        target['passwordFields'].append(html.tostring(safe_string(el)))
+                                    except:
+                                        target['passwordFields'] = [html.tostring(safe_string(el))]
 
                             target['input'] = len(items)
 
@@ -1047,16 +1125,16 @@ def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site resp
                             target[tag] = len(items)
 
                     except:
-                        error = '\n\t\t'.join( traceback.format_exc().splitlines() )
-                        error_msg(" parsing HTML element [ %s ]:\n\t%s" % (target['url'], error) )
+                        error = '\n\t\t'.join(traceback.format_exc().splitlines())
+                        error_msg(" parsing HTML element [ %s ]:\n\t%s" % (target['url'], error))
                         if opts.verbose:
-                            output.put("  %s[!]%s Error parsing HTML element:\n\t%s\n" % (TC.YELLOW, TC.END, error) )
+                            output.put("  %s[!]%s Error parsing HTML element:\n\t%s\n" % (TC.YELLOW, TC.END, error))
 
             except:
-                error = '\n\t\t'.join( traceback.format_exc().splitlines() )
-                error_msg(" parsing HTML element [ %s ]:\n\t%s" % (target['url'], error) )
+                error = '\n\t\t'.join(traceback.format_exc().splitlines())
+                error_msg(" parsing HTML element [ %s ]:\n\t%s" % (target['url'], error))
                 if opts.verbose:
-                    output.put("  %s[!]%s Error parsing HTML from:\n\t%s\n" % (TC.YELLOW, TC.END, error) )
+                    output.put("  %s[!]%s Error parsing HTML from:\n\t%s\n" % (TC.YELLOW, TC.END, error))
 
             finally:
                 cxt = None
@@ -1066,9 +1144,9 @@ def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site resp
             target[header.lower()] = target['res'].headers[header]
 
         # check CPE for matches in the DPE Database
-        if opts.defpass and "cpe" in target.keys():
+        if opts.defpass and "cpe" in target:
             target['cve'], target['defpass'], target['wordlist'] = [], [], []
-            dpe = etree.parse("%s/%s" % (scriptpath, DPE_FILE) )
+            dpe = etree.parse("%s/%s" % (scriptpath, DPE_FILE))
 
             for el_model in dpe.xpath("//*[@cpe]"):
                 try:
@@ -1078,57 +1156,60 @@ def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site resp
 
                         for el in el_model.getchildren():
                             if el.tag.endswith("info") and el.attrib["cve"]:
-                                target['cve'] = el.attrib["cve"]
+                                target['cve'].append(el.attrib["cve"])
 
                             elif el.tag.endswith("credential"):
-                                if not 'printed on' in el.attrib["password"]:
-                                    target['wordlist'].append( el.attrib["password"] )
+                                if 'printed on' not in el.attrib["password"]:
+                                    target['wordlist'].append(el.attrib["password"])
 
                                 un = 'blank'
                                 if el.attrib["username"]:
                                     un = el.attrib["username"]
-                                    target['usernames'].append( un )
+                                    target['usernames'].append(un)
 
-                                target['defpass'].append( un + ":" + el.attrib["password"] )
+                                target['defpass'].append(un + ":" + el.attrib["password"])
 
                         break
 
                 except:
                     error = traceback.format_exc().splitlines()
                     error_msg("\n".join(error))
-                    output.put("\n  %s[!]%s Error parsing dpe_db.xml\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)) )
+                    output.put("\n  %s[!]%s Error parsing dpe_db.xml\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)))
 
     if "service_tunnel" in target:
         if target['service_tunnel'] == 'ssl':
-            if not 'ssl-cert' in target and 'returncode' in target:
+            if 'ssl-cert' not in target and 'returncode' in target:
                 # ^ hosts were loaded by a file that didn't contain SSL info
                 output.put("  %s[>]%s Pulling SSL cert for  %s" % (TC.GREEN, TC.END, target['url']))
-    
+
                 import ssl
                 cert = None
                 try:
                     cert = ssl.get_server_certificate((target['hostnames'][0], int(target['port'])),
                                                       ssl_version=ssl.PROTOCOL_TLSv1)
-    
+
                 except:
                     try:
                         cert = ssl.get_server_certificate((target['hostnames'][0], int(target['port'])))
-    
-                    except: pass   # get an error in here!
-    
+
+                    except:
+                        pass  # get an error in here!
+
                 finally:
                     if not opts.json_min:
                         try:
-                            os.mkdir("ssl_certs")
-            
-                        except: pass
-            
+                            os.mkdir("./artifacts/ssl_certs")
+
+                        except:
+                            pass
+
                 try:
                     if cert:
-                        certfile = "./ssl_certs/%s_%s.pem" % (urlparse(target['url']).netloc, target['port'])
+                        certfile = "./artifacts/ssl_certs/%s_%s.pem" % (urlparse(target['url']).netloc, target['port'])
                         open(certfile, 'w').write(cert)
-                
-                        proc = subprocess.Popen(['openssl', 'x509', '-in', certfile, '-inform', 'PEM', '-text'], stdout=subprocess.PIPE)
+
+                        proc = subprocess.Popen(['openssl', 'x509', '-in', certfile, '-inform', 'PEM', '-text'],
+                                                stdout=subprocess.PIPE)
                         target['ssl-cert'] = proc.stdout.read()
                         notbefore = ""
                         notafter = ""
@@ -1136,72 +1217,74 @@ def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site resp
                             try:
                                 if "issuer" in line.lower():
                                     target['ssl_cert-issuer'] = line.split(": ")[1]
-        
-                                elif "subject" in line.lower() and not 'ssl_cert-subject' in target.keys():
+
+                                elif "subject" in line.lower() and 'ssl_cert-subject' not in target:
                                     target['ssl_cert-subject'] = line.split(": ")[1]
-        
+
                                     if "*" in line.split(": ")[1]:
                                         subject = line.split(": ")[1].split("*")[1]
-        
+
                                     else:
                                         subject = line.split(": ")[1]
-        
+
                                     if subject in target['hostnames']:
                                         target['ssl_cert-verified'] = "yes"
-        
-                                elif "md5" in line.lower() and not 'ssl_cert-md5' in target.keys():
+
+                                elif "md5" in line.lower() and 'ssl_cert-md5' not in target:
                                     target['ssl_cert-md5'] = line.split(": ")[1].replace(" ", '')
-        
-                                elif "sha-1" in line.lower() and not 'ssl_cert-sha-1' in target.keys():
+
+                                elif "sha-1" in line.lower() and 'ssl_cert-sha-1' not in target:
                                     target['ssl_cert-sha-1'] = line.split(": ")[1].replace(" ", '')
-        
-                                elif "Signature Algorithm" in line.lower() and not 'ssl_cert-keyalg' in target.keys():
+
+                                elif "Signature Algorithm" in line.lower() and 'ssl_cert-keyalg' not in target:
                                     target['ssl_cert-keyalg'] = "%s" % line.split(": ")[1]
                                     # need to take another look at this one.  not seeing it atm
-        
+
                                 elif "not before" in line.lower():
                                     notbefore = line.split(": ")[1].strip()
                                     target['ssl_cert-notbefore'] = notbefore
-        
+
                                 elif "not after" in line.lower():
                                     notafter = line.split(": ")[1].strip()
                                     target['ssl_cert-notafter'] = notafter
-                                    
-                            except: pass
-    
+
+                            except:
+                                pass
+
                         try:
-                            notbefore =  datetime.datetime.strptime(str(notbefore), '%b %d %H:%M:%S %Y %Z') # Apr 23 12:16:09 2014 GMT
-                            notafter =  datetime.datetime.strptime(str(notafter), '%b %d %H:%M:%S %Y %Z')
+                            notbefore = datetime.datetime.strptime(str(notbefore),
+                                                                   '%b %d %H:%M:%S %Y %Z')  # Apr 23 12:16:09 2014 GMT
+                            notafter = datetime.datetime.strptime(str(notafter), '%b %d %H:%M:%S %Y %Z')
                             vdays = (notafter - notbefore).days
                             if datetime.datetime.now() > notafter:
                                 daysleft = "EXPIRED"
-    
+
                             else:
                                 daysleft = (notafter - datetime.datetime.now()).days
-    
+
                         except:
                             vdays = "unk"
                             daysleft = "unk"
-    
+
                         target['ssl_cert-validityperiod'] = vdays
                         target['ssl_cert-daysleft'] = daysleft
-    
+
                 except:
                     error = traceback.format_exc().splitlines()
                     error_msg("\n".join(error))
-                    output.put("\n  %s[!]%s Error parsing cert:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)) )
-        
+                    output.put("\n  %s[!]%s Error parsing cert:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)))
+
                 target['ssl-cert'] = 'true'
-                
+
             # Parse cert and write to file
-            elif not opts.json_min and 'ssl-cert' in target.keys():
+            elif not opts.json_min and 'ssl-cert' in target:
                 try:
-                    os.mkdir("ssl_certs")
-    
+                    os.mkdir("./artifacts/ssl_certs")
+
                 except:
                     pass
-    
-                open("./ssl_certs/%s_%s.cert" %
+
+                open("./artifacts/ssl_certs/%s_%s.cert" %
                      (urlparse(target['url']).netloc, target['port']), 'w').write(target['ssl-cert'])
 
                 target['ssl-cert'] = 'true'
@@ -1211,6 +1294,10 @@ def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site resp
 
 def write_to_csv(timestamp, target):
     x = [" "] * len(flist.split(","))
+
+    for f in target:
+        if type(target[f]) == list:
+            target[f] = ' | '.join(target[f])
 
     if not os.path.isfile("rawr_%s_serverinfo.csv" % timestamp):
         open("rawr_%s_serverinfo.csv" % timestamp, 'w').write(flist)
@@ -1225,7 +1312,7 @@ def write_to_csv(timestamp, target):
     except:
         error = traceback.format_exc().splitlines()
         error_msg("\n".join(error))
-        output.put("\n  %s[!]%s Unable to write .csv:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)) )
+        output.put("\n  %s[!]%s Unable to write .csv:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)))
 
 
 def write_to_html(timestamp, target):
@@ -1234,20 +1321,20 @@ def write_to_html(timestamp, target):
         for header, chks, undef in SECURITY_HEADERS:
             found = False
             if header.lower() in target:
-                hdrString = target[header.lower()]
+                hdrstring = target[header.lower()]
                 for chk in chks:
-                    if chk[0] in hdrString.lower():
-                        of.write(chk[1].replace('<<>>', hdrString))
+                    if chk[0] in hdrstring.lower():
+                        of.write(chk[1].replace('<<>>', hdrstring))
                         found = True
                         break
 
             if not found:
                 of.write(undef)
 
-        of.write('</tr>')    
+        of.write('</tr>')
 
     x = [" "] * len(flist.split(","))
-    for i, v in target.items():    
+    for i, v in target.items():
         if i.lower() in flist.lower().split(', '):
             try:
                 x[flist.lower().split(", ").index(i.lower())] = re.sub('[\n\r,]', '', safe_string(v))
@@ -1256,18 +1343,236 @@ def write_to_html(timestamp, target):
                 error_msg("\n".join(traceback.format_exc().splitlines()[-3:]))
 
     try:
-        with open('index_%s.html' % timestamp, 'a') as of:
-            of.write("\n" + str(target['hist']) + ", " + str(','.join(x)))
+        with open('report_%s.html' % timestamp, 'a') as of:
+            of.write(
+                "\n" + str(target['hist']) + ", " + str(opts.useragent[target['useragent']]) + ", " + str(','.join(x)))
 
     except:
         error = traceback.format_exc().splitlines()
         error_msg("\n".join(error))
-        output.put("\n  %s[!]%s Unable to write .html:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)) )
+        output.put("\n  %s[!]%s Unable to write .html:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)))
+
+
+def run_nmap(target, opts, logfile):
+    # Run NMap to provide discovery [xml] data
+    if not (inpath("nmap") or inpath("nmap.exe")):
+        writelog("  %s[x]%s NMap not found in $PATH.  Exiting... \n\n" % (TC.RED, TC.END), logfile, opts)
+        sys.exit(1)
+
+    if opts.ports:
+        portswitch = "-p"
+        if 'top' in str(opts.ports).lower():
+            try:
+                opts.ports = str(int(str(opts.ports).replace('top', '')))
+                portswitch = "--top-ports"
+
+            except:
+                print("\n  %s[x]%s  Invalid 'top ports' specification. \n" % (TC.RED, TC.END))
+                sys.exit(1)
+
+        elif str(opts.ports).lower() == "fuzzdb":
+            opts.ports = fuzzdb
+
+        elif str(opts.ports).lower() == "all":
+            opts.ports = "1-65535"
+
+        else:
+            opts.ports = str(opts.ports)
+
+    if opts.nmapspeed:
+        try:
+            if not (6 > int(opts.nmapspeed) > 0):
+                raise ()
+
+        except:
+            print("\n  %s[x]%s  Scan Timing (-t) must be numeric and 1-5 \n" % (TC.RED, TC.END))
+            sys.exit(1)
+
+    # Build the NMap command args
+    cmd = ["nmap", "-Pn"]
+
+    if opts.sourceport:
+        cmd += "-g", str(opts.sourceport)
+
+    sslscripts = "--script=ssl-cert"
+    if opts.sslopt:
+        sslscripts += ",ssl-enum-ciphers"
+
+    if opts.json_min:
+        outputs = "-oX"
+        fname = "rawr_" + timestamp + ".xml"
+
+    else:
+        outputs = "-oA"
+        fname = "artifacts/rawr_" + timestamp
+
+    proc = subprocess.Popen(['nmap', '-V'], stdout=subprocess.PIPE)
+    ver = proc.stdout.read().split(' ')[2]
+    ver = re.sub(r'[^0-9.:]', '', ver)  # the SVN ver. of NMap includes 'svn' in the version string
+
+    # greatly increases scan speed, introduced in nmap v.6.25(?)
+    if float(ver) >= 6.25:
+        cmd += "--max-retries", "0"
+
+    cmd += portswitch, opts.ports, "-T%s" % opts.nmapspeed, "-vv", "-sV", sslscripts, outputs, fname, "--open"
+
+    if os.path.isfile(opts.target_input):
+        cmd += "-iL", opts.target_input
+
+    else:
+        cmd.append(opts.target_input)
+
+    writelog("  %s[>]%s Scanning >\n	  %s" % (TC.GREEN, TC.END, " ".join(cmd)), logfile, opts)
+
+    # need to quiet this when running with --json & --json-min
+    try:
+        if not (opts.json_min or opts.json):
+            with open(logfile, 'ab') as log_pipe:
+                ret = subprocess.call(cmd, stderr=log_pipe)
+
+        else:
+            with open('/dev/null', 'w') as log_pipe:
+                ret = subprocess.Popen(cmd, stdout=log_pipe, stderr=subprocess.PIPE).wait()
+
+    except KeyboardInterrupt:
+        writelog("\n\n  %s[!]%s  Scanning Halted (ctrl+C).  Exiting!   \n\n" % (TC.YELLOW, TC.END), logfile, opts)
+        db.close()
+        sys.exit(2)
+
+    except Exception:
+        error = traceback.format_exc().replace('\n', '\n\t\t')
+        error_msg(error)
+        writelog("\n\n  %s[x]%s  Error in scan - %s\n\n" % (TC.RED, TC.END, error), logfile, opts)
+        db.close()
+        sys.exit(2)
+
+    if ret != 0:
+        writelog("\n\n", logfile, opts)
+        db.close()
+        sys.exit(1)
+
+    if opts.json_min:
+        return ["rawr_%s.xml" % timestamp]
+
+    else:
+        return ["artifacts/rawr_%s.xml" % timestamp]
+
+
+def process_url(url):
+    target = {}
+    url = url.strip()
+    parsed_url = urlparse(url)
+    host = parsed_url.netloc.split(':')[0]
+
+    if re.search("0-9.+", host):
+        target['ipv4'] = host
+        target['hostnames'] = [socket.gethostbyaddr(host)]
+
+    else:
+        target['hostnames'] = [host]
+        try:
+            target['ipv4'] = socket.gethostbyname(host)
+
+        except:
+            print("	  %s[!]%s Unable to find IP for %s.\n" % (TC.YELLOW, TC.END, host))
+            return 0
+
+    target['service_name'] = parsed_url.scheme
+
+    if ':' in parsed_url.netloc:
+        target['port'] = parsed_url.netloc.split(':')[1]
+
+    elif parsed_url.scheme == "https":
+        target['port'] = '443'
+        target['service_tunnel'] = 'ssl'
+
+    else:
+        target['port'] = '80'
+
+    target['url'] = url
+    return process_target(target)
+
+
+def process_target(target):
+    c = 0
+    try:
+        o1, o2, o3, o4 = target['ipv4'].split('.')
+        target['ipnum'] = str((int(o1) * 16777216) + (int(o2) * 65536) + (int(o3) * 256) + int(o4))
+
+        # add this host/enum to the index
+        if not target['ipnum'] in db['idx']:
+            db['idx'][target['ipnum']] = {unix_ts: [target['port']]}
+
+        else:
+            if unix_ts in db['idx'][target['ipnum']]:
+                if not target['port'] in db['idx'][target['ipnum']][unix_ts]:
+                    db['idx'][target['ipnum']][unix_ts].append(target['port'])
+
+                else:
+                    return 0
+
+            else:
+                db['idx'][target['ipnum']][unix_ts] = [target['port']]
+
+        # if opts.allinfo or 'http' in target['service_name'] or not target['ipv4'] in ints:
+        if 'http' in target['service_name'] or not target['ipv4'] in ints:
+            try:
+                x = target['hostnames'][0]
+            except:
+                x = target['ipv4']
+            ints[target['ipv4']] = [x, [target['port']]]
+
+        elif not target['port'] in ints[target['ipv4']][1]:
+            ints[target['ipv4']][1].append(target['port'])
+
+        if 'http' in target['service_name']:
+            for ua in opts.useragent:
+                # adding the user agent's checksum to the record identifier
+                target['useragent'] = ua
+
+                y = '.'.join([target['ipnum'], unix_ts, target['port'], str(opts.useragent[ua])])
+                if y not in db:
+                    db[y] = {}
+
+                if '.' not in db[y]:  # '.' denotes a target having its IP as a hostname
+                    db[y]['.'] = target
+                    q.put((y, '.'))
+                    c += 1
+
+                for hn in target['hostnames']:
+                    if hn not in db[y] and not hn == target['ipv4']:
+                        db[y][hn] = target
+                        q.put((y, hn))
+
+                db.sync()
+
+        if not opts.json_min:
+            try:
+                os.makedirs("./artifacts/input_lists/")
+
+            except:
+                pass
+
+            with open("./artifacts/input_lists/%s_%s_iL.lst" % (target['port'], timestamp), 'a') as of:
+                of.write(target['ipv4'] + '\n')
+
+            with open("./artifacts/input_lists/all_%s_iL.lst" % timestamp, 'a') as of:
+                of.write(target['ipv4'] + '\n')
+
+        db.sync()
+
+    except Exception, ex:
+        print(ex)
+        # Examine the target object to make sure it's good to go.
+        # for t in target:
+        #    print( str(type(target[t])) + "    " +  t + "   " + str(target[t]) )
+
+    return c
 
 
 # Our parsers:
 def parse_csv(filename):
-    targets = []
+    c = 0
     body = False
     with open(filename) as r:
         for line in r:
@@ -1302,34 +1607,35 @@ def parse_csv(filename):
 
                     # Check for missing fields
                     field = [s for s in ('ipv4', 'port', 'hostnames', 'service_name', 'service_version')
-                             if not s in target.keys()]
+                             if s not in target]
                     if len(field) == 0:
                         if "http" in target['service_name']:
                             t = [s for s in ("ssl", "https", "tls") if s in target['service_version'].lower()]
-                            if len(t) > 0: 
+                            if len(t) > 0:
                                 target['service_tunnel'] = t[0]
                                 target['service_name'] = "https"
-                
+
                             else:
                                 target['service_name'] = "http"
 
-                        targets.append(target)
+                        c += process_target(target)
+                        target = None
 
                     else:
-                        field = ', '.join([s for s in ('host', 'port', 'name', 'info') if not s in headers])
-                        print("      %s[!]%s Parse Error: missing required field(s): %s" % (TC.YELLOW, TC.END, field) )
+                        field = ', '.join([s for s in ('host', 'port', 'name', 'info') if s not in headers])
+                        print("      %s[!]%s Parse Error: missing required field(s): %s" % (TC.YELLOW, TC.END, field))
                         break
 
             except:
                 error = traceback.format_exc().splitlines()
                 error_msg("\n".join(error))
-                print("      %s[!]%s Parse Error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)) )
+                print("      %s[!]%s Parse Error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)))
 
-    return targets
+    return c
 
 
 def parse_qualys_port_service_csv(filename):
-    targets = []
+    c = 0
     body = False
     with open(filename) as r:
         try:
@@ -1340,7 +1646,8 @@ def parse_qualys_port_service_csv(filename):
 
                 if body and line.strip() != "":
                     target = {}
-                    target['ipv4'], hn, sv, target['protocol'], target['port'], sn, df, du = line.replace('"', '').split(',')
+                    target['ipv4'], hn, sv, target['protocol'], target['port'],\
+                        sn, df, du = line.replace('"', '').split(',')
                     target['hostnames'] = [hn]
                     target['service_version'] = "%s %s" % (sv, sn)
                     if any(s in sn.lower() for s in ["ssl", "https", "tls", "www"]):
@@ -1349,53 +1656,52 @@ def parse_qualys_port_service_csv(filename):
                     else:
                         target['service_name'] = 'http'
 
-                    targets.append(target)
+                    c += process_target(target)
+                    target = None
 
         except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            print("      %s[!]%s Parse Error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)) )
+            print("      %s[!]%s Parse Error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)))
 
-    return targets
+    return c
 
 
-def parse_openvas_xml(r):     # need a scan of a server using SSL!
-    targets = []
+def parse_openvas_xml(r):  # need a scan of a server using SSL!
+    c = 0
     for port in r.xpath("//report/report/ports/port"):
         try:
             target = {}
             target['protocol'] = port.text.split("/")[1].strip(")")
             target['port'] = port.text.split("(")[1].split("/")[0]
             target['service_name'] = port.text.split()[0]
-            target['ipv4'] = port.xpath("host/text()")[0]
+            target['ipv4'] = str(port.xpath("host/text()")[0])
             target['service_version'] = ""
-            for result in r.xpath("//report/report/results/result[host/text()=" +
-                                  "'%s'and port/text()='%s' and nvt/family/text()='Product detection']" %
-                                  (target['ipv4'], port.text)):
+            for result in r.xpath("//report/report/results/result[host/text()='" +
+                                  "%s'and port/text()='%s' and nvt" % (target['ipv4'], port.text) +
+                                  "/family/text()='Product detection']"):
                 target['service_version'] += result.xpath("description/text()")[0].split("\n")[0].replace(
                     "Detected ", '').replace("version: ", '').split(" under")[0] + ","
 
-            targets.append(target)
+            c += process_target(target)
+            target = None
 
         except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            print("      %s[!]%s Parse Error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)) )
+            print("      %s[!]%s Parse Error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)))
 
-    return targets
+    return c
 
 
-def parse_nexpose_xml(r):     # need a scan of a server using SSL!
-    targets = []
+def parse_nexpose_xml(r):  # need a scan of a server using SSL!
+    c = 0
     for node in r.xpath("//NexposeReport/nodes/node"):
         try:
             for endpoint in node.xpath("endpoints/endpoint"):
                 target = {}
-
                 target['ipv4'] = node.attrib['address']
-
                 target['hostnames'] = list(set([x.lower() for x in node.xpath("names/name/text()")]))
-
                 try:
                     vals = node.xpath("fingerprints/os")[0].attrib.values()
                     target['os_info'] = "(%s%s) %s" % (vals[0], "%", " ".join(vals[1:]))
@@ -1412,28 +1718,27 @@ def parse_nexpose_xml(r):     # need a scan of a server using SSL!
                 except:
                     pass  # nothing to see here
 
-                targets.append(target)
+                c += process_target(target)
+                target = None
 
         except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            print("      %s[!]%s Parse Error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)) )
+            print("      %s[!]%s Parse Error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)))
 
-    return targets
+    return c
 
 
-def parse_nexpose_simple_xml(r):     # need a scan of a server using SSL!
-    targets = []
+def parse_nexpose_simple_xml(r):  # need a scan of a server using SSL!
+    c = 0
     for node in r.xpath("//NeXposeSimpleXML/devices/device"):
         try:
             for service in node.xpath("services/service"):
                 target = {}
                 target['ipv4'] = node.attrib['address']
-
                 target['hostnames'] = []  # DNS? HOSTNAME?
-
                 try:
-                    target['os_info'] = node.xpath("fingerprint/description/text()")[0]
+                    target['os_info'] = str(node.xpath("fingerprint/description/text()")[0])
                 except:
                     pass  # nothing to see here
 
@@ -1442,30 +1747,30 @@ def parse_nexpose_simple_xml(r):     # need a scan of a server using SSL!
                 target['service_name'] = service.attrib['name'].lower()
 
                 try:
-                    target['service_version'] = service.xpath("fingerprint/description/text()")[0]
+                    target['service_version'] = str(service.xpath("fingerprint/description/text()")[0])
                 except:
                     pass  # nothing to see here
 
-                targets.append(target)
+                c += process_target(target)
+                target = None
 
         except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            print("      %s[!]%s Parse Error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)) )
+            print("      %s[!]%s Parse Error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)))
 
-    return targets
+    return c
 
 
 def parse_qualys_scan_report_xml(r):
-    targets = []
+    c = 0
     for host in r.xpath("//ASSET_DATA_REPORT/HOST_LIST/HOST"):
         try:
             for vuln in host.xpath('VULN_INFO_LIST/VULN_INFO'):
                 target = {}
-                target['ipv4'] = host.xpath("IP/text()")[0]
-
+                target['ipv4'] = str(host.xpath("IP/text()")[0])
                 t = host.xpath('DNS/text()')
-                if t: 
+                if t:
                     target['hostnames'] = [t[0].lower()]
 
                 t = host.xpath('NETBIOS/text()')
@@ -1474,27 +1779,28 @@ def parse_qualys_scan_report_xml(r):
 
                 target['hostnames'] = list(set(target['hostnames']))
 
-                t = host.xpath("OPERATING_SYSTEM/text()")
-                if t and (not t[0].lower() in target['hostnames'][0]):
-                    target['os_info'] = t[0]
+                t = str(host.xpath("OPERATING_SYSTEM/text()"))
+                if t and (not t.lower() in target['hostnames'][0]):
+                    target['os_info'] = t
 
-                target['port'] = vuln.xpath("PORT/text()")[0]
-                target['protocol'] = vuln.xpath("PROTOCOL/text()")[0]
+                target['port'] = str(vuln.xpath("PORT/text()")[0])
+                target['protocol'] = str(vuln.xpath("PROTOCOL/text()")[0])
 
                 qid = vuln.xpath('QID')[0].text
                 if qid in ("86000", "86001"):
                     fqdn = vuln.xpath("FQDN/text()")
-                    if fqdn and not fqdn[0].lower() in target['hostnames']:
+                    if fqdn and fqdn[0].lower() not in target['hostnames']:
                         target['hostnames'].append(fqdn[0].lower())
 
-                    target['service_version'] = vuln.xpath("RESULT/text()")[0]
+                    target['service_version'] = str(vuln.xpath("RESULT/text()")[0])
 
                     if qid == "86001":  # SSL
                         notbefore = ""
                         notafter = ""
                         target['service_name'] = 'https'
-                        target['ssl-cert'] = host.xpath("VULN_INFO_LIST/VULN_INFO[PORT/text()='" + str(target['port']) +
-                                                        "' and QID/text()='86002']/RESULT/text()")[0]
+                        target['ssl-cert'] = str(
+                            host.xpath("VULN_INFO_LIST/VULN_INFO[PORT/text()='" + str(target['port']) +
+                                       "' and QID/text()='86002']/RESULT/text()")[0])
                         for line in target['ssl-cert'].split('(1)')[0].split('(0)'):
                             if "ISSUER NAME" in line:
                                 for item in line.split('\n'):
@@ -1506,19 +1812,19 @@ def parse_qualys_scan_report_xml(r):
                                     if "commonName" in item:
                                         target['ssl_cert-subject'] = item.split('\t')[1]
 
-                            elif "commonName" in line and not 'ssl_common-name' in target.keys():
+                            elif "commonName" in line and 'ssl_common-name' not in target:
                                 target['ssl_common-name'] = line.split("\t")[1].replace(" ", '')
 
-                            elif "organizationName" in line and not 'ssl_organization' in target.keys():
+                            elif "organizationName" in line and 'ssl_organization' not in target:
                                 target['ssl_organization'] = "%s" % line.split("\t")[1].replace('\n', '')
 
-                            elif "Public Key Algorithm" in line and not 'ssl_cert-keyalg' in target.keys():
+                            elif "Public Key Algorithm" in line and 'ssl_cert-keyalg' not in target:
                                 target['ssl_cert-keyalg'] = "%s" % line.split("\t")[1].replace('\n', '')
 
-                            elif "Signature Algorithm" in line and not 'ssl_cert-sigalg' in target.keys():
+                            elif "Signature Algorithm" in line and 'ssl_cert-sigalg' not in target:
                                 target['ssl_cert-sigalg'] = "%s" % line.split("\t")[1].replace('\n', '')
 
-                            elif "RSA Public Key" in line and not 'ssl_keylength' in target.keys():
+                            elif "RSA Public Key" in line and 'ssl_keylength' not in target:
                                 target['ssl_keylength'] = "%s" % line.split("\t")[1].replace('\n', '')
 
                             elif "Valid From" in line:
@@ -1530,8 +1836,8 @@ def parse_qualys_scan_report_xml(r):
                                 target['ssl_cert-notafter'] = notafter
 
                         try:
-                            notbefore =  datetime.datetime.strptime(notbefore, '%b %d %H:%M:%S %Y %Z')
-                            notafter =  datetime.datetime.strptime(notafter, '%b %d %H:%M:%S %Y %Z')
+                            notbefore = datetime.datetime.strptime(notbefore, '%b %d %H:%M:%S %Y %Z')
+                            notafter = datetime.datetime.strptime(notafter, '%b %d %H:%M:%S %Y %Z')
                             vdays = (notafter - notbefore).days
                             if datetime.datetime.now() > notafter:
                                 daysleft = "EXPIRED"
@@ -1548,18 +1854,19 @@ def parse_qualys_scan_report_xml(r):
                     else:
                         target['service_name'] = 'http'
 
-                    targets.append(target)
+                    c += process_target(target)
+                    target = None
 
         except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            print("      %s[!]%s Parse Error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)) )
+            print("      %s[!]%s Parse Error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)))
 
-    return targets
+    return c
 
 
 def parse_nessus_xml(r):
-    targets = []
+    c = 0
     for node in r.xpath("//ReportHost"):
         try:  # one line can fail, and the rest of the doc completes
             for item in node.xpath('ReportItem'):
@@ -1585,7 +1892,7 @@ def parse_nessus_xml(r):
 
                         elif name == "mac-address":
                             target['mac_address'] = val
-                    
+
                     target['hostnames'] = list(set(target['hostnames']))
                     target['protocol'] = item.attrib['protocol']
                     target['service_name'] = item.attrib['svc_name']
@@ -1609,16 +1916,16 @@ def parse_nessus_xml(r):
                         elif tunnel[1]:
                             target['service_tunnel'] = "ssl"
 
-                        if 'service_tunnel' in target.keys():
+                        if 'service_tunnel' in target:
                             target['service_name'] = "https"
-                            target['ssl-cert'] = node.xpath("ReportItem[@port='" + str(target['port']) +
-                                                            "' and @pluginName='SSL Certificate Information']" +
-                                                            "/plugin_output/text()")[0]
+                            target['ssl-cert'] = str(node.xpath("ReportItem[@port='" + str(target['port']) +
+                                                                "' and @pluginName='SSL Certificate Information']" +
+                                                                "/plugin_output/text()")[0])
                             target['ssl_tunnel-ciphers'] = list(node.xpath(
-                                                                "ReportItem[@port='" + str(target['port']) +
-                                                                "' and @pluginName='SSL / TLS Versions " +
-                                                                "Supported']/plugin_output" +
-                                                                "/text()")[0].split('\n')[1].split())[3].strip('.')
+                                "ReportItem[@port='" + str(target['port']) +
+                                "' and @pluginName='SSL / TLS Versions " +
+                                "Supported']/plugin_output" +
+                                "/text()")[0].split('\n')[1].split())[3].strip('.')
                             target["ssl_tunnel-weakest"] = target['ssl_tunnel-ciphers'].split('/')[0]
                             target['ssl_cert-issuer'] = target['ssl-cert'].split(
                                 "Issuer Name")[0].split("Common Name:")[1].split('\n\n')[0].split('\n')[0].strip()
@@ -1626,13 +1933,13 @@ def parse_nessus_xml(r):
                                 "Serial Number")[0].split("Common Name:")[1].split('\n\n')[0].split('\n')[0].strip()
 
                             for line in target['ssl-cert'].split("\n\n"):
-                                if "Organization" in line and not 'ssl_organization' in target.keys():
+                                if "Organization" in line and 'ssl_organization' not in target:
                                     target['ssl_organization'] = "%s" % line.split('\n')[0].split(": ")[1]
 
                                 elif "Signature Algorithm" in line:
                                     target['ssl_cert-keyalg'] = "%s" % line.split(": ")[1]
 
-                                elif "Key Length" in line and not 'ssl_keylength' in target.keys():
+                                elif "Key Length" in line and 'ssl_keylength' not in target:
                                     target['ssl_keylength'] = "%s" % line.split('\n')[1].split(": ")[1]
 
                                 elif "Not Valid Before" in line:
@@ -1642,8 +1949,8 @@ def parse_nessus_xml(r):
                                     target['ssl_cert-notafter'] = notafter
 
                             try:
-                                notbefore =  datetime.datetime.strptime(notbefore, '%b %d %H:%M:%S %Y %Z')
-                                notafter =  datetime.datetime.strptime(notafter, '%b %d %H:%M:%S %Y %Z')
+                                notbefore = datetime.datetime.strptime(notbefore, '%b %d %H:%M:%S %Y %Z')
+                                notafter = datetime.datetime.strptime(notafter, '%b %d %H:%M:%S %Y %Z')
                                 vdays = (notafter - notbefore).days
                                 if datetime.datetime.now() > notafter:
                                     daysleft = "EXPIRED"
@@ -1660,18 +1967,19 @@ def parse_nessus_xml(r):
                     else:
                         target['service_name'] = item.attrib['svc_name']
 
-                    targets.append(target)
+                    c += process_target(target)
+                    target = None
 
         except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            print("      %s[!]%s Parse Error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)) )
+            print("      %s[!]%s Parse Error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)))
 
-    return targets
+    return c
 
 
 def parse_nmap_xml(r):
-    targets = []
+    c = 0
     for el_port in r.xpath("//port"):
         try:  # one line can fail, and the rest of the doc completes
             if el_port.find("state").attrib["state"] == "open":
@@ -1695,15 +2003,16 @@ def parse_nmap_xml(r):
                         elif key in ("product", "version", "extrainfo", "ostype"):
                             target["service_version"].append(el_svc.attrib[key])
 
-                        else: 
-                            target["service_"+key] = el_svc.attrib[key]
+                        else:
+                            target["service_" + key] = el_svc.attrib[key]
 
                 try:
                     target['cpe'] = str(el_svc.xpath("cpe/text()")[0])
 
-                except: pass
+                except:
+                    pass
 
-                if target["service_version"] != []:
+                if target["service_version"]:
                     target["service_version"] = ' '.join(target["service_version"])
 
                 for el_scpt in el_port.xpath("script"):
@@ -1714,7 +2023,7 @@ def parse_nmap_xml(r):
                             if "issuer" in line.lower():
                                 target['ssl_cert-issuer'] = line.split(": ")[1]
 
-                            elif "subject" in line.lower() and not 'ssl_cert-subject' in target.keys():
+                            elif "subject" in line.lower() and 'ssl_cert-subject' not in target:
                                 target['ssl_cert-subject'] = line.split(": ")[1]
 
                                 if "*" in line.split(": ")[1]:
@@ -1726,13 +2035,13 @@ def parse_nmap_xml(r):
                                 if subject in target['hostnames']:
                                     target['ssl_cert-verified'] = "yes"
 
-                            elif "md5" in line.lower() and not 'ssl_cert-md5' in target.keys():
+                            elif "md5" in line.lower() and 'ssl_cert-md5' not in target:
                                 target['ssl_cert-md5'] = line.split(": ")[1].replace(" ", '')
 
-                            elif "sha-1" in line.lower() and not 'ssl_cert-sha-1' in target.keys():
+                            elif "sha-1" in line.lower() and 'ssl_cert-sha-1' not in target:
                                 target['ssl_cert-sha-1'] = line.split(": ")[1].replace(" ", '')
 
-                            elif "algorithm" in line.lower() and not 'ssl_cert-keyalg' in target.keys():
+                            elif "algorithm" in line.lower() and 'ssl_cert-keyalg' not in target:
                                 target['ssl_cert-keyalg'] = "%s" % line.split(": ")[1]
                                 # need to take another look at this one.  no seeing it atm
 
@@ -1745,12 +2054,12 @@ def parse_nmap_xml(r):
                                 target['ssl_cert-notafter'] = notafter
 
                         try:
-                            notbefore =  datetime.datetime.strptime(str(notbefore).split("+")[0], '%Y-%m-%d %H:%M:%S')
-                            notafter =  datetime.datetime.strptime(str(notafter).split("+")[0], '%Y-%m-%d %H:%M:%S')
+                            notbefore = datetime.datetime.strptime(str(notbefore).split("+")[0], '%Y-%m-%d %H:%M:%S')
+                            notafter = datetime.datetime.strptime(str(notafter).split("+")[0], '%Y-%m-%d %H:%M:%S')
 
                         except:  # Different format
-                            notbefore =  datetime.datetime.strptime(str(notbefore).split("+")[0], '%Y-%m-%dT%H:%M:%S')
-                            notafter =  datetime.datetime.strptime(str(notafter).split("+")[0], '%Y-%m-%dT%H:%M:%S')
+                            notbefore = datetime.datetime.strptime(str(notbefore).split("+")[0], '%Y-%m-%dT%H:%M:%S')
+                            notafter = datetime.datetime.strptime(str(notafter).split("+")[0], '%Y-%m-%dT%H:%M:%S')
 
                         vdays = (notafter - notbefore).days
                         if datetime.datetime.now() > notafter:
@@ -1772,59 +2081,64 @@ def parse_nmap_xml(r):
                 target['port'] = el_port.attrib['portid']
                 target['protocol'] = el_port.attrib['protocol']
 
-                if not 'service_name' in target.keys():
+                if 'service_name' not in target:
                     if target['port'] == 80:
                         target['service_name'] = "http"
 
                     else:
                         target['service_name'] = "unk"
 
-                targets.append(target)
+                c += process_target(target)
+                target = None
 
         except:
             error = traceback.format_exc().splitlines()
             error_msg("\n".join(error))
-            print("      %s[!]%s Parse Error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)) )
-    
-    return targets
+            print("      %s[!]%s Parse Error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)))
+
+    return c
 
 
 def update(pjs_path, scriptpath, force, use_ghost):
     import urllib2
     os.chdir(scriptpath)
 
-    print("  %s[>]%s Updating...  \n" % (TC.GREEN, TC.END) )
+    print("  %s[>]%s Updating...  \n" % (TC.GREEN, TC.END))
 
     # nmap
     if not (inpath("nmap") or inpath("nmap.exe")):
-        print("  %s[i]%s NMap not found in $PATH.  You'll need to install it to use RAWR.  \n" % (TC.CYAN, TC.END) )
+        print("  %s[i]%s NMap not found in $PATH.  You'll need to install it to use RAWR.  \n" % (TC.CYAN, TC.END))
 
     else:
         proc = subprocess.Popen(['nmap', '-V'], stdout=subprocess.PIPE)
         ver = proc.stdout.read().split(' ')[2]
         if int(ver.split('.')[0]) < 6:  # 6.00 is when ssl_num_ciphers.nse was added.
-            print("  %s[!]%s NMap %s found, but versions prior to 6.00 won't return all SSL data.\n" % (TC.YELLOW, TC.END, ver) )
+            print("  %s[!]%s NMap %s found, but versions prior to 6.00 won't return all SSL data.\n" % (
+            TC.YELLOW, TC.END, ver))
 
         else:
-            print("  %s[i]%s NMap %s found\n" % (TC.CYAN, TC.END, ver) )
+            print("  %s[i]%s NMap %s found\n" % (TC.CYAN, TC.END, ver))
 
-    #PhantomJS
+    # PhantomJS
     if not use_ghost:
         try:
             proc = subprocess.Popen([pjs_path, '-v'], stdout=subprocess.PIPE)
             pjs_curr = re.sub('[\n\r]', '', proc.stdout.read())
 
-        except: pjs_curr = 0
+        except:
+            pjs_curr = 0
 
         if force or (PJS_VER > pjs_curr):
             if pjs_curr != 0 and (PJS_VER > pjs_curr):
-                choice = raw_input("\n  %s[i]%s phantomJS %s found (current is %s) - do you want to update? [Y/n]: " % (TC.CYAN, TC.END, pjs_curr, PJS_VER))
+                choice = raw_input("\n  %s[i]%s phantomJS %s found (current is %s) - do you want to update? [Y/n]: " %
+                                   (TC.CYAN, TC.END, pjs_curr, PJS_VER))
 
             elif not force:
-                choice = raw_input("\n  %s[!]%s phantomJS was not found - do you want to install it? [Y/n]: " % (TC.YELLOW, TC.END) )
+                choice = raw_input(
+                    "\n  %s[!]%s phantomJS was not found - do you want to install it? [Y/n]: " % (TC.YELLOW, TC.END))
 
-            if not (force or (choice.lower() in ("y", "yes", '')) ):
-                print("\n  %s[!]%s Exiting...\n\n" % (TC.YELLOW, TC.END) )
+            if not (force or (choice.lower() in ("y", "yes", ''))):
+                print("\n  %s[!]%s Exiting...\n\n" % (TC.YELLOW, TC.END))
                 sys.exit(0)
 
             else:
@@ -1837,11 +2151,11 @@ def update(pjs_path, scriptpath, force, use_ghost):
                     fname = pre + "-macosx.zip"
                     url = PJS_REPO + fname
 
-                #elif platform.machine() == "armv7":
+                # elif platform.machine() == "armv7":
                 #   fname = "-arm7.tar.gz"
                 #   url = REPO_DL_PATH + fname
 
-                elif sys.maxsize > 2**32:
+                elif sys.maxsize > 2 ** 32:
                     fname = pre + "-linux-x86_64.tar.bz2"
                     url = PJS_REPO + fname
 
@@ -1849,25 +2163,28 @@ def update(pjs_path, scriptpath, force, use_ghost):
                     fname = pre + "-linux-i686.tar.bz2"  # default is 32bit *nix
                     url = PJS_REPO + fname
 
-                try: shutil.rmtree("data/phantomjs")
-                except: pass
+                try:
+                    shutil.rmtree("data/phantomjs")
+                except:
+                    pass
 
                 try:
                     u = urllib2.urlopen(url)
                     meta = u.info()
                     file_size = int(meta.getheaders("Content-Length")[0])
                     print "  %s[>]%s Updating phantomJS\n\t[%s] -" % (TC.GREEN, TC.END, url),
-    
+
                     file_size_dl = 0
                     with open("data/" + fname, 'wb') as f:
                         while True:
-                            buffer = u.read(8192)
-                            if not buffer: break
-    
-                            file_size_dl += len(buffer)
-                            f.write(buffer)
+                            buf = u.read(8192)
+                            if not buf:
+                                break
+
+                            file_size_dl += len(buf)
+                            f.write(buf)
                             status = r"%7d [%3.2f%%]" % (file_size_dl, file_size_dl * 100. / file_size)
-                            status = status + chr(8)*(len(status)+1)
+                            status += chr(8) * (len(status) + 1)
                             print status,
 
                     if os.path.exists("data/phantomjs"):
@@ -1899,44 +2216,47 @@ def update(pjs_path, scriptpath, force, use_ghost):
                     exit(1)
 
         else:
-            print("  %s[i]%s phantomJS %s found (current supported version)\n" % (TC.CYAN, TC.END, pjs_curr) )
-
+            print("  %s[i]%s phantomJS %s found (current supported version)\n" % (TC.CYAN, TC.END, pjs_curr))
 
     # DPE Database
     u = urllib2.urlopen(DPE_DL_PATH)
     meta = u.info()
     file_size = int(meta.getheaders("Content-Length")[0])
 
-    try: cfile_size = os.path.getsize(DPE_FILE)
-    except: cfile_size = 0
+    try:
+        cfile_size = os.path.getsize(DPE_FILE)
+    except:
+        cfile_size = 0
 
     if force or file_size != cfile_size:
         if not force:
             choice = raw_input("\n  %s[!]%s Update %s from [%s]? [Y/n]: " % (TC.YELLOW, TC.END, DPE_FILE, DPE_DL_PATH))
 
         if force or choice.lower() in ("y", "yes", ''):
-            try: os.remove(DPE_FILE)
-            except: pass
+            try:
+                os.remove(DPE_FILE)
+            except:
+                pass
 
             print "  %s[>]%s Updating DPE.xml\n\t[%s] -" % (TC.GREEN, TC.END, DPE_DL_PATH),
-        
+
             file_size_dl = 0
             with open(DPE_FILE, 'wb') as f:
                 while True:
-                    buffer = u.read(8192)
-                    if not buffer: break
-        
-                    file_size_dl += len(buffer)
-                    f.write(buffer)
+                    buf = u.read(8192)
+                    if not buf:
+                        break
+
+                    file_size_dl += len(buf)
+                    f.write(buf)
                     status = r"%7d [%3.2f%%]" % (file_size_dl, file_size_dl * 100. / file_size)
-                    status = status + chr(8)*(len(status)+1)
+                    status += chr(8) * (len(status) + 1)
                     print status,
 
             print("\n")
 
     else:
-        print("  %s[i]%s DPE Database at current version." % (TC.CYAN, TC.END) )
-
+        print("  %s[i]%s DPE Database at current version." % (TC.CYAN, TC.END))
 
     # Ip2Country
     try:
@@ -1946,33 +2266,38 @@ def update(pjs_path, scriptpath, force, use_ghost):
                     ip2c_curr = l.split(" ")[5].replace('\n', '')
                     break
 
-    except: ip2c_curr = 0
+    except:
+        ip2c_curr = 0
 
     if force or IP2C_VER > ip2c_curr:
         choice = 'y'
-        if not force: 
-            choice = raw_input("\n  %s[!]%s Update IpToCountry.csv (rev.%s > rev.%s)? [Y/n]: " % (TC.YELLOW, TC.END, ip2c_curr, IP2C_VER))
+        if not force:
+            choice = raw_input("\n  %s[!]%s Update IpToCountry.csv (rev.%s > rev.%s)? [Y/n]: " %
+                               (TC.YELLOW, TC.END, ip2c_curr, IP2C_VER))
 
         if choice.lower() in ("y", "yes", ''):
-            try: os.remove(IP_TO_COUNTRY)
-            except: pass
+            try:
+                os.remove(IP_TO_COUNTRY)
+            except:
+                pass
 
             url = REPO_DL_PATH + IP_TO_COUNTRY.split("/")[1] + ".tar.gz"
             u = urllib2.urlopen(url)
             meta = u.info()
             file_size = int(meta.getheaders("Content-Length")[0])
             print "  %s[>]%s Updating IpToCountry.csv\n\t[%s] -" % (TC.GREEN, TC.END, url),
-        
+
             file_size_dl = 0
             with open(IP_TO_COUNTRY + ".tar.gz", 'wb') as f:
                 while True:
-                    buffer = u.read(8192)
-                    if not buffer: break
-    
-                    file_size_dl += len(buffer)
-                    f.write(buffer)
+                    buf = u.read(8192)
+                    if not buf:
+                        break
+
+                    file_size_dl += len(buf)
+                    f.write(buf)
                     status = r"%7d [%3.2f%%]" % (file_size_dl, file_size_dl * 100. / file_size)
-                    status = status + chr(8)*(len(status)+1)
+                    status += chr(8) * (len(status) + 1)
                     print status,
 
             tarfile.open(IP_TO_COUNTRY + ".tar.gz").extractall('./data')
@@ -1983,7 +2308,7 @@ def update(pjs_path, scriptpath, force, use_ghost):
     else:
         print("\n  %s[i]%s %s - already at ver.%s\n" % (TC.CYAN, TC.END, IP_TO_COUNTRY, IP2C_VER))
 
-    print("  %s[i]%s Update Complete\n\n" % (TC.BLUE, TC.END) )
+    print("  %s[i]%s Update Complete\n\n" % (TC.BLUE, TC.END))
     sys.exit(2)
 
 
@@ -1995,13 +2320,15 @@ def inpath(app):
 
 
 def error_msg(msg):
-    open('error.log', 'a').write("Error:%s\n\n" % msg)
+    if not opts.json_min:
+        open('artifacts/error.log', 'a').write("Error:%s\n\n" % msg)
 
 
 def writelog(msg, logfile, opts):
-    if not (opts.json or opts.json_min) or type(msg) == dict:
+    if (not (opts.json or opts.json_min)) or type(msg) == dict:
         print(msg)
 
     if not opts.json_min:
-        msg = re.sub("""\033\[(?:0|9[0-9])m""", '', str(msg))  #  clear out the terminal color formatting
+        #  clear out the terminal color formatting
+        msg = re.sub("""\033\[(?:0|9[0-9])m""", '', str(msg))
         open(logfile, 'a').write("%s\n" % msg)

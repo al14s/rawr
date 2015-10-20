@@ -1,3 +1,77 @@
+
+----- 0.31 -----
+
+	BUGFIXES
+		switched back to '{}' for dict definitions
+
+	CHANGES
+        added PIL library to install script and updated all files to accomodate the change.
+            this made library references in rawr_meta much simpler
+        added SOCKS5 proxy support
+        added proxy authenciation for socks5, http(basic), and http(digest)
+        added proxy test to verify - pulls and shows current IP from ipchicken
+        reconfigured proxy switch(es)
+
+
+----- 0.3 -----
+
+	BUGFIXES
+		fixed install error caused by an old version of requests
+		implemented John Askew's fix for screenshot.js
+			code was incompatible with newer version of PJS (1.9.8)
+			his changes work with both versions
+        fixed json and json-min - json and json only - also verified cleanup of files for json-min
+        implemented workaround for Issue #2
+            (Issue #2 - RHEL / CentOS / Fedora - pip pygraphviz does not detect graphviz install)
+        fixed .total_seconds() | centOS bug(s) - changed all instances of .total_seconds() reference to .seconds()
+        multiple bugfixes for the install script        
+        fixed bug in input list creation
+        fixed / tested all inputs
+		fixed serverinfo 'order by' bug
+        reviewed bing functionality - unable to replicate issues
+        filtered a lot of junk from meta report
+
+	CHANGES
+        moved .cfg file to main log folder   
+        now skipping the phantomjs check if --noss is supplied        
+		(incomplete) added option to use google dorks to pull common docs (crawl or not)
+		shelved the DNS axfr/query function until i can get better use cases
+		remove raw response object from target - give the option to keep it?
+		remove large/unneeded items from target before insertion into db
+		server_info.csv:
+            moved url to column right after port
+		    converted lists to csv before adding to server_info.csv
+        asm now ordered by ip
+		filtered valid element names from wordlists
+		now accepting --useragent with string or csv input
+        added EXAMPLES file in docs/
+            feel free to send me your cmdline uses to be used as an example!
+        updated README
+		updated ghost to 0.2.1 and requests to 2.7.0
+		incremented PJS version to 1.9.8
+		added --notify to send notification via sendmail of completed scan
+			can specify the email recipient as an arg
+        ************************************************************************
+		  All target input is now done through a floating arg, REPLACING -c, -i, and -f
+			RAWR detects the nature of the input and reacts accordingly:
+                Text Inputs
+			        - single URL   (feeds directly in to web calls)
+			        - single nmap input
+                Files
+                    - .cfg (RAWR config file)
+			        - .xml (Nessus, Nexpose, Qualys, OpenVAS)
+			        - .csv (MSF, Qualys, ???)
+			        - .nessus
+			        - URL/nmap_input list (can be mixed! - will pull out and process URLs if present)
+        ************************************************************************
+		optimization on the startup process
+		switched to argparse
+		organised technical data into <logdir>/artifacts
+		renamed index report to 'report_<>_.html' and made it self-reliant
+		optimization on the file parsing process
+		moved all but the .csv and .html reports into a new folder - 'artifacts'		
+
+
 ----- 0.21 -----
 
 	BUGFIXES

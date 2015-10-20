@@ -7,8 +7,8 @@ PARSER_TRUEFALSE = 4    # Places 'True' or 'False' based on tag and attr specifi
 PARSER_COUNT = 5        # Places the number of results in the specified field.
 
 # Format
-#	WHOLEDOC: ( <field name>, <regex>, <type>, <usable for nonHTML> )
-#	PARSER:   ( <field name>, [<tag>, ("<attrib>"|"text"), <regex>], <type>, <usable for nonHTML>  )
+# WHOLEDOC: ( <field name>, <regex>, <type>, <usable for nonHTML> )
+# PARSER:   ( <field name>, [<tag>, ("<attrib>"|"text"), <regex>], <type>, <usable for nonHTML>  )
 
 modules = [
     (
@@ -22,23 +22,19 @@ modules = [
         WHOLEDOC_TRUEFALSE,
         False),
     (
-        "locations",
-        """[^http:](?:[a-zA-Z]:[\\\\]{1,}|file:[\\\\]{1,}|[\\\\]{1,})((?:[\\\\]{1,}[a-z.A-Z0-9]{1,30}){2,}[/|\\\\]?)""",
-        WHOLEDOC_CONTENT,
-        True),
-    (
         "email_addresses",                               # store the results in the 'email_addresses' column
-        """([a-zA-Z0-9._+-]{2,}@[a-zA-Z0-9.-]{1,}\.(?:[A-Z]{2,4}|[a-z]{2,4}))""",    # look for email addresses
+        """([a-zA-Z0-9._+-]{1,}@[a-zA-Z0-9.-]{1,}\.[a-z]{2,5}|[a-zA-Z0-9._+-]{1,}@[a-zA-Z0-9.-]{1,}\.[a-z]{2,5})""",
         WHOLEDOC_CONTENT,                                # Search the whole response content
         True),
-    #(
+    # (
     #    "keywords",
     #    """((?:username|un|user|password|passwd|pwd|pw)[\:\s]+[^\n\r]{,10})""",  # One of the keywords + 10 chars
     #    WHOLEDOC_CONTENT,
     #    True),
     (
         "urls",
-        """(http[s]?://[0-9a-zA-Z.@:&+-]+(?:[/][0-9a-zA-Z-&\?]+)+(?:[/]|[.][0-9a-z][0-9a-z-]{0,2}|[.][0-9A-Z][0-9A-Z-]{0,2}]))""",
+        """(http[s]?://[0-9a-zA-Z.@:&+-]+(?:[/][0-9a-zA-Z-&\?]+)+(?:[/]|[.][0-9a-z][0-9a-z-]""" +
+        """{0,2}|[.][0-9A-Z][0-9A-Z-]{0,2}]))""",
         WHOLEDOC_CONTENT,
         True),
     (
@@ -53,7 +49,7 @@ modules = [
         True),                                          # Should be used during document/image document parsing
     (
         "unc_paths",                                   # store the results in the 'share_paths' column
-        """[^http:](?:[a-zA-Z]:[\\\\]{1,}|file:[\\\\]{1,}|[\\\\]{1,})((?:[\\\\]{1,}[a-z.A-Z0-9]{1,30}){2,}[/|\\\\]?)""",
+        """[^http](?:[a-zA-Z]:[\\\\]{1,}|file:[\\\\]{1,}|[\\\\]{1,})((?:[\\\\]{1,}[a-z.A-Z0-9]{1,30}){2,}[/|\\\\]?)""",
         WHOLEDOC_CONTENT,                                # Search the whole response content
         True),                                          # Should be used during document/image document parsing
     (
@@ -64,12 +60,12 @@ modules = [
     (
         "internal_ips",
         """((?:127.0.0.1|(?:10\.(?:25[0-4]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[1-9])|192\.168|172\.""" +
-		"""(?:1[6-9]|2[0-9]|3[0-1]))(?:\.(?:25[0-4]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[1-9])){2}))""",
+        """(?:1[6-9]|2[0-9]|3[0-1]))(?:\.(?:25[0-4]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[1-9])){2}))""",
         WHOLEDOC_CONTENT,
         True),
     (
         "users",
-		"""(?:[a-zA-Z]:[\\\\]{1,}[U|u]sers|[D|d]ocuments and [S|s]ettings)[\\\\]{1,}(.*?)[\\\\]{1,}""",
+        """(?:[a-zA-Z]:[\\\\]{1,}[U|u]sers|[D|d]ocuments and [S|s]ettings)[\\\\]{1,}(.*?)[\\\\]{1,}""",
         WHOLEDOC_CONTENT,
         True),
     (
