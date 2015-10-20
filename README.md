@@ -6,7 +6,7 @@
 
 ### Twitter: [@RapidWebEnum](https://twitter.com/RapidWebEnum) | Freenode: #rawr-project ###
 
-## Wiki - [Home](https://bitbucket.org/al14s/rawr/wiki/Home) | [Installation](https://bitbucket.org/al14s/rawr/wiki/Installation) | [Usage](https://bitbucket.org/al14s/rawr/wiki/Usage) | [Talks](https://bitbucket.org/al14s/rawr/wiki/Talks)  | [FAQ](https://bitbucket.org/al14s/rawr/wiki/FAQ) ##
+## Wiki - [Home](https://bitbucket.org/al14s/rawr/wiki/Home) | [Installation](https://bitbucket.org/al14s/rawr/wiki/Installation) | [Usage](https://bitbucket.org/al14s/rawr/wiki/Usage) | [Community](https://bitbucket.org/al14s/rawr/wiki/Community)  | [FAQ](https://bitbucket.org/al14s/rawr/wiki/FAQ) ##
 
   RAWR is a python tool that is designed to make the process of web enumeration easy and efficient by
 providing pertinent information in usable formats.  It uses NMap(live or from
