@@ -13,6 +13,7 @@
 
 	CHANGES
         html report - 'm' button changed to 'd' and now brings up diagram in another tab
+        not specifying '-p' causes rawr to run nmap with default ports (changed from 80,8080,8088,443,8443)
 
 
 ----- 0.31 -----
