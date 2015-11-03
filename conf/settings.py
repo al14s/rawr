@@ -121,7 +121,7 @@ spider_levels = {1: (False, 2, 200, 3, 100, 2, True, 5),
 # CSV settings
 csv_sort_col = "ipv4"  # The column name of the field by which the CSV will be ordered.  *Must exist in 'flist'*
 flist = "url, ipv4, port, useragent, x-powered-by, options, returncode, hostnames, notes, title, version, allow, " + \
-        "cookies, robots, iframe, applet, object, script, embed, file_includes, access-control-allow-origin, " + \
+        "cookies, robots.txt, iframe, applet, object, script, embed, file_includes, access-control-allow-origin, " + \
         "content-security-policy, x-permitted-cross-domain-policies, x-content-type-options, " + \
         "strict-transport-security, x-xss-protection, x-frame-options, ssl_cert-daysleft, " + \
         "ssl_cert-validityperiod, ssl_cert-md5, ssl_cert-sha-1, ssl_cert-notbefore, ssl_cert-notafter, " + \

@@ -420,7 +420,7 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                              (hostname, target['port']), 'w').write(safe_string(res.content))
                                         self.output.put("      %s[r]%s Pulled robots.txt :      [ %s:%s ]" %
                                                         (TC.PURPLE, TC.END, hostname, target['port']))
-                                    target['robots'] = "y"
+                                    target['robots.txt'] = "y"
 
                             except requests.ConnectionError:
                                 msg = ["  %s[x]%s Not found" % (TC.RED, TC.END), ""]
@@ -446,7 +446,7 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                             wordlist += crawl(target, self.logdir, self.timestamp, self.opts)
                             crawling -= 1
 
-                        ret = parsedata(task, target, self.timestamp, self.scriptpath, self.opts)
+                        target = parsedata(task, target, self.timestamp, self.scriptpath, self.opts)
 
                         if 'wordlist' in target:
                             wordlist += target['wordlist']  # add all suggested passwords to our wordlist
@@ -460,19 +460,19 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                         wordlist = None
 
                         if self.opts.json or self.opts.json_min:
-                            output.put(ret)
+                            output.put(target)
 
                         i = target['url'] + "_" + str(self.opts.useragent[target['useragent']])
                         if not (self.opts.json or self.opts.json_min or i in outs):
                             outs.append(i)
-                            write_to_html(timestamp, ret)
-                            write_to_csv(timestamp, ret)
+                            write_to_html(timestamp, target)
+                            write_to_csv(timestamp, target)
 
                         # remove redundant / potentially large entries before adding to db
                         for x in [x for x in ('defpass', 'res') if x in target]:
                             del target[x]
 
-                        self.db[task[0]][task[1]] = ret
+                        self.db[task[0]][task[1]] = target
 
                         self.output.put("%s  [ %s:%s ]%s" % (msg[0], hostname, target['port'], msg[1]))
 
@@ -783,7 +783,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                                         for i, v in el.items():
                                                             if i in ("src", "href"):
                                                                 if "mailto" in v:
-                                                                    x = safe_string(v.split(":")[1])
+                                                                    x = safe_string(v.split(":")[1]).strip()
                                                                     try:
                                                                         if x not in target['email_addresses']:
                                                                             target['email_addresses'].append(x)
@@ -913,8 +913,8 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
             # Draw as PNG
             gr.layout(prog=LAYOUT_TYPE)
             # will get a warning if the graph is too large - not fatal
-            f = '%s/artifacts/diagrams/diagram_%s_%s__%s.png' %\
-                (logdir, urlparse(target['url']).netloc, target['port'], timestamp)
+            f = '%s/artifacts/diagrams/diagram_%s_%s__%s_%s.png' %\
+                (logdir, urlparse(target['url']).netloc, target['port'], timestamp, opts.useragent[target['useragent']])
 
             if opts.verbose:
                 output.put("      %s[i]%s Drawing diagram for [ %s ]: %s" % (TC.BLUE, TC.END, target['url'], f))
@@ -997,7 +997,8 @@ def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site resp
                             i = i.split("'")[0].rstrip(')/.')
 
                         try:
-                            target[field].append(str(i))
+                            if not str(i) in target[field]:
+                                target[field].append(str(i))
 
                         except:
                             target[field] = [str(i)]
@@ -1097,7 +1098,7 @@ def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site resp
                             for i, v in items:
                                 if i == "href":
                                     if "mailto:" in v:
-                                        x = safe_string(v.split(":")[1])
+                                        x = safe_string(v.split(":")[1]).strip()
                                         try:
                                             if x not in target['email_addresses']:
                                                 target['email_addresses'].append(x)
@@ -1514,8 +1515,7 @@ def process_target(target):
             else:
                 db['idx'][target['ipnum']][unix_ts] = [target['port']]
 
-        # if opts.allinfo or 'http' in target['service_name'] or not target['ipv4'] in ints:
-        if 'http' in target['service_name'] or not target['ipv4'] in ints:
+        if not target['ipv4'] in ints:
             try:
                 x = target['hostnames'][0]
             except:
@@ -1525,6 +1525,7 @@ def process_target(target):
         elif not target['port'] in ints[target['ipv4']][1]:
             ints[target['ipv4']][1].append(target['port'])
 
+        #  Only web ints get passed to the queue... '-a' sends non-web to the csv
         if 'http' in target['service_name']:
             for ua in opts.useragent:
                 # adding the user agent's checksum to the record identifier
@@ -1545,6 +1546,9 @@ def process_target(target):
                         q.put((y, hn))
 
                 db.sync()
+
+        elif opts.allinfo:
+            write_to_csv(timestamp, target)
 
         if not opts.json_min:
             try:
