@@ -47,7 +47,7 @@ parser.add_argument('-a', help='Include all open ports in .csv and surface matri
 parser.add_argument('-m', help="Process inputs, create an Attack Surface Matrix,\n   then exit.", dest='asm',
                     action='store_true')
 parser.add_argument('-p', metavar="<port(s)>", help="Specify port(s) to scan.\n   [default is '80,443,8080,8088']",
-                    dest='ports', default=ports)
+                    dest='ports', default='')
 parser.add_argument('-s', metavar="<port>", help='Specify a source port for the NMap scan.', dest='sourceport',
                     type=int)
 parser.add_argument('-t', metavar="(1-5)", help='Set a custom NMap scan timing.   [default is 4]', dest='nmapspeed',

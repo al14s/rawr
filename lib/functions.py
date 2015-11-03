@@ -1380,6 +1380,9 @@ def run_nmap(target, opts, logfile):
         else:
             opts.ports = str(opts.ports)
 
+    else:
+        portswitch = ''
+
     if opts.nmapspeed:
         try:
             if not (6 > int(opts.nmapspeed) > 0):
