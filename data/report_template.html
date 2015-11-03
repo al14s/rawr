@@ -214,7 +214,7 @@
 
 								// no map, no clickie
 								if ( item.diagram != "" ) {
-									map = "<li><a target='_blank' onclick='showpic(\"None\",\"" + diagram_url + "\",\"" + item.url + "\");' >m</a></li>"; }
+									map = "<li><a target='_blank' href='" + diagram_url + "'>d</li>"; }
 								else { map = ""; }
 
 								$("#bd").append("<div class='result'><span class='result_content'>" + ip_url + "<br />" + hostname + "</span><br />" + pic + "<div class='tabdiv'><ul class='tabs'><li><a target='_blank' href='" + item.url + "' >open</a></li><li><a onclick='showinfo(" + r + ");'>i</a></li>" + map + "<li><a onclick='listaddrem(\"" + ip_port + "\", \"" + hostname + "\", this);'>+/-</a></li></ul></div><div class='info' id='" + String(r) + "'>" + JSON.stringify(item) + "</div></div>");

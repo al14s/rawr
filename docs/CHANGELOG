@@ -1,3 +1,19 @@
+----- 0.41 -----
+
+	BUGFIXES
+        fixed major bug in target handling which caused some of the data to be dropped
+        fixed bug which caused broken links for diagrams in the html report
+        fixed bug that allowed duplicate findings when running modules
+        fixed logic bug - re: when/how we're creating the attack surface matrix
+        fixed bug which prevented the nmap link from showing in the html report
+        fixed broken link for nmap.xml in the html report
+        fixed '-a' logic:
+            -a will cause all ports to show up in the serverinfo csv
+            note:  asm will always include all ports
+
+	CHANGES
+        html report - 'm' button changed to 'd' and now brings up diagram in another tab
+
 
 ----- 0.31 -----
 

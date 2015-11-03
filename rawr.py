@@ -595,6 +595,7 @@ else:
                                 urls_present = True
 
                 if c > 0:
+                    is_NMap_input = True
                     fname = run_nmap("-iL .tmp", opts, logfile)
                     r = etree.parse(fname[0])
                     count += parse_nmap_xml(r)
@@ -653,60 +654,61 @@ if not opts.json_min:
             newname = filename.replace(":", "_")
             os.rename(filename, "./artifacts/images/%s" % newname)
 
+if len(ints) > 0 and not opts.json_min:
+    writelog("\n  %s[>]%s Building Attack surface matrix" % (TC.GREEN, TC.END), logfile, opts)
+
+    # create the attack surface matrix
+    asm_f = "%s/rawr_%s_attack_surface.csv" % (logdir, timestamp)
+    try:
+        ports = {}
+        for i in ints:
+            new = "%3s.%3s.%3s.%3s" % tuple(i.split("."))
+            ints[new] = ints.pop(i)
+
+        for i in ints:
+            for p in ints[i][1]:
+                if p not in ports:
+                    ports[p] = 1
+
+                else:
+                    ports[p] += 1
+
+        pts = ports.keys()
+        pts.sort(key=int)  # ports is a list of ports found while parsing files
+        cols = ["IP", "HOSTNAME"] + pts + [" ", "TOTAL"]
+        pts = None
+
+        with open(asm_f, 'a') as f:
+            f.write('"' + '","'.join(cols) + '"\n')  # write the column headers
+            for ip in sorted(ints.keys()):  # ints is a list of interfaces found while parsing files
+                line = [ip.replace(' ', ''), ints[ip][0]] + [" "] * (len(cols) - 3)
+                for port in ints[ip][1]:
+                    line[cols.index(port)] = "x"
+
+                line.append(str(line.count("x")))
+                f.write('"' + '","'.join(line) + '"\n')
+
+            line = ["TOTAL"] + [" "] * len(cols)
+
+            for port in ports:
+                line[cols.index(port)] = str(ports[port])  # fill out the last line w/ count totals
+
+            f.write('\n"' + '","'.join(line) + '"\n')
+            ports = None
+
+    except:
+        error = traceback.format_exc()
+        error_msg(error)
+        writelog("\n  %s[!]%s Error creating attack surface matrix :\n\t%s\n" %
+                 (TC.YELLOW, TC.END, error), logfile, opts)
+
+    if opts.asm:  # quit after creating the asm
+        print('\n\n')
+        db.close()
+        exit(0)
+
 if q.qsize() > 0:
     if not opts.json_min:
-        writelog("\n  %s[>]%s Building Attack surface matrix" % (TC.GREEN, TC.END), logfile, opts)
-
-        # create the attack surface matrix
-        asm_f = "%s/rawr_%s_attack_surface.csv" % (logdir, timestamp)
-        try:
-            ports = {}
-            for i in ints:
-                new = "%3s.%3s.%3s.%3s" % tuple(i.split("."))
-                ints[new] = ints.pop(i)
-
-            for i in ints:
-                for p in ints[i][1]:
-                    if p not in ports:
-                        ports[p] = 1
-
-                    else:
-                        ports[p] += 1
-
-            pts = ports.keys()
-            pts.sort(key=int)  # ports is a list of ports found while parsing files
-            cols = ["IP", "HOSTNAME"] + pts + [" ", "TOTAL"]
-            pts = None
-
-            with open(asm_f, 'a') as f:
-                f.write('"' + '","'.join(cols) + '"\n')  # write the column headers
-                for ip in sorted(ints.keys()):  # ints is a list of interfaces found while parsing files
-                    line = [ip.replace(' ', ''), ints[ip][0]] + [" "] * (len(cols) - 3)
-                    for port in ints[ip][1]:
-                        line[cols.index(port)] = "x"
-
-                    line.append(str(line.count("x")))
-                    f.write('"' + '","'.join(line) + '"\n')
-
-                line = ["TOTAL"] + [" "] * len(cols)
-
-                for port in ports:
-                    line[cols.index(port)] = str(ports[port])  # fill out the last line w/ count totals
-
-                f.write('\n"' + '","'.join(line) + '"\n')
-                ports = None
-
-        except:
-            error = traceback.format_exc()
-            error_msg(error)
-            writelog("\n  %s[!]%s Error creating attack surface matrix :\n\t%s\n" %
-                     (TC.YELLOW, TC.END, error), logfile, opts)
-
-        if opts.asm:  # quit after creating the asm
-            print('\n\n')
-            db.close()
-            exit(0)
-
         # Begin processing any hosts found
         shutil.copy("%s/data/report_template.html" % scriptpath, 'report_%s.html' % timestamp)
 
@@ -727,7 +729,7 @@ if q.qsize() > 0:
 
         filedat = open('report_%s.html' % timestamp).read()
         if is_NMap_input:
-            fname = "rawr_%s.xml" % timestamp  # Make the link to NMap XML in our HTML report
+            fname = "artifacts/rawr_%s.xml" % timestamp  # Make the link to NMap XML in our HTML report
             x = '<li><a class="textwds" onselect=False target="_blank" href="%s">NMap XML</a></li>' % fname
             filedat = filedat.replace('<!-- REPLACEWITHLINK -->', x)
 
