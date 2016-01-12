@@ -10,6 +10,8 @@
         fixed '-a' logic:
             -a will cause all ports to show up in the serverinfo csv
             note:  asm will always include all ports
+        fixed issue where spider dies when mirroring due to lack of page name on root urls
+        fixed issue with meta which caused spidering to die
 
 	CHANGES
         html report - 'm' button changed to 'd' and now brings up diagram in another tab

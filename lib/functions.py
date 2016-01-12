@@ -671,6 +671,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                             try:
                                 doc_f = '%s/artifacts/meta/%s_%s_%s_findings.csv' %\
                                         (logdir, hname, target['port'], timestamp)
+
                                 dat = session.get(url_t2,
                                                   headers={"user-agent": useragent, "referer": url_t1},
                                                   verify=False,
@@ -699,10 +700,12 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
 
                                     page = p.path.split('/')[-1]
                                     if opts.mirror:
+                                        if not page:
+                                            page = '/' + "root_page"
+
                                         fpath = '%s/artifacts/mirrored_sites/%s_%s%s' %\
                                                 (logdir, hname, target['port'], p.path.replace(page, ''))
-                                        fn = '%s/artifacts/mirrored_sites/%s_%s%s' %\
-                                             (logdir, hname, target['port'], p.path)
+                                        fn = fpath + page
 
                                         try:
                                             os.makedirs(fpath)
@@ -723,22 +726,29 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                     # parse for meta
                                     if ext in DOC_TYPES and url_t2 not in target['docs']:
                                         if not opts.mirror:
+                                            fpath = '%s/artifacts/meta/%s_%s_files' % (logdir, hname, target['port'])
+                                            fn = '%s/%s' % (fpath, page)
+
                                             try:
                                                 os.makedirs(fpath)
 
                                             except:
                                                 pass
 
-                                            fpath = '%s/artifacts/meta/%s_%s_files' % (logdir, hname, target['port'])
-                                            fn = '%s/%s' % (fpath, page)
-
-                                            with open(fn, 'wb') as wf:
+                                            with open(fn, 'wb+') as wf:
                                                 for chunk in dat.iter_content(200):
                                                     wf.write(chunk)
 
-                                        target['docs'].append(str(url_t2))
+                                            target['docs'].append(str(url_t2))
 
-                                        with open(doc_f, 'a') as ofn:
+
+                                        try:
+                                            os.makedirs('%s/artifacts/meta/' % logdir)
+
+                                        except:
+                                            pass
+
+                                        with open(doc_f, 'a+') as ofn:
                                             ofn.write('DOC,%s\n' % safe_string(url_t2))
 
                                         try:
@@ -765,7 +775,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                         except:
                                             pass
 
-                                        with open(doc_f, 'a') as ofn:
+                                        with open(doc_f, 'a+') as ofn:
                                             ofn.write('OTHER,%s\n' % safe_string(url_t2))
 
                                     for u in list(set(re.findall(URL_REGEX, dat.content, re.I))):
@@ -1426,7 +1436,7 @@ def run_nmap(target, opts, logfile):
     else:
         cmd.append(opts.target_input)
 
-    writelog("  %s[>]%s Scanning >\n	  %s" % (TC.GREEN, TC.END, " ".join(cmd)), logfile, opts)
+    writelog("  %s[>]%s Scanning >\n      %s" % (TC.GREEN, TC.END, " ".join(cmd)), logfile, opts)
 
     # need to quiet this when running with --json & --json-min
     try:
@@ -1478,7 +1488,7 @@ def process_url(url):
             target['ipv4'] = socket.gethostbyname(host)
 
         except:
-            print("	  %s[!]%s Unable to find IP for %s.\n" % (TC.YELLOW, TC.END, host))
+            print("      %s[!]%s Unable to find IP for %s.\n" % (TC.YELLOW, TC.END, host))
             return 0
 
     target['service_name'] = parsed_url.scheme
