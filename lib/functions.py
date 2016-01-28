@@ -2226,6 +2226,13 @@ def update(pjs_path, scriptpath, force, use_ghost):
                         f.write(OSX_PLIST)
                         f.close()
 
+                    if platform.system().lower() in "linux":
+                        import stat
+                        f_stat = os.stat("data/phantomjs/bin/phantomjs")
+                        all_exec = (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+                        if (f_stat.st_mode & all_exec) is not all_exec:
+                            os.chmod("data/phantomjs/bin/phantomjs", f_stat.st_mode | all_exec)
+
                     print("\n")
 
                 except urllib2.URLError, ex:
