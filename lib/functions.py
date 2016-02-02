@@ -131,6 +131,7 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                         port = ":" + target['port']
 
                     if self.opts.dns and ('is_dns_result' not in target):
+                        hostnames = []
                         # Don't do Bing>DNS lookups for non-routable IPs
                         if not re.findall(NRIP_REGEX, target['ipv4']):
                             if target['ipv4'] in dns_cache:
