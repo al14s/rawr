@@ -2143,7 +2143,6 @@ def parse_powersploit_xml(r):
                     else:
                         target['service_name'] = "unk"
 
-                print target
                 c += process_target(target)
                 target = None
 
