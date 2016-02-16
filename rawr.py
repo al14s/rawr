@@ -562,6 +562,10 @@ else:
                     writelog("       %s[Qualys Scan Report]%s" % (TC.BLUE, TC.END), logfile, opts)
                     count = parse_qualys_scan_report_xml(r)
 
+                elif len(r.xpath('//Portscanrun')) > 0:
+                    writelog("       %s[PowerSploit]%s" % (TC.BLUE, TC.END), logfile, opts)
+                    count = parse_powersploit_xml(r)
+
                 elif len(r.xpath('//nmaprun')) > 0:
                     writelog("       %s[NMap]%s" % (TC.BLUE, TC.END), logfile, opts)
                     count = parse_nmap_xml(r)

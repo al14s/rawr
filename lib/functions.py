@@ -2117,6 +2117,44 @@ def parse_nmap_xml(r):
     return c
 
 
+def parse_powersploit_xml(r):
+    c = 0
+    for el_port in r.xpath("//Port"):
+        try:  # one line can fail, and the rest of the doc completes
+            if el_port.attrib["state"] == "open":
+                target = {}
+                el_host = el_port.getparent().getparent()
+                target['ipv4'] = el_host.attrib["id"]
+                target['hostnames'] = [target['ipv4']]
+
+                for el_hn in el_host.xpath("*/hostname"):
+                    target['hostnames'].append(str(el_hn.attrib['name']))
+
+                target['hostnames'] = list(set(target['hostnames']))
+
+                target["service_version"] = []
+
+                target['port'] = el_port.attrib['id']
+
+                if 'service_name' not in target:
+                    if int(target['port']) in (80, 443):
+                        target['service_name'] = "http"
+
+                    else:
+                        target['service_name'] = "unk"
+
+                print target
+                c += process_target(target)
+                target = None
+
+        except:
+            error = traceback.format_exc().splitlines()
+            error_msg("\n".join(error))
+            print("      %s[!]%s Parse Error:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)))
+
+    return c
+
+
 def update(pjs_path, scriptpath, force, use_ghost):
     import urllib2
     os.chdir(scriptpath)
