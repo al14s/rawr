@@ -2122,26 +2122,16 @@ def parse_powersploit_xml(r):
     for el_port in r.xpath("//Port"):
         try:  # one line can fail, and the rest of the doc completes
             if el_port.attrib["state"] == "open":
-                target = {}
-                el_host = el_port.getparent().getparent()
-                target['ipv4'] = el_host.attrib["id"]
+                target = {'port': el_port.attrib['id']}
+
+                target['ipv4'] = el_port.getparent().getparent().attrib["id"]
                 target['hostnames'] = [target['ipv4']]
 
-                for el_hn in el_host.xpath("*/hostname"):
-                    target['hostnames'].append(str(el_hn.attrib['name']))
+                if int(target['port']) in (80, 443, 8080, 8443):
+                    target['service_name'] = "http"
 
-                target['hostnames'] = list(set(target['hostnames']))
-
-                target["service_version"] = []
-
-                target['port'] = el_port.attrib['id']
-
-                if 'service_name' not in target:
-                    if int(target['port']) in (80, 443):
-                        target['service_name'] = "http"
-
-                    else:
-                        target['service_name'] = "unk"
+                else:
+                    target['service_name'] = "unk"
 
                 c += process_target(target)
                 target = None
