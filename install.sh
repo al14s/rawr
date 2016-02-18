@@ -19,15 +19,13 @@ fi
 case `cat /etc/issue` in
     *"Kali"* )
             echo -e '\n   [>] Installing Kali Deps\n'
-            apt-get install python-qt4 python-pip python-imaging python-lxml python-pygraphviz xvfb $y ;;
+            apt-get install python-qt4 python-pip python-imaging python-lxml python-pygraphviz xvfb $y
+            pip install python_qt_binding ;;
 
     *"Debian"* | *"Ubuntu"* )
             echo -e '\n   [>] Installing Debian Deps\n'
             apt-get install nmap cmake qt4-qmake python python-lxml python-imaging python-psutil python-qt4 python-pip python-netaddr python-lxml python-pygraphviz xvfb $y
-            curl "https://bootstrap.pypa.io/get-pip.py" > get-pip.py
-            python get-pip.py
-            pip install python_qt_binding
-            rm -rf get-pip.py ;;
+            pip install python_qt_binding ;;
 
     *"ArchAssault"* )
             echo -e '\n   [>]  Installing ArchAssault deps...\n'
@@ -76,6 +74,10 @@ case `cat /etc/issue` in
             curl https://pypi.python.org/packages/source/p/pygraphviz/pygraphviz-1.3rc2.tar.gz > pgv.tar.gz
             tar -zxvf pgv.tar.gz
             cd pygraphviz-1.3rc2/
+
+            a=""
+            if [[ `uname -a` == *"x86_64"* ]]; then a="64"; fi
+
             sed "s/library\_dirs\ \=\ None/library\_dirs\ \=\'\/usr\/lib$a\/graphviz\'/g" setup.py > setup.py.tmp
             sed "s/include\_dirs\ \=\ None/include\_dirs\ \=\'\/usr\/include\/graphviz\'/g" setup.py.tmp > setup.py
             python setup.py install
