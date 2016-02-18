@@ -17,7 +17,7 @@ if [ `id -u` != 0 ]; then
 fi
 
 case `cat /etc/issue` in
-    "Kali"* )
+    *"Kali"* )
             echo -e '\n   [>] Installing Kali Deps\n'
             apt-get install python-qt4 python-pip python-imaging python-lxml python-pygraphviz xvfb $y ;;
 
@@ -36,24 +36,16 @@ case `cat /etc/issue` in
 
     *"Red Hat"* | *"CentOS"* | *"Fedora"* )     
         echo -e '\n   [>] Installing RHEL / CentOS Deps\n'
-        read -p '[?] Install and Enable EPEL Repository? (y/n): ' epel
-        if [ "${epel}" == 'y' ]; then
+                
+        $epel = 'y'
+        if [ $1 != 'y' ]; then    
+            read -p '[?] Install and Enable EPEL Repository? [Required]  (Y/n): ' epel
+
+        fi
+
+        if [ "${epel}" != 'n' ]; then
                 ver=`sed 's/.*release \(.*\).[0-9] .*/\1/' /etc/issue | head -n1`
-
-                if [[ `uname -a` == *"x86_64"* ]]; then
-                        arch="x86_64"; a="64"
-
-                elif [[ `uname -a` == *"i386"* ]]; then
-                        arch="i386"; a=""
-
-                else
-                        echo -e "\n    [!] Installer not set up for this architecture - Installation Cancelled."
-                        echo -e "\n         Please let al14s@pdrcorps.com (Twitter - @al14s) know."
-                        exit 1
-
-                fi
-
-                rpm -Uvh http://download.fedoraproject.org/pub/epel/$ver/$arch/epel-release-6-8.noarch.rpm
+                rpm -Uvh http://mirrors.rit.edu/fedora/epel//epel-release-latest-$ver.noarch.rpm
 
         else
                 echo '[!] EPEL Repo Required - Installation Cancelled.'
@@ -61,17 +53,23 @@ case `cat /etc/issue` in
 
         fi
 
-        yum install nmap cmake python python-pip PyQt4 PyQt4 PyQt4-webkit python-argparse python-netaddr python-lxml python-psutil python-imaging python-lxml $y
+        yum install nmap cmake python python-pip PyQt4 PyQt4 PyQt4-webkit python-argparse python-netaddr python-lxml python-psutil python-imaging python-lxml xorg-x11-server-xvfb $y
         curl "https://bootstrap.pypa.io/get-pip.py" > get-pip.py
         python get-pip.py
         pip install python_qt_binding
         rm -rf get-pip.py
 
         pgv_deps=" gcc graphviz graphviz-python graphviz-devel python-devel"
-        echo '[?] Configuring pygraphviz on Fedora/CentOS/RHEL involves installing the following:'
-        echo -e "        $pgv_deps\n"
-        read -p '   Would you like to continue? [enables site diagrams during spider] (y/n): ' pgv
-        if [ "${pgv}" == 'y' ]; then
+        
+        $pgv = 'y'
+        if [ $1 != 'y' ]; then
+            echo '[?] Configuring pygraphviz on Fedora/CentOS/RHEL involves installing the following:'
+            echo -e "        $pgv_deps\n"
+            read -p '   Would you like to continue? [enables site diagrams during spider] (Y/n): ' pgv
+
+        fi
+
+        if [ "${pgv}" != 'n' ]; then
             yum install $pgv_deps $y            
             wd=`pwd`                
             cd /tmp
