@@ -35,15 +35,26 @@ case `cat /etc/redhat-release 2>/dev/null || cat /etc/issue` in
     *"Red Hat"* | *"CentOS"* | *"Fedora"* )     
         echo -e '\n   [>] Installing RHEL / CentOS Deps\n'
                 
-        $epel = 'y'
-        if [ $1 != 'y' ]; then    
+        epel='y'
+        if [[ $1 != 'y' ]]; then    
             read -p '[?] Install and Enable EPEL Repository? [Required]  (Y/n): ' epel
 
         fi
 
-        if [ "${epel}" != 'n' ]; then
+        if [[ "${epel}" != 'n' ]]; then
                 if grep Fedora /etc/redhat-release; then
                     ver=`sed 's/.*Fedora release \([0-9][0-9]\) .*/\1/' /etc/redhat-release`
+
+                    if [[ $ver > 18 ]]; then
+                        ver='7'
+
+                    elif [[ $ver > 12 ]]; then
+                        ver='6'
+
+                    else
+                        ver='5'
+
+                    fi
 
                 else
                     ver=`sed 's/.*release \(.*\).[0-9] .*/\1/' /etc/redhat-release | cut -d'.' -f1`
@@ -63,17 +74,17 @@ case `cat /etc/redhat-release 2>/dev/null || cat /etc/issue` in
         pip install python_qt_binding
         rm -rf get-pip.py
 
-        pgv_deps=" gcc graphviz graphviz-python graphviz-devel python-devel"
+        pgv_deps=" gcc graphviz graphviz-python graphviz-devel python-devel rpm-build"
         
-        $pgv = 'y'
-        if [ $1 != 'y' ]; then
+        pgv='y'
+        if [[ $1 != 'y' ]]; then
             echo '[?] Configuring pygraphviz on Fedora/CentOS/RHEL involves installing the following:'
             echo -e "        $pgv_deps\n"
             read -p '   Would you like to continue? [enables site diagrams during spider] (Y/n): ' pgv
 
         fi
 
-        if [ "${pgv}" != 'n' ]; then
+        if [[ "${pgv}" != 'n' ]]; then
             yum install $pgv_deps $y            
             wd=`pwd`                
             cd /tmp
