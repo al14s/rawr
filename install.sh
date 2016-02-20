@@ -16,7 +16,7 @@ if [ `id -u` != 0 ]; then
         exit 1
 fi
 
-case `cat /etc/issue` in
+case `cat /etc/redhat-release 2>/dev/null || cat /etc/issue` in
     *"Kali"* )
             echo -e '\n   [>] Installing Kali Deps\n'
             apt-get install python-qt4 python-pip python-imaging python-lxml python-pygraphviz xvfb $y
@@ -42,7 +42,13 @@ case `cat /etc/issue` in
         fi
 
         if [ "${epel}" != 'n' ]; then
-                ver=`sed 's/.*release \(.*\).[0-9] .*/\1/' /etc/issue | head -n1`
+                if grep Fedora /etc/redhat-release; then
+                    ver=`sed 's/.*Fedora release \([0-9][0-9]\) .*/\1/' /etc/redhat-release`
+
+                else
+                    ver=`sed 's/.*release \(.*\).[0-9] .*/\1/' /etc/redhat-release | cut -d'.' -f1`
+
+                fi
                 rpm -Uvh http://mirrors.rit.edu/fedora/epel//epel-release-latest-$ver.noarch.rpm
 
         else
