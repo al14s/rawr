@@ -17,6 +17,11 @@ if [ `id -u` != 0 ]; then
 fi
 
 case `cat /etc/redhat-release 2>/dev/null || cat /etc/issue` in
+    *"openSUSE"* )
+            echo -e '\n   [>] Installing openSUSE Deps\n'
+            apt-get $y install python-qt4 python-pip python-imaging python-lxml python-pygraphviz
+            pip install python_qt_binding ;;
+
     *"Kali"* )
             echo -e '\n   [>] Installing Kali Deps\n'
             apt-get install python-qt4 python-pip python-imaging python-lxml python-pygraphviz xvfb $y
@@ -24,87 +29,56 @@ case `cat /etc/redhat-release 2>/dev/null || cat /etc/issue` in
 
     *"Debian"* | *"Ubuntu"* )
             echo -e '\n   [>] Installing Debian Deps\n'
-            apt-get install nmap cmake qt4-qmake python python-lxml python-imaging python-psutil python-qt4 python-pip python-netaddr python-lxml python-pygraphviz xvfb $y
+            apt-get install nmap cmake qt4-qmake python-lxml python-imaging python-psutil python-qt4 python-pip python-netaddr python-pygraphviz python-pip xvfb $y
             pip install python_qt_binding ;;
 
-    *"ArchAssault"* )
+    *"Arch"* )
             echo -e '\n   [>]  Installing ArchAssault deps...\n'
             # this is just to fix a broken link
             ln -sf /usr/share/rawr/rawr.py /usr/bin/rawr ;;
 
-    *"Red Hat"* | *"CentOS"* | *"Fedora"* )     
+    *"Red Hat"* | *"CentOS"* )
         echo -e '\n   [>] Installing RHEL / CentOS Deps\n'
-                
+           
         epel='y'
         if [[ $1 != 'y' ]]; then    
             read -p '[?] Install and Enable EPEL Repository? [Required]  (Y/n): ' epel
 
         fi
 
-        if [[ "${epel}" != 'n' ]]; then
-                if grep Fedora /etc/redhat-release; then
-                    ver=`sed 's/.*Fedora release \([0-9][0-9]\) .*/\1/' /etc/redhat-release`
-
-                    if [[ $ver > 18 ]]; then
-                        ver='7'
-
-                    elif [[ $ver > 12 ]]; then
-                        ver='6'
-
-                    else
-                        ver='5'
-
-                    fi
-
-                else
-                    ver=`sed 's/.*release \(.*\).[0-9] .*/\1/' /etc/redhat-release | cut -d'.' -f1`
-
-                fi
-                rpm -Uvh http://mirrors.rit.edu/fedora/epel//epel-release-latest-$ver.noarch.rpm
+        if [[ "${epel}" != 'n' ]]; then                    
+            ver=`sed 's/.*release \(.*\).[0-9] .*/\1/' /etc/redhat-release | cut -d'.' -f1`
+            rpm -Uvh http://mirrors.rit.edu/fedora/epel//epel-release-latest-$ver.noarch.rpm
 
         else
-                echo '[!] EPEL Repo Required - Installation Cancelled.'
-                exit 1
+            echo '[!] EPEL Repo Required - Installation Cancelled.'
+            exit 1
 
         fi
 
-        yum install nmap cmake python python-pip PyQt4 PyQt4 PyQt4-webkit python-argparse python-netaddr python-lxml python-psutil python-imaging python-lxml xorg-x11-server-xvfb $y
-        curl "https://bootstrap.pypa.io/get-pip.py" > get-pip.py
-        python get-pip.py
-        pip install python_qt_binding
-        rm -rf get-pip.py
+        yum install nmap cmake PyQt4 PyQt4-webkit python-netaddr python-lxml python-psutil python-imaging gcc graphviz graphviz-python graphviz-devel python-devel rpm-build python-pip xorg-x11-server-Xvfb python-argparse $y
 
-        pgv_deps=" gcc graphviz graphviz-python graphviz-devel python-devel rpm-build"
-        
-        pgv='y'
-        if [[ $1 != 'y' ]]; then
-            echo '[?] Configuring pygraphviz on Fedora/CentOS/RHEL involves installing the following:'
-            echo -e "        $pgv_deps\n"
-            read -p '   Would you like to continue? [enables site diagrams during spider] (Y/n): ' pgv
+        wd=`pwd`                
+        cd /tmp
+        curl https://pypi.python.org/packages/source/p/pygraphviz/pygraphviz-1.3rc2.tar.gz > pgv.tar.gz
+        tar -zxvf pgv.tar.gz
+        cd pygraphviz-1.3rc2/
+        a=""
+        if [[ `uname -a` == *"x86_64"* ]]; then a="64"; fi
+        sed "s/library\_dirs\ \=\ None/library\_dirs\ \=\'\/usr\/lib$a\/graphviz\'/g" setup.py > setup.py.tmp
+        sed "s/include\_dirs\ \=\ None/include\_dirs\ \=\'\/usr\/include\/graphviz\'/g" setup.py.tmp > setup.py
+        python setup.py install
+        rm setup.py.tmp
+        cd ..
+        rm -rf pgv.tar.gz
+        rm -rf pygraphviz-1.3rc2/
+        cd $wd ;;
 
-        fi
+    *"Fedora"* )
+        echo -e '\n   [>] Installing Fedora Deps\n'
+        yum install nmap cmake PyQt4 PyQt4-webkit python-psutil python-imaging python-pygraphviz $y
+        pip install python_qt_binding ;;
 
-        if [[ "${pgv}" != 'n' ]]; then
-            yum install $pgv_deps $y            
-            wd=`pwd`                
-            cd /tmp
-            curl https://pypi.python.org/packages/source/p/pygraphviz/pygraphviz-1.3rc2.tar.gz > pgv.tar.gz
-            tar -zxvf pgv.tar.gz
-            cd pygraphviz-1.3rc2/
-
-            a=""
-            if [[ `uname -a` == *"x86_64"* ]]; then a="64"; fi
-
-            sed "s/library\_dirs\ \=\ None/library\_dirs\ \=\'\/usr\/lib$a\/graphviz\'/g" setup.py > setup.py.tmp
-            sed "s/include\_dirs\ \=\ None/include\_dirs\ \=\'\/usr\/include\/graphviz\'/g" setup.py.tmp > setup.py
-            python setup.py install
-            rm setup.py.tmp
-            rm -rf pgv.tar.gz
-            rm -rf /tmp/pygraphviz-1.3rc2/
-            cd $wd
-
-        fi ;;
-    
     * ) 
         echo -e "\n   [x] This OS isn't supported by the install script as of yet."
         echo -e "\n         Please let al14s@pdrcorps.com (Twitter - @al14s) know."
