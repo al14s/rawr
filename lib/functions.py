@@ -19,7 +19,7 @@ from urlparse import urlparse
 from glob import glob
 from Queue import Queue
 from lxml import html, etree
-from multiprocessing import Process
+from multiprocessing import Process, Pipe
 
 # Local Imports
 import requests
@@ -29,6 +29,8 @@ from conf.modules import *
 from conf.settings import fuzzdb, useragent, flist, timeout, ss_delay, nthreads, allow_redir, use_ghost
 from lib.rawr_meta import *
 from lib.ghost import Ghost
+import lib.rdp as rdp
+import lib.vnc as vnc
 
 meta_parser = Meta_Parser()
 
@@ -68,7 +70,34 @@ crawling = 0  # a count of the number of crawls happening simultaneously
 
 threads = []  # contains handles for each thread
 q = Queue()  # The main queue.  Holds db reference for each target.
+rd = Queue()  # The RD screenshot.  Holds RDP/VNC screenshot targets.
 output = Queue()  # The output queue - prevents output overlap
+
+
+class RD_Screenshot_Thread(threading.Thread):  # Worker class that screenshots RDP/VNC services from the queue 'rd'.
+    def __init__(self, queue, logdir, output):
+        threading.Thread.__init__(self)
+        self.queue = queue
+        self.logdir = logdir 
+        self.output = output
+
+    def run(self):
+        while not self.queue.empty():
+            ip, port, t = self.queue.get()
+            ipnum = get_ipnum(ip)
+
+            if t == 'vnc':
+                f = vnc.get_screenshot(ip, port, self.logdir)
+                self.output.put("      %s[+]%s VNC Screenshot [ %s:%s ]" % (TC.CYAN, TC.END, ip, port))
+
+            else:
+                f = rdp.get_screenshot(ip, port, self.logdir)
+                self.output.put("      %s[+]%s RDP Screenshot [ %s:%s ]" % (TC.CYAN, TC.END, ip, port))
+
+            hist = get_histval(f)
+            write_to_html(timestamp, (str(hist), str(ipnum), t, ip, port))
+
+            self.queue.task_done()
 
 
 class OutThread(threading.Thread):  # Worker class that displays msgs in the 'output' queue in order and one at a time.
@@ -153,7 +182,6 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                     try:
                                         bing_res = requests.get("https://www.bing.com/search?q=ip%3a" + target['ipv4'] +
                                                                 '&format=rss&first=%s' % nxt,
-                                                                headers={"user-agent": target['useragent']},
                                                                 verify=False,
                                                                 timeout=timeout,
                                                                 allow_redirects=allow_redir,
@@ -232,7 +260,7 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                     except requests.ConnectionError:
                         try:
                             if '[401]' in target['res']:
-                                open('%s/artifacts/401_failed_auth.lst' % self.logdir, 'a').write(target['url'])
+                                open('%s/4_Exploitation/401_failed_auth.lst' % self.logdir, 'a').write(target['url'])
 
                         except:
                             pass
@@ -318,7 +346,7 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
 
                                 for doc in docs:
                                     fname = urlparse(doc).filename
-                                    fpath = '%s/artifacts/meta/%s_%s_files' % (self.logdir, hostname, target['port'])
+                                    fpath = '%s/3_Enumeration/meta/%s_%s_files' % (self.logdir, hostname, target['port'])
                                     fn = '%s/%s' % (fpath, fname)
                                     try:
                                         os.makedirs(fpath)
@@ -330,8 +358,14 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                         for chunk in dat.iter_content(200):
                                             wf.write(chunk)
 
-                                    report_fname = '%s/meta_report_%s.html' % (self.logdir, timestamp)
+                                    report_fname = '%s/5_Reporting/meta_report_%s.html' % (self.logdir, timestamp)
                                     ret = meta_parser.parse(fn)
+                                    try:
+                                        target['wordlist'] += ret['words']
+                                    except:
+                                        target['wordlist'] = [ret['words']]
+
+                                    del ret['words']  # save space on the report
                                     meta_parser.add_to_report(fn, report_fname, ret, url_t2)
                                     if ret:
                                         self.output.put("          %s[#]%s Meta logged: %s" %
@@ -339,25 +373,31 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
 
                             target['hist'] = 256
                             if not (self.opts.noss or self.opts.json_min) and 'res' in target:
+                                parent_conn, child_conn = Pipe()
                                 proc = Process(target=screenshot,
-                                               args=(target['url'], target['port'],
+                                               args=(child_conn, target['url'], target['port'],
                                                      self.logfile, self.logdir, self.timestamp,
                                                      self.scriptpath, self.opts.proxy_dict,
                                                      target['useragent'], self.pjs_path,
                                                      (self.opts.json or self.opts.json_min),
                                                      timeout, use_ghost, self.opts.useragent[target['useragent']]))
                                 proc.start()
+                                r = parent_conn.recv()
                                 proc.join()
 
-                                if proc.exitcode == 0:
-                                    # target['hist'] = proc[1]
+                                if r[0]:
+                                    target['hist'] = int(r[1])
                                     self.output.put(
                                         "      %s[+]%s Screenshot :   [ %s ]" % (TC.CYAN, TC.END, target['url']))
 
                                 else:
-                                    # target['hist'] = 0
+                                    target['hist'] = 0
                                     self.output.put(
-                                        "      %s[x]%s Screenshot :   [ %s ] Failed" % (TC.RED, TC.END, target['url']))
+                                        "      %s[x]%s Screenshot :   [ %s ] Failed - %s" % \
+                                            (TC.RED, TC.END, target['url'], r[1]))
+
+                                parent_conn, child_conn = None, None
+
 
                         if self.opts.getcrossdomain:
                             try:
@@ -372,12 +412,12 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                 if res.status_code == 200:
                                     if not self.opts.json_min:
                                         try:
-                                            os.makedirs("./artifacts/cross_domain")
+                                            os.makedirs("./3_Enumeration/cross_domain")
 
                                         except:
                                             pass
 
-                                        open("./artifacts/cross_domain/%s_%s_crossdomain.xml" %
+                                        open("./3_Enumeration/cross_domain/%s_%s_crossdomain.xml" %
                                              (hostname, target['port']), 'w').write(safe_string(res.content))
                                         self.output.put("      %s[c]%s Pulled crossdomain.xml : [ %s:%s ]" %
                                                         (TC.PURPLE, TC.END, hostname, target['port']))
@@ -412,12 +452,12 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                                 if res.status_code == 200 and "llow:" in res.content:
                                     if not self.opts.json_min:
                                         try:
-                                            os.makedirs("./artifacts/robots")
+                                            os.makedirs("./3_Enumeration/robots")
 
                                         except:
                                             pass
 
-                                        open("./artifacts/robots/%s_%s_robots.txt" %
+                                        open("./3_Enumeration/robots/%s_%s_robots.txt" %
                                              (hostname, target['port']), 'w').write(safe_string(res.content))
                                         self.output.put("      %s[r]%s Pulled robots.txt :      [ %s:%s ]" %
                                                         (TC.PURPLE, TC.END, hostname, target['port']))
@@ -447,16 +487,26 @@ class SiThread(threading.Thread):  # Threading class that enumerates hosts conta
                             wordlist += crawl(target, self.logdir, self.timestamp, self.opts)
                             crawling -= 1
 
-                        target = parsedata(task, target, self.timestamp, self.scriptpath, self.opts)
+                        target = parse_data(task, target, self.timestamp, self.scriptpath, self.opts)
 
-                        if 'wordlist' in target:
-                            wordlist += target['wordlist']  # add all suggested passwords to our wordlist
+                        wordlist = list(set(wordlist))
+                        try: 
+                            wordlist += target['wordlist']  # add our wordlist to all words from crawl
                             del target['wordlist']
 
+                        except Exception, ex:
+                            pass
+
                         if not self.opts.json_min:
-                            with open('./artifacts/input_lists/wordlist__%s_%s_%s.lst' %
-                                      (hostname, target['port'], self.timestamp), 'w') as of:
-                                of.write('\n'.join(list(set(wordlist))))
+                            try:
+                                os.makedirs("./4_Exploitation/wordlists/")
+
+                            except:
+                                pass
+
+                            with open('./4_Exploitation/wordlists/%s_%s.wl' %
+                                      (hostname, target['port']), 'w') as of:
+                                of.write('\n'.join(wordlist))
 
                         wordlist = None
 
@@ -535,10 +585,24 @@ def safe_string(s):
 
     return r
 
+def get_histval(fn):
+    rgb, c = (0, 0, 0), 0
+    img = Image.open(fn).resize((150, 150)) #  taking our hist from a downsized sample
+    hsv = (0, 0, sum(img.histogram()))
+    for x in xrange(img.size[0]):
+        for y in xrange(img.size[1]):
+            t = img.load()[x, y]
+            rgb = tuple(map(sum, zip(rgb, t)))
+            c += 1
 
-def screenshot(url, port, logfile, logdir, timestamp, scriptpath, proxy, useragent, pjs_path, silent, timeout,
+    rgb = tuple((x / c) for x in rgb)
+    hsv = colorsys.rgb_to_hsv(*rgb)
+    return hsv[2]
+
+
+def screenshot(conn, url, port, logfile, logdir, timestamp, scriptpath, proxy, useragent, pjs_path, silent, timeout,
                use_ghost, ua_cksum):
-    filename = "%s/%s_%s_%s_%s.png" % ("%s/artifacts/images" % logdir, urlparse(url).netloc, timestamp, port, ua_cksum)
+    filename = "%s/5_Reporting/images/%s_%s_%s_%s.png" % (logdir, urlparse(url).netloc.split(':')[0], timestamp, port, ua_cksum)
 
     if use_ghost:
         ghost = Ghost()
@@ -587,34 +651,32 @@ def screenshot(url, port, logfile, logdir, timestamp, scriptpath, proxy, userage
                             except:
                                 pass
 
-                            return False, ' Timed Out.'
+                            conn.send( (False, ' Timed Out.') )
+                            conn.close() 
 
                 except:
-                    return False, "\n\t\t".join(traceback.format_exc().splitlines())
+                    conn.send( (False, "\n\t\t".join(traceback.format_exc().splitlines())) )
+                    conn.close() 
 
         if not os.path.isfile(filename):
-            shutil.copy(scriptpath + "/data/error.png", filename)
-            return False, '.png not created'
+            shutil.copy(scriptpath + "/data/error.png", "%s/5_Reporting/images/error.png" % logdir)
+            conn.send( (False, '.png not created') )            
+            conn.close() 
 
         elif os.stat(filename).st_size > 0:
             try:  # histogram time!
-                rgb, c = (0, 0, 0), 0
-                img = Image.open(filename).resize((150, 150))
-                for x in xrange(img.size[0]):
-                    for y in xrange(img.size[1]):
-                        t = img.load()[x, y]
-                        tuple(map(sum, zip(rgb, t)))
-                        c += 1
+                hist = get_histval(filename)
+                conn.send( (True, hist) )
+                conn.close() 
 
-                hsv = colorsys.rgb_to_hsv(tuple((x / c) for x in rgb))
-                return True, hsv[2]
-
-            except:  # histogram failed
-                return True, 0
+            except Exception, ex:  # histogram failed
+                conn.send( (True, 0) )
+                conn.close() 
 
         else:
-            shutil.copy(scriptpath + "/data/error.png", filename)
-            return False, '0 byte file. [Deleted]'
+            shutil.copy(scriptpath + "/data/error.png", "%s/5_Reporting/images/error.png" % logdir)
+            conn.send( (False, '0 byte file. [Deleted]') )
+            conn.close()
 
 
 def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
@@ -652,7 +714,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                 coll.append((url_t1.replace(":", "-"), url_t2.replace(":", "-")))
 
                 if not (url_t2 in urls_visited or (opts.spider_url_blacklist and (url_t2 in url_blacklist))):
-                    with open('%s/artifacts/diagrams/links_%s_%s__%s.txt' % (logdir, hname, target['port'], timestamp),
+                    with open('%s/5_Reporting/diagrams/links_%s_%s__%s.txt' % (logdir, hname, target['port'], timestamp),
                               'a') as of:
                         of.write("%s%s\n" % (tabs, safe_string(url_t2)))
 
@@ -670,7 +732,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                         if url_t2_hn in url_t1 or opts.alt_domains and url_t2_hn in opts.alt_domains.split(','):
                             urls_t3 = []
                             try:
-                                doc_f = '%s/artifacts/meta/%s_%s_%s_findings.csv' %\
+                                doc_f = '%s/3_Enumeration/meta/%s_%s_%s_findings.csv' %\
                                         (logdir, hname, target['port'], timestamp)
 
                                 dat = session.get(url_t2,
@@ -682,7 +744,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                                   auth=opts.proxy_auth)
 
                                 if dat.status_code == 201:
-                                    open('%s/artifacts/201_pages.lst' % logdir, 'a').write(url_t2 + '\n')
+                                    open('%s/4_Exploitation/201_pages.lst' % logdir, 'a').write(url_t2 + '\n')
 
                                 elif dat.status_code == (300, 301, 302, 303, 305, 306, 307, 308):
                                     if "location" in dat.headers.keys():
@@ -691,7 +753,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                                 urls_t3.append(l)
 
                                 elif dat.status_code in (401, 403):
-                                    open('%s/artifacts/auth_sites.lst' % logdir, 'a').write('[' + str(dat.status_code) + '] ' + url_t2 + '\n')
+                                    open('%s/4_Exploitation/auth_sites.lst' % logdir, 'a').write('[' + str(dat.status_code) + '] ' + url_t2 + '\n')
 
                                 elif dat.content and dat.status_code != 404:
                                     l = list(set(target['res'].content.split()))
@@ -704,7 +766,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                         if not page:
                                             page = '/' + "root_page"
 
-                                        fpath = '%s/artifacts/mirrored_sites/%s_%s%s' %\
+                                        fpath = '%s/3_Enumeration/mirrored_sites/%s_%s%s' %\
                                                 (logdir, hname, target['port'], p.path.replace(page, ''))
                                         fn = fpath + page
 
@@ -719,7 +781,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                                 wf.write(chunk)
 
                                     else:
-                                        fpath = '%s/artifacts/meta/%s_%s_files' % (logdir, hname, target['port'])
+                                        fpath = '%s/3_Enumeration/meta/%s_%s_files' % (logdir, hname, target['port'])
                                         fn = '%s/%s' % (fpath, page)
 
                                     ext = p.path.split(".")[-1].lower()
@@ -727,7 +789,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                     # parse for meta
                                     if ext in DOC_TYPES and url_t2 not in target['docs']:
                                         if not opts.mirror:
-                                            fpath = '%s/artifacts/meta/%s_%s_files' % (logdir, hname, target['port'])
+                                            fpath = '%s/3_Enumeration/meta/%s_%s_files' % (logdir, hname, target['port'])
                                             fn = '%s/%s' % (fpath, page)
 
                                             try:
@@ -744,7 +806,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
 
 
                                         try:
-                                            os.makedirs('%s/artifacts/meta/' % logdir)
+                                            os.makedirs('%s/3_Enumeration/meta/' % logdir)
 
                                         except:
                                             pass
@@ -753,8 +815,16 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
                                             ofn.write('DOC,%s\n' % safe_string(url_t2))
 
                                         try:
-                                            report_fname = '%s/meta_report_%s.html' % (logdir, timestamp)
+                                            report_fname = '%s/5_Reporting/meta_report_%s.html' % (logdir, timestamp)
                                             ret = meta_parser.parse(fn)
+                                            
+                                            try:
+                                                target['wordlist'] += ret['words']
+
+                                            except:
+                                                target['wordlist'] = ret['words']
+
+                                            del ret['words']  # save space on the report
                                             meta_parser.add_to_report(fn, report_fname, ret, url_t2)
                                             if ret:
                                                 output.put("          %s[#]%s Meta logged: %s" %
@@ -858,9 +928,9 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
     time_start = datetime.datetime.now()
     session = requests.Session()
 
-    if not (opts.json_min or os.path.exists("./artifacts/diagrams")):
+    if not (opts.json_min or os.path.exists("./5_Reporting/diagrams")):
         try:
-            os.makedirs("./artifacts/diagrams")
+            os.makedirs("./5_Reporting/diagrams")
 
         except:
             pass
@@ -924,7 +994,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
             # Draw as PNG
             gr.layout(prog=LAYOUT_TYPE)
             # will get a warning if the graph is too large - not fatal
-            f = '%s/artifacts/diagrams/diagram_%s_%s__%s_%s.png' %\
+            f = '%s/5_Reporting/diagrams/diagram_%s_%s__%s_%s.png' %\
                 (logdir, urlparse(target['url']).netloc, target['port'], timestamp, opts.useragent[target['useragent']])
 
             if opts.verbose:
@@ -942,7 +1012,7 @@ def crawl(target, logdir, timestamp, opts):  # Our Spidering function.
     return wl
 
 
-def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site response and parses it.
+def parse_data(task, target, timestamp, scriptpath, opts):  # Takes raw site response and parses it.
     for i, v in target.items():
         target[i] = target[str(i)]
 
@@ -966,12 +1036,12 @@ def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site resp
         if len(target['res'].cookies) > 0:
             if not opts.json_min:
                 try:
-                    os.mkdir("./artifacts/cookies")
+                    os.mkdir("./3_Enumeration/cookies")
 
                 except:
                     pass
 
-                with open("./artifacts/cookies/%s_%s.txt" % (urlparse(target['url']).netloc,
+                with open("./3_Enumeration/cookies/%s_%s.txt" % (urlparse(target['url']).netloc,
                                                              target['port']), 'w') as of:
                     of.write(str(target['res'].cookies))
 
@@ -1210,14 +1280,14 @@ def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site resp
                 finally:
                     if not opts.json_min:
                         try:
-                            os.mkdir("./artifacts/ssl_certs")
+                            os.mkdir("./3_Enumeration/ssl_certs")
 
                         except:
                             pass
 
                 try:
                     if cert:
-                        certfile = "./artifacts/ssl_certs/%s_%s.pem" % (urlparse(target['url']).netloc, target['port'])
+                        certfile = "./3_Enumeration/ssl_certs/%s_%s.pem" % (urlparse(target['url']).netloc, target['port'])
                         open(certfile, 'w').write(cert)
 
                         proc = subprocess.Popen(['openssl', 'x509', '-in', certfile, '-inform', 'PEM', '-text'],
@@ -1289,14 +1359,14 @@ def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site resp
                 target['ssl-cert'] = 'true'
 
             # Parse cert and write to file
-            elif not opts.json_min and 'ssl-cert' in target:
+            elif (not opts.json_min) and 'ssl-cert' in target:
                 try:
-                    os.mkdir("./artifacts/ssl_certs")
+                    os.mkdir("./3_Enumeration/ssl_certs")
 
                 except:
                     pass
 
-                open("./artifacts/ssl_certs/%s_%s.cert" %
+                open("./3_Enumeration/ssl_certs/%s_%s.cert" %
                      (urlparse(target['url']).netloc, target['port']), 'w').write(target['ssl-cert'])
 
                 target['ssl-cert'] = 'true'
@@ -1305,64 +1375,78 @@ def parsedata(task, target, timestamp, scriptpath, opts):  # Takes raw site resp
 
 
 def write_to_csv(timestamp, target):
-    x = [" "] * len(flist.split(","))
+    try:
+        x = [" "] * len(flist.split(","))
 
-    for f in target:
-        if type(target[f]) == list:
-            target[f] = ' | '.join(target[f])
+        for i, v in target.items():
+            if type(v) == list:
+                v = ' | '.join(v)
 
-    if not os.path.isfile("rawr_%s_serverinfo.csv" % timestamp):
-        open("rawr_%s_serverinfo.csv" % timestamp, 'w').write(flist)
+            if i.lower() in flist.lower().split(', '):  # matching up the columns with our values
+                x[flist.lower().split(", ").index(i.lower())] = re.sub('[\n\r,]', '', safe_string(v).replace('"', '&quot;'))
 
-    for i, v in target.items():
-        if i.lower() in flist.lower().split(', '):  # matching up the columns with our values
-            x[flist.lower().split(", ").index(i.lower())] = re.sub('[\n\r,]', '', safe_string(v).replace('"', '&quot;'))
+    except Exception, ex:
+        output.put("\n  %s[!]%s Unable to parse host record:\n\t%s\n" % (TC.YELLOW, TC.END, str(ex)))
 
     try:
-        open("rawr_%s_serverinfo.csv" % timestamp, 'a').write('\n"%s"' % (str('","'.join(x))))
+        if not os.path.isfile("3_Enumeration/rawr_%s_serverinfo.csv" % timestamp):
+            try: os.mkdirs("3_Enumeration")
+            except: pass
+            open("3_Enumeration/rawr_%s_serverinfo.csv" % timestamp, 'w').write(flist)
 
-    except:
-        error = traceback.format_exc().splitlines()
-        error_msg("\n".join(error))
-        output.put("\n  %s[!]%s Unable to write .csv:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)))
+        open("3_Enumeration/rawr_%s_serverinfo.csv" % timestamp, 'a').write('\n"%s"' % (str('","'.join(x))))
+
+    except Exception, ex:
+        output.put("\n  %s[!]%s Unable to write .csv:\n\t%s\n" % (TC.YELLOW, TC.END, str(ex)))
 
 
 def write_to_html(timestamp, target):
-    with open('sec_headers_%s.html' % timestamp, 'a') as of:
-        of.write('<tr><td>%s</td>' % target['url'])
-        for header, chks, undef in SECURITY_HEADERS:
-            found = False
-            if header.lower() in target:
-                hdrstring = target[header.lower()]
-                for chk in chks:
-                    if chk[0] in hdrstring.lower():
-                        of.write(chk[1].replace('<<>>', hdrstring))
-                        found = True
-                        break
+    if not type(target) == dict:
+        try:
+            with open('5_Reporting/report_%s.html' % timestamp, 'a') as of:
+                of.write('\n' + ', '.join(target))
 
-            if not found:
-                of.write(undef)
+        except:
+            error = traceback.format_exc().splitlines()
+            error_msg("\n".join(error))
+            output.put("\n  %s[!]%s Unable to write .html:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)))
 
-        of.write('</tr>')
+    else:
+        with open('5_Reporting/sec_headers_%s.html' % timestamp, 'a') as of:
+            of.write('<tr><td>%s</td>' % target['url'])
+            for header, chks, undef in SECURITY_HEADERS:
+                found = False
+                if header.lower() in target:
+                    hdrstring = target[header.lower()]
+                    for chk in chks:
+                        if chk[0] in hdrstring.lower():
+                            of.write(chk[1].replace('<<>>', hdrstring))
+                            found = True
+                            break
 
-    x = [" "] * len(flist.split(","))
-    for i, v in target.items():
-        if i.lower() in flist.lower().split(', '):
-            try:
-                x[flist.lower().split(", ").index(i.lower())] = re.sub('[\n\r,]', '', safe_string(v))
+                if not found:
+                    of.write(undef)
 
-            except:
-                error_msg("\n".join(traceback.format_exc().splitlines()[-3:]))
+            of.write('</tr>')
 
-    try:
-        with open('report_%s.html' % timestamp, 'a') as of:
-            of.write(
-                "\n" + str(target['hist']) + ", " + str(opts.useragent[target['useragent']]) + ", " + str(','.join(x)))
+        x = [" "] * len(flist.split(","))
+        for i, v in target.items():
+            if i.lower() in flist.lower().split(', '):
+                try:
+                    x[flist.lower().split(", ").index(i.lower())] = re.sub('[\n\r,]', '', safe_string(v))
 
-    except:
-        error = traceback.format_exc().splitlines()
-        error_msg("\n".join(error))
-        output.put("\n  %s[!]%s Unable to write .html:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)))
+                except:
+                    error_msg("\n".join(traceback.format_exc().splitlines()[-3:]))
+
+        try:
+            with open('5_Reporting/report_%s.html' % timestamp, 'a') as of:
+                of.write(
+                    "\n" + str(target['hist']) + ", " + str(target['ipnum']) + ", " + str(opts.useragent[target['useragent']]) + ", " + str(','.join(x)))
+
+        except:
+            error = traceback.format_exc().splitlines()
+            error_msg("\n".join(error))
+            output.put("\n  %s[!]%s Unable to write .html:\n\t%s\n" % (TC.YELLOW, TC.END, "\n\t".join(error)))        
 
 
 def run_nmap(target, opts, logfile):
@@ -1372,24 +1456,53 @@ def run_nmap(target, opts, logfile):
         sys.exit(1)
 
     if opts.ports:
-        portswitch = "-p"
-        if 'top' in str(opts.ports).lower():
-            try:
-                opts.ports = str(int(str(opts.ports).replace('top', '')))
-                portswitch = "--top-ports"
-
-            except:
-                print("\n  %s[x]%s  Invalid 'top ports' specification. \n" % (TC.RED, TC.END))
-                sys.exit(1)
-
-        elif str(opts.ports).lower() == "fuzzdb":
-            opts.ports = fuzzdb
-
-        elif str(opts.ports).lower() == "all":
-            opts.ports = "1-65535"
+        if ',' in opts.ports:
+            opts.ports = opts.ports.split(',')
 
         else:
-            opts.ports = str(opts.ports)
+            opts.ports = [opts.ports]
+
+        portswitch = '-p'
+        out_ports = ''
+        for o in opts.ports:
+            if 'top' in str(o).lower():
+                try:
+                    portswitch = "--top-ports"
+                    out_ports = str(int(str(o).replace('top', '')))
+
+                except:
+                    print("\n  %s[x]%s  Invalid 'top ports' specification. \n" % (TC.RED, TC.END))
+                    sys.exit(1)
+
+            elif str(o).lower() == "fuzzdb":
+                if portswitch == '--top-ports':
+                    out_ports = fuzzdb.split(',')
+
+                else:
+                    if not out_ports:
+                        out_ports = fuzzdb
+
+                    else:
+                        out_ports += ',' + fuzzdb
+
+                portswitch = "-p"
+
+            elif str(o).lower() == "all":
+                portswitch = "-p"
+                out_ports = "1-65535"
+
+            else:
+                if portswitch == '--top-ports':
+                    out_ports = fuzzdb.split(',')
+
+                else:
+                    if not out_ports:
+                        out_ports = o
+
+                    else:
+                        out_ports += ',' + o
+
+                portswitch = "-p"
 
     else:
         portswitch = ''
@@ -1419,7 +1532,7 @@ def run_nmap(target, opts, logfile):
 
     else:
         outputs = "-oA"
-        fname = "artifacts/rawr_" + timestamp
+        fname = "2_Mapping/rawr_" + timestamp
 
     proc = subprocess.Popen(['nmap', '-V'], stdout=subprocess.PIPE)
     ver = proc.stdout.read().split(' ')[2]
@@ -1429,7 +1542,10 @@ def run_nmap(target, opts, logfile):
     if float(ver) >= 6.25:
         cmd += "--max-retries", "0"
 
-    cmd += portswitch, opts.ports, "-T%s" % opts.nmapspeed, "-vv", "-sV", sslscripts, outputs, fname, "--open"
+    cmd += portswitch, out_ports, "-T%s" % opts.nmapspeed, "-vv", "-sV", sslscripts, outputs, fname, "--open"
+
+    if opts.udp:
+        cmd.append("-sU")
 
     if os.path.isfile(opts.target_input):
         cmd += "-iL", opts.target_input
@@ -1470,7 +1586,7 @@ def run_nmap(target, opts, logfile):
         return ["rawr_%s.xml" % timestamp]
 
     else:
-        return ["artifacts/rawr_%s.xml" % timestamp]
+        return ["2_Mapping/rawr_%s.xml" % timestamp]
 
 
 def process_url(url):
@@ -1508,11 +1624,16 @@ def process_url(url):
     return process_target(target)
 
 
+def get_ipnum(ip):
+    o1, o2, o3, o4 = ip.split('.')
+    ipnum = str((int(o1) * 16777216) + (int(o2) * 65536) + (int(o3) * 256) + int(o4))
+    return ipnum
+
+
 def process_target(target):
     c = 0
     try:
-        o1, o2, o3, o4 = target['ipv4'].split('.')
-        target['ipnum'] = str((int(o1) * 16777216) + (int(o2) * 65536) + (int(o3) * 256) + int(o4))
+        target['ipnum'] = get_ipnum(target['ipv4'])
 
         # add this host/enum to the index
         if not target['ipnum'] in db['idx']:
@@ -1561,29 +1682,43 @@ def process_target(target):
 
                 db.sync()
 
+        elif opts.rdp_vnc and any([x for x in ('vnc','ms-wbt-server') if x in target['service_name']]):
+            y = '.'.join([target['ipnum'], unix_ts, target['port']])
+            if not y in db:
+                if 'vnc' in target['service_name']:
+                    t = 'vnc'
+
+                else:
+                    t = 'rdp'
+
+                rd.put((target['ipv4'], target['port'], t))
+                c += 1
+                db[y] = {target['ipv4'] : target}
+                write_to_csv(timestamp, target)
+
         elif opts.allinfo:
             write_to_csv(timestamp, target)
 
         if not opts.json_min:
             try:
-                os.makedirs("./artifacts/input_lists/")
+                os.makedirs("./4_Exploitation/input_lists/")
 
             except:
                 pass
 
-            with open("./artifacts/input_lists/%s_%s_iL.lst" % (target['port'], timestamp), 'a') as of:
+            with open("./4_Exploitation/input_lists/%s.il" % target['port'], 'a') as of:
                 of.write(target['ipv4'] + '\n')
 
-            with open("./artifacts/input_lists/all_%s_iL.lst" % timestamp, 'a') as of:
-                of.write(target['ipv4'] + '\n')
+            with open("./4_Exploitation/input_lists/all.il" , 'a') as of:
+                of.write(target['ipv4'] + ':' + target['port'] + '\n')
 
         db.sync()
 
     except Exception, ex:
         print(ex)
         # Examine the target object to make sure it's good to go.
-        # for t in target:
-        #    print( str(type(target[t])) + "    " +  t + "   " + str(target[t]) )
+        #for t in target:
+        #   print( str(type(target[t])) + "    " +  t + "   " + str(target[t]) )
 
     return c
 
@@ -2006,6 +2141,8 @@ def parse_nmap_xml(r):
                 el_host = el_port.getparent().getparent()
                 for el_add in el_host.xpath("address"):
                     target[el_add.attrib['addrtype']] = el_add.attrib['addr']
+                    try:  target['nic_vendor'] = el_add.attrib['vendor']
+                    except: pass
 
                 for el_hn in el_host.xpath("*/hostname"):
                     target['hostnames'].append(str(el_hn.attrib['name']))
@@ -2033,10 +2170,21 @@ def parse_nmap_xml(r):
                 if target["service_version"]:
                     target["service_version"] = ' '.join(target["service_version"])
 
+                target['port'] = el_port.attrib['portid']
+                target['protocol'] = el_port.attrib['protocol']
+
                 for el_scpt in el_port.xpath("script"):
                     if el_scpt.attrib['id'] == "ssl-cert":
-                        target['service_name'] = 'https'
                         target['ssl-cert'] = el_scpt.attrib['output']
+                        try:
+                            os.mkdir("./3_Enumeration/ssl_certs")
+
+                        except:
+                            pass
+
+                        open("./3_Enumeration/ssl_certs/%s_%s.crt" %
+                            (target['ipv4'], target['port']), 'w').write(target['ssl-cert'])
+
                         for line in target['ssl-cert'].split('\n'):
                             if "issuer" in line.lower():
                                 target['ssl_cert-issuer'] = line.split(": ")[1]
@@ -2071,6 +2219,8 @@ def parse_nmap_xml(r):
                                 notafter = line.split(": ")[1].strip()
                                 target['ssl_cert-notafter'] = notafter
 
+                        target['ssl-cert'] = 'true'
+
                         try:
                             notbefore = datetime.datetime.strptime(str(notbefore).split("+")[0], '%Y-%m-%d %H:%M:%S')
                             notafter = datetime.datetime.strptime(str(notafter).split("+")[0], '%Y-%m-%d %H:%M:%S')
@@ -2095,9 +2245,6 @@ def parse_nmap_xml(r):
 
                 for el_hn in el_host.xpath('owner'):
                     target['owner'].append(el_hn.attrib['name'])
-
-                target['port'] = el_port.attrib['portid']
-                target['protocol'] = el_port.attrib['protocol']
 
                 if 'service_name' not in target:
                     if target['port'] == 80:
@@ -2196,7 +2343,7 @@ def update(pjs_path, scriptpath, force, use_ghost):
                     fname = pre + "-macosx.zip"
                     url = PJS_REPO + fname
 
-                # elif platform.machine() == "armv7":
+                # elif platform.machine() == "armlv7":
                 #   fname = "-arm7.tar.gz"
                 #   url = REPO_DL_PATH + fname
 
@@ -2373,7 +2520,7 @@ def inpath(app):
 
 def error_msg(msg):
     if not opts.json_min:
-        open('artifacts/error.log', 'a').write("Error:%s\n\n" % msg)
+        open('error.log', 'a').write("Error:%s\n\n" % msg)
 
 
 def writelog(msg, logfile, opts):
@@ -2383,4 +2530,4 @@ def writelog(msg, logfile, opts):
     if not opts.json_min:
         #  clear out the terminal color formatting
         msg = re.sub("""\033\[(?:0|9[0-9])m""", '', str(msg))
-        open(logfile, 'a').write("%s\n" % msg)
+        open(logfile, 'a').write("%s\n" % msg)      

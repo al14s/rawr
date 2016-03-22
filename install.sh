@@ -20,20 +20,20 @@ case `cat /etc/redhat-release 2>/dev/null || cat /etc/issue` in
     *"openSUSE"* )
             echo -e '\n   [>] Installing openSUSE Deps\n'
             apt-get $y install python-qt4 python-pip python-imaging python-lxml python-pygraphviz
-            pip install python_qt_binding ;;
+            pip install python_qt_binding XlsxWriter rdpy ;;
 
     *"Kali"* )
             echo -e '\n   [>] Installing Kali Deps\n'
             apt-get install python-qt4 python-pip python-imaging python-lxml python-pygraphviz xvfb $y
-            pip install python_qt_binding ;;
+            pip install python_qt_binding XlsxWriter rdpy ;;
 
     *"Debian"* | *"Ubuntu"* )
             echo -e '\n   [>] Installing Debian Deps\n'
             apt-get install nmap cmake qt4-qmake python-lxml python-imaging python-psutil python-qt4 python-pip python-netaddr python-pygraphviz python-pip xvfb $y
-            pip install python_qt_binding ;;
+            pip install python_qt_binding XlsxWriter rdpy ;;
 
-    *"Arch"* )
-            echo -e '\n   [>]  Installing ArchAssault deps...\n'
+    *"Archassault"* )
+            echo -e '\n   [>]  Archassault!  Just need to fix the symlink...\n'
             # this is just to fix a broken link
             ln -sf /usr/share/rawr/rawr.py /usr/bin/rawr ;;
 
@@ -58,6 +58,9 @@ case `cat /etc/redhat-release 2>/dev/null || cat /etc/issue` in
 
         yum install nmap cmake PyQt4 PyQt4-webkit python-netaddr python-lxml python-psutil python-imaging gcc graphviz graphviz-python graphviz-devel python-devel rpm-build python-pip xorg-x11-server-Xvfb python-argparse $y
 
+        curl "https://bootstrap.pypa.io/get-pip.py" | python
+        pip install python_qt_binding XlsxWriter rdpy
+
         wd=`pwd`                
         cd /tmp
         curl https://pypi.python.org/packages/source/p/pygraphviz/pygraphviz-1.3rc2.tar.gz > pgv.tar.gz
@@ -77,7 +80,7 @@ case `cat /etc/redhat-release 2>/dev/null || cat /etc/issue` in
     *"Fedora"* )
         echo -e '\n   [>] Installing Fedora Deps\n'
         yum install nmap cmake PyQt4 PyQt4-webkit python-psutil python-imaging python-pygraphviz $y
-        pip install python_qt_binding ;;
+        pip install python_qt_binding XlsxWriter rdpy ;;
 
     * ) 
         echo -e "\n   [x] This OS isn't supported by the install script as of yet."

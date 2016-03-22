@@ -122,7 +122,7 @@ csv_sort_col = "ipv4"  # The column name of the field by which the CSV will be o
 flist = "url, ipv4, port, useragent, x-powered-by, options, returncode, hostnames, notes, title, version, allow, " + \
         "cookies, robots.txt, iframe, applet, object, script, embed, file_includes, access-control-allow-origin, " + \
         "content-security-policy, x-permitted-cross-domain-policies, x-content-type-options, " + \
-        "strict-transport-security, x-xss-protection, x-frame-options, ssl_cert-daysleft, " + \
+        "strict-transport-security, x-xss-protection, x-frame-options, mac, nic_vendor, ssl_cert-daysleft, " + \
         "ssl_cert-validityperiod, ssl_cert-md5, ssl_cert-sha-1, ssl_cert-notbefore, ssl_cert-notafter, " + \
         "country, type, cpe, cve, service_version, server, robots.txt, rpc_info, endurl, date, analytics_id," + \
         " owner, content-md5, content-type, last-modified, trailer, transfer-encoding, warning, www-authenticate, " + \

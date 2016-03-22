@@ -18,6 +18,7 @@ import argparse
 import os
 import sys
 import getpass
+import xlsxwriter
 from glob import glob
 from lxml import etree
 from lib.banner import *
@@ -71,6 +72,7 @@ group.add_argument('-x', help='Make an additional web call to get "crossdomain.x
                    action='store_true')
 group.add_argument('--downgrade', help='Make requests using HTTP 1.0', dest='ver_dg', action='store_true')
 group.add_argument('--noss', help='Disable screenshots.', dest='noss', action='store_true')
+group.add_argument('--rd', help='Take screenshots of RDP and VNC interfaces.', dest='rdp_vnc', action='store_true')
 group.add_argument('--proxy', metavar="<[username:password@]ip:port[+type] | filename>",
                    help="Push all traffic through a proxy.\n  Supported types are socks and http," +
                         "basic, digest.\nFile should contain proxy info on one line.\n" +
@@ -81,6 +83,7 @@ group.add_argument('--spider', dest='crawl', action='store_true',
                    help="Enumerate all urls in target's HTML, create site layout\n graph." +
                         "  Will record but not follow links outside of\n the target's domain." +
                         "  Creates a map (.png) for that\n site in the <logfolder>/maps folder.")
+group.add_argument('--udp', help='Have NMap check both TCP and UDP during scan.', dest='udp', action='store_true')
 group.add_argument('--alt-domains', metavar="<domains>",
                    help="Enable cross-domain spidering on specific domains.\n  (comma-seperated)", dest='alt_domains')
 group.add_argument('--blacklist-urls', metavar="<file>",
@@ -202,6 +205,12 @@ if opts.update or opts.forceupdate:
 if os.path.exists(opts.target_input):
     opts.target_input = os.path.realpath(opts.target_input)
 
+# Check for root privies if we're scanning UDP...
+if opts.udp and not os.getuid() == 0:
+    print("  %s[x]%s Scanning UDP requires root.\n\n  %s[x]%s Exiting... !!\n\n" %
+          (TC.RED, TC.END, TC.RED, TC.END))
+    sys.exit(1)
+
 # Determine filenames for the log directory and log file
 if opts.logdir:
     # redefine logdir based on user request
@@ -210,7 +219,7 @@ if opts.logdir:
 else:
     logdir = os.path.realpath("log_%s_rawr" % timestamp)
 
-logfile = "%s/artifacts/rawr_%s.log" % (logdir, timestamp)
+logfile = "%s/rawr_%s.log" % (logdir, timestamp)
 
 if os.path.isdir(opts.target_input):
     if opts.target_input.endswith('/'):
@@ -239,8 +248,11 @@ if not opts.json_min:
 
     os.chdir(logdir)
 
-    if not os.path.exists("./artifacts"):
-        os.makedirs("./artifacts")
+    os.makedirs("1_Recon")
+    os.makedirs("2_Mapping")
+    os.makedirs("3_Enumeration")
+    os.makedirs("4_Exploitation")
+    os.makedirs("5_Reporting")
 
     import ConfigParser
 
@@ -259,7 +271,7 @@ if not opts.json_min:
 if any([opts.crawl_level, opts.crawl, opts.mirror, opts.crawl_opts]):
     opts.crawl = True
     if opts.crawl_level:
-        sl = opts.crawl_level
+        sl = int(opts.crawl_level)
 
     else:
         sl = 3  # default
@@ -523,36 +535,19 @@ else:
         count = 0
         writelog("\n  %s[>]%s Parsing: %s" % (TC.GREEN, TC.END, filename), logfile, opts)
         try:
-            if filename.endswith(".csv"):
-                with open(filename) as r:
-                    head = ' '.join([r.next() for x in xrange(2)])
+            r = etree.parse(filename)
+            is_xml = True
+        except: is_xml = False
 
-                if 'Asset Group:' in head:
-                    writelog("       %s[Qualys Port Service CSV]%s" % (TC.BLUE, TC.END), logfile, opts)
-                    count = parse_qualys_port_service_csv(filename)
-
-                else:  # generic CSV
-                    writelog("       %s[Generic CSV]%s" % (TC.BLUE, TC.END), logfile, opts)
-                    count = parse_csv(filename)
-
-            elif filename.endswith(".nessus"):
-                r = etree.parse(filename)
-
-                if len(r.xpath('//NessusClientData_v2')) > 0:
-                    writelog("       %s[Nessus V2]%s" % (TC.BLUE, TC.END), logfile, opts)
-                    count = parse_nessus_xml(r)
-
-                else:
-                    writelog("        %s[!]%s Unrecognized .nessus file format.\n\n" % (TC.YELLOW, TC.END), logfile,
-                             opts)
-                    continue
-
-            elif filename.endswith(".xml"):
-                r = etree.parse(filename)
-
+        try:
+            if is_xml:
                 if len(r.xpath('//NexposeReport')) > 0:
                     writelog("       %s[NeXpose XML]%s" % (TC.BLUE, TC.END), logfile, opts)
                     count = parse_nexpose_xml(r)
+
+                elif len(r.xpath('//NessusClientData_v2')) > 0:
+                    writelog("       %s[Nessus V2]%s" % (TC.BLUE, TC.END), logfile, opts)
+                    count = parse_nessus_xml(r)
 
                 elif len(r.xpath('//NeXposeSimpleXML')) > 0:
                     writelog("       %s[NeXpose Simple XML]%s" % (TC.BLUE, TC.END), logfile, opts)
@@ -577,6 +572,18 @@ else:
                 else:
                     writelog("      %s[!]%s Unrecognized XML file.\n\n" % (TC.YELLOW, TC.END), logfile, opts)
                     continue
+
+            elif filename.endswith(".csv"):
+                with open(filename) as r:
+                    head = ' '.join([r.next() for x in xrange(2)])
+
+                if 'Asset Group:' in head:
+                    writelog("       %s[Qualys Port Service CSV]%s" % (TC.BLUE, TC.END), logfile, opts)
+                    count = parse_qualys_port_service_csv(filename)
+
+                else:  # generic CSV
+                    writelog("       %s[Generic CSV]%s" % (TC.BLUE, TC.END), logfile, opts)
+                    count = parse_csv(filename)
 
             else:
                 # Check to see if this is an NMap-formatted input list,
@@ -619,7 +626,7 @@ else:
 
             if newdir and not opts.json_min:
                 try:
-                    shutil.copyfile(filename, "./artifacts/%s" % os.path.basename(filename))
+                    shutil.copyfile(filename, "./2_Mapping/%s" % os.path.basename(filename))
                 except:
                     pass
 
@@ -642,27 +649,27 @@ if not opts.json_min:
                  opts)
 
     if not newdir and not (
-                glob("*.png") or glob("artifacts/images/*.png")):  # Look for and copy any images from previous scans
+                glob("*.png") or glob("5_Reporting/images/*.png")):  # Look for and copy any images from previous scans
         # Create the folder for html resource files
-        writelog("\n  %s[!]%s No thumbnails found in [%s/]\n      or in [.%s/artifacts/images/]. **\n" %
+        writelog("\n  %s[!]%s No thumbnails found in [%s/]\n      or in [.%s/5_Reporting/images/]. **\n" %
                  (TC.YELLOW, TC.END, os.getcwd(), os.getcwd()), logfile, opts)
         if not opts.noss:
             writelog("      Will take website screenshots during the enumeration. ", logfile, opts)
 
     else:
         png_files = glob("*.png")
-        if not os.path.exists("artifacts/images") and (not opts.noss or len(png_files) > 0):
-            os.mkdir("artifacts/images")
+        if not os.path.exists("5_Reporting/images") and (not opts.noss or len(png_files) > 0):
+            os.mkdir("5_Reporting/images")
 
         for filename in glob("*.png"):
             newname = filename.replace(":", "_")
-            os.rename(filename, "./artifacts/images/%s" % newname)
+            os.rename(filename, "./5_Reporting/images/%s" % newname)
 
 if len(ints) > 0 and not opts.json_min:
     writelog("\n  %s[>]%s Building Attack surface matrix" % (TC.GREEN, TC.END), logfile, opts)
 
     # create the attack surface matrix
-    asm_f = "%s/rawr_%s_attack_surface.csv" % (logdir, timestamp)
+    asm_f = "%s/2_Mapping/rawr_%s_attack_surface.csv" % (logdir, timestamp)
     try:
         ports = {}
         for i in ints:
@@ -679,26 +686,83 @@ if len(ints) > 0 and not opts.json_min:
 
         pts = ports.keys()
         pts.sort(key=int)  # ports is a list of ports found while parsing files
+
+        ### xlsx header start
+        workbook = xlsxwriter.Workbook('%s/5_Reporting/rawr_%s_attack_surface.xlsx' % (logdir, timestamp))
+
+        x_fmt = workbook.add_format({'bg_color': '#9BC2E6', 'font_color': '#9BC2E6'})
+
+        center = workbook.add_format({'align': 'center'})
+
+        banner_fmt = workbook.add_format({'bg_color': '#2F75B5', 'font_color': 'white'})
+        banner_fmt.set_valign('top')
+        banner_fmt.set_shrink()
+        banner_fmt.set_align('center')
+
+        worksheet = workbook.add_worksheet()
+        worksheet.set_row(0, None, banner_fmt) 
+        worksheet.set_column(0, 0, 15) 
+        worksheet.write(0, 0, 'IP')
+        worksheet.set_column(1, 1, .5) 
+
+        c = 2
+        for pt in pts:
+            worksheet.write_string(0, c, pt)
+            worksheet.set_column(c, c, 6)
+            c += 1
+
+        worksheet.set_column(c, c, .5)
+        worksheet.write(0, c + 1, 'TOTAL')
+        worksheet.set_column(c + 1, c + 1, 6)
+        worksheet.freeze_panes(1, 0)
+        ### xlsx header end
+
         cols = ["IP", "HOSTNAME"] + pts + [" ", "TOTAL"]
         pts = None
+        row = 1
 
         with open(asm_f, 'a') as f:
             f.write('"' + '","'.join(cols) + '"\n')  # write the column headers
             for ip in sorted(ints.keys()):  # ints is a list of interfaces found while parsing files
+                worksheet.write_string(row, 0, ip.replace(' ', ''), center)
+
                 line = [ip.replace(' ', ''), ints[ip][0]] + [" "] * (len(cols) - 3)
                 for port in ints[ip][1]:
+                    worksheet.write_string(row, cols.index(port), "x", x_fmt)
                     line[cols.index(port)] = "x"
 
                 line.append(str(line.count("x")))
-                f.write('"' + '","'.join(line) + '"\n')
+                worksheet.write_string(row, len(cols) - 1, str(line.count("x")), center)
+
+                f.write('"' + '","'.join(line) + '"\n')                
+                row += 1
 
             line = ["TOTAL"] + [" "] * len(cols)
 
             for port in ports:
+                
                 line[cols.index(port)] = str(ports[port])  # fill out the last line w/ count totals
 
             f.write('\n"' + '","'.join(line) + '"\n')
+
             ports = None
+            worksheet.set_row(row, 5)
+
+            x = 0
+            row += 1
+
+            for c in line:
+                try:
+                    c = int(c.strip())
+                    worksheet.write_number(row, x, c, center)
+
+                except:
+                    worksheet.write_string(row, x, c, center)
+
+                x += 1
+
+        workbook.close()
+            
 
     except:
         error = traceback.format_exc()
@@ -711,12 +775,13 @@ if len(ints) > 0 and not opts.json_min:
         db.close()
         exit(0)
 
-if q.qsize() > 0:
+
+if q.qsize() > 0 or rd.qsize() > 0:
     if not opts.json_min:
         # Begin processing any hosts found
-        shutil.copy("%s/data/report_template.html" % scriptpath, 'report_%s.html' % timestamp)
+        shutil.copy("%s/data/report_template.html" % scriptpath, '5_Reporting/report_%s.html' % timestamp)
 
-        with open('sec_headers_%s.html' % timestamp, 'a') as of:
+        with open('5_Reporting/sec_headers_%s.html' % timestamp, 'a') as of:
             of.write("""<html>\n<head>\n<title>Security Headers Report</title>\n<style>\n""" +
                      """table,th,td{border-spacing: 0px;border: 1px solid black; text-align:center;""" +
                      """ font-size:85%; letter-spacing:1px;}\n""" +
@@ -731,9 +796,9 @@ if q.qsize() > 0:
                      """x-permitted-cross-domain-policies</th><th>x-powered-by</th><th>""" +
                      """x-xss-protection</th></tr>""")
 
-        filedat = open('report_%s.html' % timestamp).read()
+        filedat = open('5_Reporting/report_%s.html' % timestamp).read()
         if is_NMap_input:
-            fname = "artifacts/rawr_%s.xml" % timestamp  # Make the link to NMap XML in our HTML report
+            fname = "../2_Mapping/rawr_%s.xml" % timestamp  # Make the link to NMap XML in our HTML report
             x = '<li><a class="textwds" onselect=False target="_blank" href="%s">NMap XML</a></li>' % fname
             filedat = filedat.replace('<!-- REPLACEWITHLINK -->', x)
 
@@ -763,23 +828,23 @@ if q.qsize() > 0:
         filedat = filedat.replace('<!-- REPLACEWITHRANGE -->', report_range)
         filedat = filedat.replace('<!-- REPLACEWITHTIMESTAMP -->', timestamp)
         filedat = filedat.replace('<!-- REPLACEWITHSECHEADERS -->', "sec_headers_%s.html" % timestamp)
-        filedat = filedat.replace('<!-- REPLACEWITHFLIST -->', ("hist, ua_cksum, " + flist.replace('hist, ', '')))
+        filedat = filedat.replace('<!-- REPLACEWITHFLIST -->', ("hist, ipnum, ua_cksum, " + flist.replace('hist, ', '')))
 
         if opts.logo:
             shutil.copy(logo_file, "./html_res/")
-            l = ('\n<img id="logo" height="80px" src="./artifacts/%s" />\n' % os.path.basename(logo_file))
+            l = ('\n<img id="logo" height="80px" src="./5_Reporting/%s" />\n' % os.path.basename(logo_file))
             filedat = filedat.replace('<!-- REPLACEWITHLOGO -->', l)
 
-        open('report_%s.html' % timestamp, 'w').write(filedat)
+        open('5_Reporting/report_%s.html' % timestamp, 'w').write(filedat)
 
         if is_NMap_input:
             if os.path.exists("%s/data/nmap.xsl" % scriptpath):
-                if not os.path.exists("./artifacts/nmap.xsl"):
-                    shutil.copy("%s/data/nmap.xsl" % scriptpath, "./artifacts/nmap.xsl")
+                if not os.path.exists("2_Mapping/nmap.xsl"):
+                    shutil.copy("%s/data/nmap.xsl" % scriptpath, "./2_Mapping/nmap.xsl")
 
-                for xmlfile in glob("rawr_*.xml"):
+                for xmlfile in glob("2_Mapping/rawr_*.xml"):
                     fileloc = re.findall(r'.*href="(.*)" type=.*', open(xmlfile).read())[0]
-                    filedat = open(xmlfile).read().replace(fileloc, 'artifacts/nmap.xsl')
+                    filedat = open(xmlfile).read().replace(fileloc, '../2_Mapping/nmap.xsl')
                     open(xmlfile, 'w').write(filedat)
 
                 writelog(
@@ -789,10 +854,10 @@ if q.qsize() > 0:
             else:
                 writelog("\n  %s[!]%s Unable to locate nmap.xsl.\n" % (TC.YELLOW, TC.END), logfile, opts)
 
-        if not os.path.exists("rawr_%s_serverinfo.csv" % timestamp):
-            open("rawr_%s_serverinfo.csv" % timestamp, 'w').write('"' + flist.replace(', ', '","') + '"')
+        if not os.path.exists("3_Enumeration/rawr_%s_serverinfo.csv" % timestamp):
+            open("3_Enumeration/rawr_%s_serverinfo.csv" % timestamp, 'w').write('"' + flist.replace(', ', '","') + '"')
 
-        target_count = q.qsize()
+        target_count = q.qsize() + rd.qsize()
         writelog("\n  %s[>]%s Beginning enumeration of [ %s ] target[s].\n" % (TC.GREEN, TC.END, target_count), logfile,
                  opts)
 
@@ -801,14 +866,23 @@ if q.qsize() > 0:
     o.daemon = True
     o.start()
 
-    # Create the main worker pool and get them started
-    for i in range(nthreads):
-        t = SiThread(db, timestamp, scriptpath, pjs_path, logfile, logdir, output, opts)
-        threads.append(t)
-        t.daemon = True
-        t.start()
+    if q.qsize() > 0:
+        # Create the main worker pool and get them started
+        for i in range(nthreads):
+            t = SiThread(db, timestamp, scriptpath, pjs_path, logfile, logdir, output, opts)
+            threads.append(t)
+            t.daemon = True
+            t.start()
+
+    if rd.qsize() > 0:
+        # Create the output queue - prevents output overlap
+        rd_thread = RD_Screenshot_Thread(rd, logdir, output)
+        rd_thread.daemon = True
+        output.put("  %s[i]%s   Starting Remote Desktop services queue.\n" % (TC.BLUE, TC.END))
+        rd_thread.start()
 
     try:
+        rd.join()       
         q.join()
 
         # Queue is clear, tell the threads to close.
@@ -830,22 +904,22 @@ if q.qsize() > 0:
 
     # Add the data and ending tags to the HTML report
     if not opts.json_min:
-        if os.path.exists('meta_report_%s.html' % timestamp):
-            filedat = open('report_%s.html' % timestamp).read()
+        if os.path.exists('5_Reporting/meta_report_%s.html' % timestamp):
+            filedat = open('5_Reporting/report_%s.html' % timestamp).read()
             x = '<li><a class="textwds" onselect=False target="_blank" ' \
                 'href="meta_report_%s.html">META Report</a></li>' % timestamp
             filedat = filedat.replace('<!-- REPLACEWITHMETALINK -->', x)
-            with open('report_%s.html' % timestamp, 'w') as of:
+            with open('5_Reporting/report_%s.html' % timestamp, 'w') as of:
                 of.write(filedat + "</div></body></html>")
 
-            with open('meta_report_%s.html' % timestamp, 'a') as of:
+            with open('5_Reporting/meta_report_%s.html' % timestamp, 'a') as of:
                 of.write("</body></html>")
 
         else:
-            with open('report_%s.html' % timestamp, 'a') as of:
+            with open('5_Reporting/report_%s.html' % timestamp, 'a') as of:
                 of.write("</div></body></html>")
 
-        with open('sec_headers_%s.html' % timestamp, 'a') as of:
+        with open('5_Reporting/sec_headers_%s.html' % timestamp, 'a') as of:
             of.write("""</table><br><br>\n<h5>Access Control Allow Origin (Access-Control-""" +
                      """Allow-Origin)</h5>\n<p>\nModern websites often include content dyn""" +
                      """amically pulled in from other sources online. SoundCloud, Flickr, """ +
@@ -897,7 +971,7 @@ if q.qsize() > 0:
 
         # Sort the csv by IP
         try:
-            f = "rawr_%s_serverinfo.csv" % timestamp
+            f = "3_Enumeration/rawr_%s_serverinfo.csv" % timestamp
             i = flist.lower().split(", ").index(csv_sort_col)
             data_list = [l.strip() for l in open(f)]
             headers = data_list[0]

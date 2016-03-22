@@ -1,3 +1,51 @@
+----- 0.5 -----
+
+	BUGFIXES
+        fixed bug that misnamed images, causing errors when the html report tried to load them
+        fixed bug - "HTML report doesn't refresh when switching to/from 'image only'"
+        
+	CHANGES
+        sorted outputs into folders corresponding with phases of the assessment -
+            1_Recon/
+            2_Mapping/
+                < NMap output and user input >
+                rawr_<datetime>_attack_surface.csv
+            3_Enumeration/
+                cookies/
+                cross_domain/
+                meta/
+                robots/
+                ssl_certs/
+                rawr_<datetime>_server_info.csv
+            4_Exploitation/
+                input_lists/
+                wordlists/
+                auth_sites.lst
+            5_Reporting/
+                diagrams/
+                images/
+                rawr_<datetime>_attack_surface.xlsx
+                rawr_<datetime>_server_info.xlsx
+                report_<datetime>.html
+                sec_headers_<datetime>.html                
+            error.log
+            report_<datetime>.cfg
+            report_<datetime>.log
+            report_<datetime>.shelvedb
+
+        input lists are now named  <port>.il
+        wordlists are now stored in a 'wordlists' folder
+        wordlists are now named <host>_<port>.wl
+        now adding words from parsed documents to wordlists (+ document properties, exif, etc)
+        - added xlsx version of the Attack Surface Matrix
+            *new dep installed w/ install.sh - XslxWriter
+        added UDP scan switch option --udp (nmap -sU)
+        added ability to specify mixed port values
+            example:  -p fuzzdb,21,10-12
+            *'top<n>' will nullify previous and be nullified by subsequent values
+            *'all' will nullify previous and be nullified by subsequent values
+
+
 ----- 0.41 -----
 
 	BUGFIXES

@@ -92,8 +92,6 @@ class Meta_Parser(object):
             except:
                 pass
 
-        props = self.addto(props, self.mod_checks(fdat))
-
         try:
             for item in re.findall("<<(.*?/CreationDate.*?)>>", fdat)[0].split('/')[1:]:
                 prop = item.split('(')[0]
@@ -152,6 +150,10 @@ class Meta_Parser(object):
                 except:
                     pass
 
+        words = re.sub('[^\w]', ' ', fdat)
+        words = re.sub('[\s]+', ' ', words).split()
+        props = self.addto(props, 'words', list(set(words)))
+
         return props
 
     def addto(self, i1, i2, val=None):  # update a dict or combine two dicts, appending to lists instead of overwriting
@@ -193,7 +195,7 @@ class Meta_Parser(object):
             z = self.safe_string(f)
 
         try:
-            wl = list(set(re.findall('^[a-zA-Z0-9]{3,}$', z)))
+            wl = list(set(re.findall('[\w]{3,}', z)))
             out = {'words': wl}
 
         except:
@@ -455,7 +457,7 @@ class Meta_Parser(object):
         return ret
 
     def parse(self, f):
-        doc = {'filename': f}
+        doc = {'filename': f, 'words': []}
         fn, ext = os.path.splitext(f)
 
         # file_props(f)
@@ -473,7 +475,23 @@ class Meta_Parser(object):
                     doc = self.addto(doc, self.decompress(f))
 
                 except zipfile.BadZipfile:
-                    doc = self.addto(doc, self.mod_checks(f))  # punt
+                    pass
+
+        with open(f, 'rb') as dat:
+            fdat = dat.read()
+            doc = self.addto(doc, self.mod_checks(fdat))
+
+        doc['words'].append(f.split('/')[-1])
+        # All prop values into wordlist
+        for k in doc.keys():
+            if not k in ('filename', 'words'):
+                if type(doc[k]) == list:
+                    doc['words'] += doc[k]
+
+                else:
+                    doc['words'].append(doc[k])
+
+        doc['words'] = list(set(doc['words']))
 
         return doc
 

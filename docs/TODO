@@ -1,13 +1,5 @@
 ToDo
-
-	---KNOWN ISSUES------------------------------------------------
-		
-		html result to thumbnail matchup issues
-            external websites w/ multiple handles (IP, hn, port)
-        filter input for -p
-
-
-	---FUNCTIONALITY-----------------------------------------------
+    (does not include known issues)
 
         google dorks function not complete (need to build out API function)
 		figure correct way to init()
@@ -40,9 +32,7 @@ ToDo
 			need a better timeout mechanism for spider and diagram creation
 			reduce hard-limit for # of links in diagram			
 		
-
-	---FUTURE-----------------------------------------------------
-		serverinfo- XSL or XLSX - center all fields, set widths, freeze top row, top row - white/bold font and dark grey bg	
+		serverinfo- XSL or XLSX - center all fields, set widths, freeze top row, top row - white/bold font and dark grey bg	dddddddddddddddddddddddsssss
 		burp and faraday plugins
 			faraday - serverinfo into a single XML doc
 				give them the framework for RAWR's XML format

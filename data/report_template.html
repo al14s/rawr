@@ -154,7 +154,7 @@
 				var data = $("#data").html().split('\n');
 
                 if ($('#htxt').text()=="by IP") { data.sort(function(a,b){return a.split(',')[0] - b.split(',')[0]}); }
-                else { data.sort(function(a,b){return a.split(',')[2] - b.split(',')[2]}); }
+                else { data.sort(function(a,b){return a.split(',')[1] - b.split(',')[1]}); }
 
 				hcount = data.length;
 
@@ -164,26 +164,34 @@
 						// it will be dynamically generated based on the flist
 						// var item = JSON.parse(data[i]);	   future use
 
-						var item = new Object;
-						for (var x in flist) {
-							var f = data[i].split(",")[flist.indexOf(flist[x])];
-							if (f) { item[flist[x]] = f.replace(/^\s+|\n|\r|\s+$/g, ''); }
-						}
+					    var item = new Object;
+                        if ("vnc|rdp".indexOf(data[i].split(", ")[2]) > -1) {
+                            item.ipv4 = data[i].split(", ")[3];
+                            item.port = data[i].split(", ")[4];
+                            item.type = data[i].split(", ")[2];
 
-						// see if this item should be displayed
-						var use = 0;
-						if (q.split(" ").length > 1) { // if query holds multiple words/terms...
-							for (x = 0; x < q.split(" ").length; x++) { // check each query term against this line
-								if (data[i].toLowerCase().indexOf(q.split(" ")[x]) != -1){ use = 1; } else { use = 0; break; }
-							}
-						}
-						else {
-							if (iplistq != 1) {
-								if (q == "" || data[i].toLowerCase().indexOf(q) != -1) { use = 1; } } // one-word queries and default display
-							else if (iplistq == 1) {
-								if ( iplist.indexOf(item.ipv4 + ":" + item.port) != -1 ) { use = 1; } } // show from iplist
-						}
+                        }
+                        else {                            
+                            item.type = 'web';
+						    for (var x in flist) {
+							    var f = data[i].split(",")[flist.indexOf(flist[x])];
+							    if (f) { item[flist[x]] = f.replace(/^\s+|\n|\r|\s+$/g, ''); }
+						    }
+                        }
 
+					    // see if this item should be displayed
+					    var use = 0;
+					    if (q.split(" ").length > 1) { // if query holds multiple words/terms...
+						    for (x = 0; x < q.split(" ").length; x++) { // check each query term against this line
+							    if (data[i].toLowerCase().indexOf(q.split(" ")[x]) != -1){ use = 1; } else { use = 0; break; }
+						    }
+					    }
+					    else {
+						    if (iplistq != 1) {
+							    if (q == "" || data[i].toLowerCase().indexOf(q) != -1) { use = 1; } } // one-word queries and default display
+						    else if (iplistq == 1) {
+							    if ( iplist.indexOf(item.ipv4 + ":" + item.port) != -1 ) { use = 1; } } // show from iplist
+					    }
 
 						if ( use == 1 ) {   // display this line
 							m++;   // results that are useful
@@ -191,36 +199,55 @@
 							if ( (r <= n) && (i >= ((p-1)*n)) ){  // make sure we're within the limits for this page
 								item.id = r;
 								ip_port = item.ipv4 + ":" + item.port;
-								ip_url = item.url.split("/")[0] + "//" + ip_port;
-								hostname = item.url.split('/')[2];
-								if (hostname == "") { hostname = "n/a"; }
 
-								diagram_url="artifacts/diagrams/diagram_" + hostname + "_" + item.port + "__" + timestamp + "_" + item.ua_cksum + ".png";
+                                if ("vnc|rdp".indexOf(item.type) > -1 && item.type != "") {
+                                    picurl = "images/" + item.type + "_" + item.ipv4 + "_" + item.port + ".jpg";
+                                    console.log(picurl + ' ' + item.type);
+                                    diagram_url=""; }
+
+                                else {
+								    ip_url = item.url.split("/")[0] + "//" + ip_port;
+								    hostname = item.url.split('/')[2];
+								    if (hostname == "") { hostname = item.ipv4; }
+
+								    diagram_url="./diagrams/diagram_" + hostname + "_" + item.port + "__" + timestamp + "_" + item.ua_cksum + ".png";
+								    picurl = "images/" + hostname + "_" + timestamp + "_" + item.port + "_" + item.ua_cksum + ".png";
+
+                                }
 
 								// find pic if present
-								picurl = "artifacts/images/" + hostname + "_" + timestamp + "_" + item.port + "_" + item.ua_cksum + ".png";
-								$.ajax({ type: "GET", url: picurl, error: function() {
-									picurl = "artifacts/images/" + item.ipv4 + "_" + timestamp + "_" + item.port + "_" + item.ua_cksum + ".png";
-									$.ajax({ type: "GET", url: picurl, error: function() {
-										picurl = "artifacts/images/error.png";
+								$.ajax({ type: "GET", url: picurl, error: function(x, status, error) {
+										console.log(error + ' -- ' + picurl);
+									picurl = "images/" + item.ipv4 + "_" + timestamp + "_" + item.port + "_" + item.ua_cksum + ".png";
+									$.ajax({ type: "GET", url: picurl, error: function(x, status, error) {
+										console.log(error + ' -- ' + picurl);
+										picurl = "images/error.png";
 									}});
 								}});
 
 								// no pic, no clickie
-								if ( picurl == "artifacts/images/error.png" ) {
-										pic = "<div class='img_div noimg'><img class='thumb' style='display:none;' src='" + picurl + "' width=100% /></div> "; }
+								if ($('#cbtxt').text()=="show all" && picurl.indexOf("error.png") > -1 ){ 
+									m--; }									
 								else {
-									pic = "<div class='img_div' onclick='showpic($(this).children(\"img\"),\"" + picurl + "\",\"" + item.url + "\");' style='height:" + (picsize-20) + "px;' ><img class='thumb' style='display:none;' src='" + picurl + "' width=100% /></div>"; }
+									if ( picurl.indexOf("error.png") > -1 ) {									
+										pic = "<div class='img_div noimg'><img class='thumb' style='display:none;' src='" + picurl + "' width=100% /></div> "; }
+									else {
+										pic = "<div class='img_div' onclick='showpic($(this).children(\"img\"),\"" + picurl + "\",\"" + item.url + "\");' style='height:" + (picsize-20) + "px;' ><img class='thumb' style='display:none;' src='" + picurl + "' width=100% /></div>"; }
 
-								// no map, no clickie
-								if ( item.diagram != "" ) {
-									map = "<li><a target='_blank' href='" + diagram_url + "'>d</li>"; }
-								else { map = ""; }
+									// no map, no clickie
+									if ( item.diagram != "" ) {
+										map = "<li><a target='_blank' href='" + diagram_url + "'>d</li>"; }
+									else { map = ""; }
 
-								$("#bd").append("<div class='result'><span class='result_content'>" + ip_url + "<br />" + hostname + "</span><br />" + pic + "<div class='tabdiv'><ul class='tabs'><li><a target='_blank' href='" + item.url + "' >open</a></li><li><a onclick='showinfo(" + r + ");'>i</a></li>" + map + "<li><a onclick='listaddrem(\"" + ip_port + "\", \"" + hostname + "\", this);'>+/-</a></li></ul></div><div class='info' id='" + String(r) + "'>" + JSON.stringify(item) + "</div></div>");
+									if ( "vnc|rdp".indexOf(item.type) > -1 && item.type != "" ) {
+                                        $("#bd").append("<div class='result'><span class='result_content'>" + item.ipv4+':'+item.port + "</span><br />" + pic + "<div class='tabdiv'><ul class='tabs'><li><a onclick='showinfo(" + r + ");'>i</a></li><li><a onclick='listaddrem(\"" + item.ipv4+':'+item.port + "\", \"" + item.ipv4 + "\", this);'>+/-</a></li></ul></div><div class='info' id='" + String(r) + "'>" + JSON.stringify(item) + "</div></div>"); }
 
-								result_ips.push(ip_port);
-								r++;   // number of results that will be displayed - also the item's id
+                                    else {
+                                        $("#bd").append("<div class='result'><span class='result_content'>" + ip_url + "<br />" + hostname + "</span><br />" + pic + "<div class='tabdiv'><ul class='tabs'><li><a target='_blank' href='" + item.url + "' >open</a></li><li><a onclick='showinfo(" + r + ");'>i</a></li>" + map + "<li><a onclick='listaddrem(\"" + ip_port + "\", \"" + hostname + "\", this);'>+/-</a></li></ul></div><div class='info' id='" + String(r) + "'>" + JSON.stringify(item) + "</div></div>"); }
+
+									result_ips.push(ip_port);
+									r++;   // number of results that will be displayed - also the item's id
+								}
 							}
 						}
 					}
@@ -250,7 +277,7 @@
 					$("#srchindex").html(index);
 				} else if (pages < 1){ $("#hdinfo").html("No results found.");
 				} else { $("#hdinfo").html("Page " + p + " / " + pages + " with " + m + " results"); $("#srchindex").html(""); }
-
+				
 				$('.result').css('height', parseInt(picsize)).css('width', parseInt(picsize));
 				$('#bd').css({ top: 80, bottom: 0 });
 				$('button').button();
@@ -274,10 +301,8 @@
 				});
 				$('.img_div').css('height', $('.result').css('height'));
 				picsize=$('.result').height();
-				shownopic();
 			}
-
-
+				
 			function setselected(){
 				$('.result').each(function() {
 					data = JSON.parse( $('.info', this).html() );
@@ -286,7 +311,10 @@
 					if ( iplist.indexOf(ip) != -1 ) {
 						$(this).addClass('selected'); }
 					else {
-						var hn = data.url.split('//')[1].split(":")[0];
+						if ('vnc|rdp'.indexOf(data.type) > -1) {
+                            var hn = data.ipv4; }
+                        else {
+                            var hn = data.url.split('//')[1].split(":")[0]; }
 
 						if ( iplist.indexOf(hn) != -1){
 							$(this).addClass('selected'); }
@@ -376,19 +404,6 @@
 			}
 
 
-			function shownopic(){
-				if ($('#cbtxt').text()=="show all"){
-					//because some browsers are allergic to standards
-					$('.noimg').closest('.result').hide();
-					$('img:hidden').closest('.result').hide();
-				} else {
-					//because some browsers are allergic to standards
-					$('.noimg').closest('.result').show();
-					$('img:hidden').closest('.result').show();
-				};
-			}
-
-
 			$(window).resize(function() {
 				if ($('#picview').css("display")=="block") { $('#picview').center(); }
 				if ($('#iplist').css("display")=="block") { $('#iplist').center(); }
@@ -405,13 +420,13 @@
 					$('#q').val('');
 					$('.tabs').css({display:"none"});
 					$('#q').keypress(function(event){var keycode = (event.keyCode ? event.keyCode : event.which);if(keycode == '13'){ render(1); }});
-					$('#imgsizedown').click(function(){if ($('.result').height()>100){ $('.result').css('height','-=75').css('width','-=75') };imgsize();});
+					$('#imgsizedown').click(function(){if ($('.result').height()>125){ $('.result').css('height','-=75').css('width','-=75') };imgsize();});
 					$('#imgsizeup').click(function(){ if ($('.result').height()<325){ $('.result').css('height', '+=75').css('width', '+=75') }; imgsize();});
 					$('.rsltbtn').click(function(){ $('#bd').text(''); n= $(this).text(); render(1); });
 					$('#picview').click(function(){ $('#picview').css({display:"none"}); $('#overlay').css({display:"none"}); });
 					$('#imgonly').click(function(){
 						if ($('#cbtxt').text()=="show all"){ $('#cbtxt').text("img only"); }else{ $('#cbtxt').text("show all"); };
-						shownopic();
+						render(1);
 					});
 					$('#hist').click(function(){
 						if ($('#htxt').text()=="by IP"){
